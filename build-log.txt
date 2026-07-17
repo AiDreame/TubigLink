@@ -1,0 +1,141 @@
+  ▲ Next.js 14.2.35
+  - Environments: .env
+
+   Creating an optimized production build ...
+ ⚠ For production Image Optimization with Next.js, the optional 'sharp' package is strongly recommended. Run 'npm i sharp', and Next.js will use it automatically for Image Optimization.
+Read more: https://nextjs.org/docs/messages/sharp-missing-in-production
+ ⚠ For production Image Optimization with Next.js, the optional 'sharp' package is strongly recommended. Run 'npm i sharp', and Next.js will use it automatically for Image Optimization.
+Read more: https://nextjs.org/docs/messages/sharp-missing-in-production
+ ✓ Compiled successfully
+   Linting and checking validity of types ...
+   Collecting page data ...
+   Generating static pages (0/33) ...
+Admin stations fetch error: n [Error]: Dynamic server usage: Route /api/admin/stations couldn't be rendered statically because it used `headers`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error
+    at l (/home/team/aqualink-ph/.next/server/chunks/9276.js:1:37220)
+    at d (/home/team/aqualink-ph/.next/server/chunks/9637.js:25:27870)
+    at s (/home/team/aqualink-ph/.next/server/chunks/9637.js:25:20859)
+    at l (/home/team/aqualink-ph/.next/server/app/api/admin/stations/route.js:1:1269)
+    at /home/team/aqualink-ph/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:38417
+    at /home/team/aqualink-ph/node_modules/next/dist/server/lib/trace/tracer.js:140:36
+    at NoopContextManager.with (/home/team/aqualink-ph/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:7062)
+    at ContextAPI.with (/home/team/aqualink-ph/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:518)
+    at NoopTracer.startActiveSpan (/home/team/aqualink-ph/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:18093)
+    at ProxyTracer.startActiveSpan (/home/team/aqualink-ph/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:18854) {
+  description: "Route /api/admin/stations couldn't be rendered statically because it used `headers`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error",
+  digest: 'DYNAMIC_SERVER_USAGE'
+}
+Admin users fetch error: n [Error]: Dynamic server usage: Route /api/admin/users couldn't be rendered statically because it used `headers`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error
+    at l (/home/team/aqualink-ph/.next/server/chunks/9276.js:1:37220)
+    at d (/home/team/aqualink-ph/.next/server/chunks/9637.js:25:27870)
+    at s (/home/team/aqualink-ph/.next/server/chunks/9637.js:25:20859)
+    at l (/home/team/aqualink-ph/.next/server/app/api/admin/users/route.js:1:1259)
+    at /home/team/aqualink-ph/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:38417
+    at /home/team/aqualink-ph/node_modules/next/dist/server/lib/trace/tracer.js:140:36
+    at NoopContextManager.with (/home/team/aqualink-ph/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:7062)
+    at ContextAPI.with (/home/team/aqualink-ph/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:518)
+    at NoopTracer.startActiveSpan (/home/team/aqualink-ph/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:18093)
+    at ProxyTracer.startActiveSpan (/home/team/aqualink-ph/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:18854) {
+  description: "Route /api/admin/users couldn't be rendered statically because it used `headers`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error",
+  digest: 'DYNAMIC_SERVER_USAGE'
+}
+Dashboard fetch error: B [Error]: Dynamic server usage: Route /api/dashboard couldn't be rendered statically because it used `request.url`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error
+    at V (/home/team/aqualink-ph/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:21778)
+    at Object.get (/home/team/aqualink-ph/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:29465)
+    at l (/home/team/aqualink-ph/.next/server/app/api/dashboard/route.js:1:1255)
+    at /home/team/aqualink-ph/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:38417
+    at /home/team/aqualink-ph/node_modules/next/dist/server/lib/trace/tracer.js:140:36
+    at NoopContextManager.with (/home/team/aqualink-ph/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:7062)
+    at ContextAPI.with (/home/team/aqualink-ph/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:518)
+    at NoopTracer.startActiveSpan (/home/team/aqualink-ph/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:18093)
+    at ProxyTracer.startActiveSpan (/home/team/aqualink-ph/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:18854)
+    at /home/team/aqualink-ph/node_modules/next/dist/server/lib/trace/tracer.js:122:103 {
+  description: "Route /api/dashboard couldn't be rendered statically because it used `request.url`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error",
+  digest: 'DYNAMIC_SERVER_USAGE'
+}
+Notifications fetch error: n [Error]: Dynamic server usage: Route /api/notifications couldn't be rendered statically because it used `headers`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error
+    at l (/home/team/aqualink-ph/.next/server/chunks/9276.js:1:37220)
+    at d (/home/team/aqualink-ph/.next/server/chunks/9637.js:25:27870)
+    at s (/home/team/aqualink-ph/.next/server/chunks/9637.js:25:20859)
+    at c (/home/team/aqualink-ph/.next/server/app/api/notifications/route.js:1:1269)
+    at /home/team/aqualink-ph/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:38417
+    at /home/team/aqualink-ph/node_modules/next/dist/server/lib/trace/tracer.js:140:36
+    at NoopContextManager.with (/home/team/aqualink-ph/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:7062)
+    at ContextAPI.with (/home/team/aqualink-ph/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:518)
+    at NoopTracer.startActiveSpan (/home/team/aqualink-ph/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:18093)
+    at ProxyTracer.startActiveSpan (/home/team/aqualink-ph/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:18854) {
+  description: "Route /api/notifications couldn't be rendered statically because it used `headers`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error",
+  digest: 'DYNAMIC_SERVER_USAGE'
+}
+   Generating static pages (8/33) 
+Profile fetch error: B [Error]: Dynamic server usage: Route /api/user/profile couldn't be rendered statically because it used `request.url`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error
+    at V (/home/team/aqualink-ph/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:21778)
+    at Object.get (/home/team/aqualink-ph/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:29465)
+    at p (/home/team/aqualink-ph/.next/server/app/api/user/profile/route.js:1:567)
+    at /home/team/aqualink-ph/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:38417
+    at /home/team/aqualink-ph/node_modules/next/dist/server/lib/trace/tracer.js:140:36
+    at NoopContextManager.with (/home/team/aqualink-ph/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:7062)
+    at ContextAPI.with (/home/team/aqualink-ph/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:518)
+    at NoopTracer.startActiveSpan (/home/team/aqualink-ph/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:18093)
+    at ProxyTracer.startActiveSpan (/home/team/aqualink-ph/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:18854)
+    at /home/team/aqualink-ph/node_modules/next/dist/server/lib/trace/tracer.js:122:103 {
+  description: "Route /api/user/profile couldn't be rendered statically because it used `request.url`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error",
+  digest: 'DYNAMIC_SERVER_USAGE'
+}
+   Generating static pages (16/33) 
+   Generating static pages (24/33) 
+ ✓ Generating static pages (33/33)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                              Size     First Load JS
+┌ ○ /                                    9.67 kB         157 kB
+├ ○ /_not-found                          873 B          88.7 kB
+├ ○ /admin                               2.96 kB         101 kB
+├ ○ /admin/stations                      3.92 kB         127 kB
+├ ƒ /api/addresses                       0 B                0 B
+├ ƒ /api/admin/stations                  0 B                0 B
+├ ƒ /api/admin/users                     0 B                0 B
+├ ƒ /api/auth/[...nextauth]              0 B                0 B
+├ ƒ /api/auth/register                   0 B                0 B
+├ ƒ /api/dashboard                       0 B                0 B
+├ ƒ /api/dashboard/orders/[id]           0 B                0 B
+├ ƒ /api/notifications                   0 B                0 B
+├ ƒ /api/orders                          0 B                0 B
+├ ƒ /api/orders/[id]                     0 B                0 B
+├ ƒ /api/payments/check/[id]             0 B                0 B
+├ ƒ /api/payments/create-source          0 B                0 B
+├ ƒ /api/payments/webhook                0 B                0 B
+├ ƒ /api/products/[id]                   0 B                0 B
+├ ƒ /api/reviews                         0 B                0 B
+├ ƒ /api/stations                        0 B                0 B
+├ ƒ /api/stations/[id]                   0 B                0 B
+├ ƒ /api/stations/[id]/products          0 B                0 B
+├ ○ /api/stats                           0 B                0 B
+├ ƒ /api/user/profile                    0 B                0 B
+├ ○ /auth/login                          5.03 kB         126 kB
+├ ○ /auth/register                       4.52 kB         122 kB
+├ ○ /cart                                7.1 kB          128 kB
+├ ○ /dashboard                           5.24 kB         122 kB
+├ ○ /dashboard/earnings                  4.44 kB         109 kB
+├ ○ /dashboard/orders                    4.84 kB         142 kB
+├ ○ /dashboard/products                  5.24 kB         117 kB
+├ ○ /orders                              4.16 kB         114 kB
+├ ƒ /orders/[id]                         6.04 kB         111 kB
+├ ○ /payment/cancel                      2.89 kB        97.8 kB
+├ ○ /payment/success                     3.15 kB        98.1 kB
+├ ○ /profile                             6.64 kB         123 kB
+├ ○ /profile/addresses                   3.85 kB         102 kB
+├ ○ /profile/settings                    4.19 kB         105 kB
+├ ○ /stations                            6.47 kB         116 kB
+└ ƒ /stations/[id]                       7.13 kB         125 kB
++ First Load JS shared by all            87.8 kB
+  ├ chunks/117-de22e03f861feeae.js       31.7 kB
+  ├ chunks/fd9d1056-b2087b6246bfa690.js  53.6 kB
+  └ other shared chunks (total)          2.42 kB
+
+
+ƒ Middleware                             49.5 kB
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
