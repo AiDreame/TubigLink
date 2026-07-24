@@ -2,6 +2,13 @@
 
 > A two-sided marketplace connecting households, offices, and sari-sari stores with local water refilling stations for on-demand delivery.
 
+## 📁 Repository Structure
+
+| Directory | Description |
+|-----------|-------------|
+| `v2/` | **Current AquaLink PH platform** — Next.js 14+ full-stack web app with 18 pages, 20+ API endpoints, Prisma ORM, NextAuth.js, shadcn/ui, and PWA support. This is the active codebase (Phase 2 — Polish & UX). |
+| `main` root | Legacy v1 snapshot. All active development is in `v2/`.
+
 ## ✨ Quick Start
 
 ```bash
