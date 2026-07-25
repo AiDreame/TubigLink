@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
 
     // Step 1: Create account (no session needed)
     if (step === 1) {
-      const { name, phone, email, password } = data;
+      const { name, phone, email, password, convertAccount } = data;
 
       if (!phone || !name || !password) {
         return NextResponse.json(
@@ -27,8 +27,52 @@ export async function POST(req: NextRequest) {
       });
 
       if (existingUser) {
+        // If this is a customer account and user wants to convert
+        if (existingUser.role === "CUSTOMER") {
+          // If the frontend explicitly requested conversion
+          if (convertAccount) {
+            // Update role to PROVIDER and create station
+            const updatedUser = await prisma.user.update({
+              where: { id: existingUser.id },
+              data: { role: "PROVIDER" },
+            });
+
+            const slug = slugify(data.stationName || "water-station") + "-" + Math.random().toString(36).substring(2, 6);
+            await prisma.station.create({
+              data: {
+                userId: updatedUser.id,
+                name: data.stationName || "My Water Station",
+                slug,
+                address: "",
+                barangay: "",
+                city: "",
+                province: "",
+                onboardingStep: 1,
+                onboardingComplete: false,
+              },
+            });
+
+            return NextResponse.json({
+              success: true,
+              message: "Account converted to provider! Proceed to step 2.",
+              data: { userId: updatedUser.id, converted: true },
+            });
+          }
+
+          // Otherwise, tell the frontend this account can be converted
+          return NextResponse.json(
+            {
+              success: false,
+              canConvert: true,
+              message: "This phone number already has a customer account. Would you like to convert it to a water station provider account?",
+            },
+            { status: 409 }
+          );
+        }
+
+        // Non-customer account (already a provider or admin)
         return NextResponse.json(
-          { success: false, error: "Phone number already registered" },
+          { success: false, error: "Phone number already registered as a provider" },
           { status: 409 }
         );
       }

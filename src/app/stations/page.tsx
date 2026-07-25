@@ -2,7 +2,7 @@
 
 import { Suspense, useState, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Search, SlidersHorizontal, MapPin, X, Loader2, ArrowLeft, Home, Navigation } from "lucide-react";
+import { Search, SlidersHorizontal, MapPin, X, Loader2, ArrowLeft, Home, Navigation, Map, List } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { CitySelector } from "@/components/shared/CitySelector";
 import { BarangayAutocomplete } from "@/components/shared/BarangayAutocomplete";
 import { useCityStore } from "@/hooks/use-city";
+import StationMap from "@/components/shared/StationMap";
 
 function StationsContent() {
   const router = useRouter();
@@ -26,6 +27,7 @@ function StationsContent() {
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
   const [totalCount, setTotalCount] = useState(0);
   const [showBarangaySearch, setShowBarangaySearch] = useState(false);
+  const [viewMode, setViewMode] = useState<"list" | "map">("list");
 
   // Read barangay and city from URL query params on mount
   useEffect(() => {
@@ -136,6 +138,18 @@ function StationsContent() {
                 <Home className="h-5 w-5" />
               </Button>
             </Link>
+            <Button
+              variant={viewMode === "map" ? "default" : "outline"}
+              size="sm"
+              className="rounded-xl h-9 gap-1.5 shrink-0"
+              onClick={() => setViewMode(viewMode === "list" ? "map" : "list")}
+            >
+              {viewMode === "list" ? (
+                <><Map className="h-4 w-4" /> Map</>
+              ) : (
+                <><List className="h-4 w-4" /> List</>
+              )}
+            </Button>
           </div>
 
           {/* City Selector + Barangay Filter + Quick Filter Pills */}
@@ -270,6 +284,16 @@ function StationsContent() {
           </div>
         </div>
 
+        {/* Map View */}
+        {viewMode === "map" && !isLoading && (
+          <div className="-mx-4">
+            <StationMap stations={stations} selectedCity={selectedCity} />
+          </div>
+        )}
+
+        {/* List View */}
+        {viewMode === "list" && (
+          <>
         {isLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {[1, 2, 3, 4, 5, 6].map((i) => (
@@ -351,6 +375,8 @@ function StationsContent() {
               </Button>
             </div>
           </div>
+        )}
+          </>
         )}
       </main>
 
