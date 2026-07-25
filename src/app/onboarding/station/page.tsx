@@ -238,6 +238,10 @@ export default function StationOnboardingPage() {
       toast.error("Station name, address, barangay, and city are required.");
       return;
     }
+    if (!tin || !tin.trim()) {
+      toast.error("TIN is required for BIR compliance. Please enter your Tax Identification Number.");
+      return;
+    }
     setIsLoading(true);
     try {
       const res = await fetch("/api/onboarding/station", {
@@ -604,14 +608,18 @@ export default function StationOnboardingPage() {
           </Select>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="tin">TIN (optional)</Label>
+          <Label htmlFor="tin">TIN Number *</Label>
           <Input
             id="tin"
             placeholder="XXX-XXX-XXX-XXX"
             value={tin}
             onChange={(e) => setTin(e.target.value)}
+            required
             className="min-h-[48px]"
           />
+          <p className="text-xs text-muted-foreground">
+            Required to sell — your TIN is needed for BIR compliance
+          </p>
         </div>
       </div>
 

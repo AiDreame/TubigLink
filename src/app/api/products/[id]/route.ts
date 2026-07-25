@@ -32,6 +32,14 @@ export async function PUT(
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
+    // If trying to make product available, verify station has TIN
+    if (isAvailable === true && !product.station.tin) {
+      return NextResponse.json(
+        { error: "Cannot list products until TIN is provided. Complete your BIR registration first." },
+        { status: 403 }
+      );
+    }
+
     const updatedProduct = await prisma.product.update({
       where: { id: params.id },
       data: {

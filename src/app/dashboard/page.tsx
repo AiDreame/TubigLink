@@ -139,6 +139,22 @@ export default function DashboardHome() {
 
   return (
     <div className="space-y-8">
+      {/* TIN Warning Banner */}
+      {data.station && !data.station.tin && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 p-4 flex items-start gap-3">
+          <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="font-semibold text-amber-800 dark:text-amber-300">Complete your registration</p>
+            <p className="text-sm text-amber-700 dark:text-amber-400">
+              TIN is required before you can start selling.{" "}
+              <Link href="/onboarding/station" className="font-medium underline">
+                Add your TIN now
+              </Link>
+            </p>
+          </div>
+        </div>
+      )}
+
       <div>
         <h2 className="text-3xl font-bold tracking-tight">{MESSAGES.goodDay}</h2>
         <p className="text-muted-foreground">{data.station?.name || MESSAGES.dashboardSubtitle}</p>

@@ -89,6 +89,7 @@ export async function POST(req: NextRequest) {
         provisionalUntil: true,
         isActive: true,
         approvedAt: true,
+        tin: true,
       },
     });
 
@@ -102,6 +103,13 @@ export async function POST(req: NextRequest) {
     if (!station.isActive) {
       return NextResponse.json(
         { error: "Station is not currently active" },
+        { status: 403 }
+      );
+    }
+
+    if (!station.tin) {
+      return NextResponse.json(
+        { error: "This station has not completed BIR registration. Please contact the station owner." },
         { status: 403 }
       );
     }

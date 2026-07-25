@@ -140,6 +140,13 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      if (!tin || !tin.trim()) {
+        return NextResponse.json(
+          { success: false, error: "TIN is required to operate as a water refilling station" },
+          { status: 400 }
+        );
+      }
+
       const newSlug = slugify(name) + "-" + Math.random().toString(36).substring(2, 6);
 
       const updated = await prisma.station.update({
