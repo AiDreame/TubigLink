@@ -1,11 +1,12 @@
 "use client";
 
-import { Plus, Minus, ShoppingCart } from "lucide-react";
+import { Plus, Minus, ShoppingCart, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Product } from "@/types";
 import { useCart } from "@/hooks/use-cart";
 import { useState } from "react";
 import { toast } from "react-hot-toast";
+import { UNLIMITED_STOCK_SIZES, UNLIMITED_STOCK_SENTINEL } from "@/lib/constants";
 
 interface ProductCardProps {
   product: Product;
@@ -48,7 +49,14 @@ export function ProductCard({ product, station }: ProductCardProps) {
         <div className="flex justify-between items-start">
           <div>
             <h4 className="font-bold text-card-foreground truncate">{product.name}</h4>
-            <p className="text-xs text-muted-foreground">{product.size}</p>
+            <p className="text-xs text-muted-foreground">
+              {product.size}
+              {(UNLIMITED_STOCK_SIZES.includes(product.size) || product.stock === UNLIMITED_STOCK_SENTINEL) && (
+                <span className="ml-2 inline-flex items-center gap-0.5 text-green-600 dark:text-green-400 font-medium">
+                  <Check className="h-3 w-3" /> Available
+                </span>
+              )}
+            </p>
           </div>
           <span className="font-bold text-blue-600 dark:text-blue-400">₱{product.price}</span>
         </div>

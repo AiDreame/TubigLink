@@ -36,7 +36,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import toast from "react-hot-toast";
-import { MESSAGES, WATER_TYPES, PRODUCT_SIZES } from "@/lib/constants";
+import { MESSAGES, WATER_TYPES, PRODUCT_SIZES, UNLIMITED_STOCK_SIZES, UNLIMITED_STOCK_SENTINEL } from "@/lib/constants";
 
 const STEPS = [
   { id: 1, label: "Account", icon: User },
@@ -277,9 +277,14 @@ export default function StationOnboardingPage() {
   };
 
   const handleStep3 = async () => {
-    const validProducts = products.filter((p) => p.price && p.stock);
+    const validProducts = products.filter((p) => {
+      if (!p.price) return false;
+      // 5-gallon doesn't need stock; other sizes do
+      if (UNLIMITED_STOCK_SIZES.includes(p.size)) return true;
+      return !!p.stock;
+    });
     if (validProducts.length === 0) {
-      toast.error("Add at least one product with a price and stock.");
+      toast.error("Add at least one product with a price.");
       return;
     }
     setIsLoading(true);
@@ -706,17 +711,26 @@ export default function StationOnboardingPage() {
                   className="min-h-[44px]"
                 />
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Stock (units)</Label>
-                <Input
-                  type="number"
-                  placeholder="50"
-                  value={product.stock}
-                  onChange={(e) => updateProduct(i, "stock", e.target.value)}
-                  min="0"
-                  className="min-h-[44px]"
-                />
-              </div>
+              {!UNLIMITED_STOCK_SIZES.includes(product.size) ? (
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Stock (units)</Label>
+                  <Input
+                    type="number"
+                    placeholder="50"
+                    value={product.stock}
+                    onChange={(e) => updateProduct(i, "stock", e.target.value)}
+                    min="0"
+                    className="min-h-[44px]"
+                  />
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Stock</Label>
+                  <div className="min-h-[44px] flex items-center text-sm text-muted-foreground bg-muted/50 rounded-md px-3">
+                    Unlimited — filled on demand
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         ))}

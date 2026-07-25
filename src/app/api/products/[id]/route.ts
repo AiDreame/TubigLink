@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { UNLIMITED_STOCK_SIZES, UNLIMITED_STOCK_SENTINEL } from "@/lib/constants";
 
 // PUT /api/products/[id] — Update a product
 export async function PUT(
@@ -40,6 +41,12 @@ export async function PUT(
       );
     }
 
+    // If the product is a 5-gallon (on-demand), set stock to sentinel
+    const effectiveSize = size !== undefined ? size : product.size;
+    const effectiveStock = UNLIMITED_STOCK_SIZES.includes(effectiveSize)
+      ? UNLIMITED_STOCK_SENTINEL
+      : (stock !== undefined ? stock : product.stock);
+
     const updatedProduct = await prisma.product.update({
       where: { id: params.id },
       data: {
@@ -47,7 +54,7 @@ export async function PUT(
         type,
         size,
         price,
-        stock,
+        stock: effectiveStock,
         description,
         isAvailable,
       },

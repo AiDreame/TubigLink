@@ -8272,6 +8272,10 @@ export const PRODUCT_SIZES = [
   { id: "500ml", label: "500ml Bottle", desc: "Single-serve bottle" },
 ];
 
+// 5-gallon containers are filled on-demand — no pre-filled inventory
+export const UNLIMITED_STOCK_SIZES = ["5-gallon"];
+export const UNLIMITED_STOCK_SENTINEL = -1;
+
 // Order statuses
 export const ORDER_STATUSES = [
   "PENDING",

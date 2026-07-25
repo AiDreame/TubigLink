@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { MESSAGES } from "@/lib/constants";
+import { MESSAGES, UNLIMITED_STOCK_SIZES, UNLIMITED_STOCK_SENTINEL } from "@/lib/constants";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 
@@ -261,7 +261,7 @@ export default function DashboardHome() {
                   <span className="text-sm">{MESSAGES.lowStockAlert}</span>
                 </div>
                 <span className="text-sm font-bold dark:text-white">
-                  {data.products.filter((p: any) => p.stock < 10).length} products low
+                  {data.products.filter((p: any) => !UNLIMITED_STOCK_SIZES.includes(p.size) && p.stock !== UNLIMITED_STOCK_SENTINEL && p.stock < 10).length} products low
                 </span>
               </div>
             </div>

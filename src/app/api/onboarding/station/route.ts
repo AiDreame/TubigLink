@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { slugify } from "@/lib/utils";
+import { UNLIMITED_STOCK_SIZES, UNLIMITED_STOCK_SENTINEL } from "@/lib/constants";
 
 // POST /api/onboarding/station — Create or update onboarding data
 export async function POST(req: NextRequest) {
@@ -184,16 +185,21 @@ export async function POST(req: NextRequest) {
       await prisma.product.deleteMany({ where: { stationId: station.id } });
 
       const created = await prisma.product.createMany({
-        data: products.map((p: any) => ({
-          stationId: station.id,
-          name: p.name || `${p.type} ${p.size}`,
-          type: p.type || "PURIFIED",
-          size: p.size || "5-gallon",
-          price: parseFloat(p.price) || 0,
-          stock: parseInt(p.stock) || 0,
-          isAvailable: true,
-          description: p.description || "",
-        })),
+        data: products.map((p: any) => {
+          const size = p.size || "5-gallon";
+          return {
+            stationId: station.id,
+            name: p.name || `${p.type} ${size}`,
+            type: p.type || "PURIFIED",
+            size,
+            price: parseFloat(p.price) || 0,
+            stock: UNLIMITED_STOCK_SIZES.includes(size)
+              ? UNLIMITED_STOCK_SENTINEL
+              : (parseInt(p.stock) || 0),
+            isAvailable: true,
+            description: p.description || "",
+          };
+        }),
       });
 
       await prisma.station.update({

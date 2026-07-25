@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { UNLIMITED_STOCK_SIZES, UNLIMITED_STOCK_SENTINEL } from "@/lib/constants";
 import {
   Card,
   CardContent,
@@ -132,13 +133,19 @@ export default function ProviderProductsPage() {
                 <div className="flex justify-between items-center mt-4">
                   <span className="text-xl font-bold text-blue-600 dark:text-blue-400">₱{product.price}</span>
                   <div className="flex items-center gap-2">
-                    <Package className={`h-4 w-4 ${product.stock < 10 ? "text-orange-500" : "text-gray-400 dark:text-gray-500"}`} />
-                    <span className={`text-sm font-medium ${product.stock < 10 ? "text-orange-600 dark:text-orange-400" : "dark:text-gray-300"}`}>
-                      {product.stock} units
-                    </span>
+                    {UNLIMITED_STOCK_SIZES.includes(product.size) || product.stock === UNLIMITED_STOCK_SENTINEL ? (
+                      <span className="text-sm font-medium text-green-600 dark:text-green-400">Unlimited — filled on demand</span>
+                    ) : (
+                      <>
+                        <Package className={`h-4 w-4 ${product.stock < 10 ? "text-orange-500" : "text-gray-400 dark:text-gray-500"}`} />
+                        <span className={`text-sm font-medium ${product.stock < 10 ? "text-orange-600 dark:text-orange-400" : "dark:text-gray-300"}`}>
+                          {product.stock} units
+                        </span>
+                      </>
+                    )}
                   </div>
                 </div>
-                {product.stock < 10 && product.stock > 0 && (
+                {!UNLIMITED_STOCK_SIZES.includes(product.size) && product.stock !== UNLIMITED_STOCK_SENTINEL && product.stock < 10 && product.stock > 0 && (
                   <div className="mt-3 flex items-center gap-1.5 text-[10px] text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/30 p-1.5 rounded-lg">
                     <AlertCircle className="h-3 w-3" />
                     Low stock warning
