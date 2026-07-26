@@ -22,6 +22,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useSession, signOut } from "next-auth/react";
+import DocumentsBadge from "./_components/DocumentsBadge";
 
 const sidebarItems = [
   { label: "Overview", icon: LayoutDashboard, href: "/dashboard" },
@@ -78,7 +79,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   onClick={() => setIsSidebarOpen(false)}
                 >
                   <item.icon className="h-5 w-5" />
-                  {item.label}
+                  <span className="flex items-center gap-1.5">
+                    {item.label}
+                    {item.label === "Documents" && <DocumentsBadge />}
+                  </span>
                 </Link>
               );
             })}

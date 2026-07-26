@@ -269,6 +269,9 @@ export default function DashboardDocumentsPage() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
+  // View document detail dialog
+  const [viewDocument, setViewDocument] = useState<Document | null>(null);
+
   // Delete dialog
   const [deleteTarget, setDeleteTarget] = useState<Document | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -379,6 +382,21 @@ export default function DashboardDocumentsPage() {
     }
   };
 
+  // ─── Card click handler ────────────────────────────
+
+  const handleCardClick = (docType: string, doc: Document | undefined) => {
+    if (doc) {
+      // Show document details for submitted documents
+      setViewDocument(doc);
+    } else {
+      // Open upload dialog with type pre-selected
+      setUploadType(docType);
+      setUploadFile(null);
+      setUploadError(null);
+      setIsUploadOpen(true);
+    }
+  };
+
   // ─── Derived data ──────────────────────────────────
 
   const totalDocs = documents.length;
@@ -482,15 +500,16 @@ export default function DashboardDocumentsPage() {
             return (
               <Card
                 key={key}
-                className={`border shadow-sm transition-colors ${
+                className={`border shadow-sm transition-colors cursor-pointer hover:shadow-md hover:scale-[1.02] transition-transform ${
                   !doc
-                    ? "bg-slate-50/50 dark:bg-slate-800/30 border-slate-200 dark:border-slate-700"
+                    ? "bg-slate-50/50 dark:bg-slate-800/30 border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-700"
                     : doc.verificationStatus === "VERIFIED"
                     ? "bg-green-50/50 dark:bg-green-900/10 border-green-200 dark:border-green-800/40"
                     : doc.verificationStatus === "REJECTED" || doc.verificationStatus === "EXPIRED"
                     ? "bg-red-50/50 dark:bg-red-900/10 border-red-200 dark:border-red-800/40"
                     : "bg-amber-50/50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800/40"
                 }`}
+                onClick={() => handleCardClick(key, doc)}
               >
                 <CardContent className="p-4 space-y-3">
                   <div className="flex items-start gap-3">
@@ -791,6 +810,89 @@ export default function DashboardDocumentsPage() {
                 "Delete"
               )}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* View Document Detail Dialog */}
+      <Dialog
+        open={!!viewDocument}
+        onOpenChange={(open) => {
+          if (!open) setViewDocument(null);
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" /> Document Details
+            </DialogTitle>
+            <DialogDescription>
+              View information about this submitted document.
+            </DialogDescription>
+          </DialogHeader>
+
+          {viewDocument && (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Document Type</Label>
+                <p className="text-sm font-medium text-slate-900 dark:text-white">
+                  {DOCUMENT_TYPE_LABELS[viewDocument.type] || viewDocument.type}
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label>File Name</Label>
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+                  {getFileIcon(viewDocument.fileName)}
+                  <span className="text-sm text-slate-700 dark:text-slate-300">
+                    {viewDocument.fileName}
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <Label className="text-xs">File Size</Label>
+                  <p className="text-sm text-slate-700 dark:text-slate-300">
+                    {formatFileSize(viewDocument.fileSize)}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Uploaded</Label>
+                  <p className="text-sm text-slate-700 dark:text-slate-300">
+                    {formatDate(viewDocument.uploadedAt)}
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs">Status</Label>
+                <div>{getStatusBadge(viewDocument.verificationStatus)}</div>
+                {viewDocument.rejectionReason && (
+                  <p className="text-sm text-red-600 dark:text-red-400 mt-1">
+                    Reason: {viewDocument.rejectionReason}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setViewDocument(null)}
+              className="rounded-xl"
+            >
+              Close
+            </Button>
+            {viewDocument && (
+              <Button
+                onClick={() => window.open(viewDocument.fileUrl, "_blank")}
+                className="rounded-xl"
+              >
+                <Eye className="h-4 w-4 mr-2" /> View File
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
