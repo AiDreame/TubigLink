@@ -151,6 +151,7 @@ export async function GET(req: NextRequest) {
           total: o.total,
           paymentMethod: o.paymentMethod,
           paymentStatus: o.paymentStatus,
+          notes: o.notes,
           createdAt: o.createdAt,
           customer: o.user,
           station: o.station,

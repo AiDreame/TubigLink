@@ -46,6 +46,7 @@ export default function CartPage() {
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
   const [loadingAddresses, setLoadingAddresses] = useState(true);
   const [selectedPayment, setSelectedPayment] = useState("COD");
+  const [deliveryNotes, setDeliveryNotes] = useState("");
 
   const deliveryFee = 0;
   const total = subtotal + deliveryFee;
@@ -93,6 +94,7 @@ export default function CartPage() {
         addressId: selectedAddressId,
         paymentMethod: selectedPayment,
         orderType: "ONCE",
+        notes: deliveryNotes || null,
       };
 
       const res = await fetch("/api/orders", {
@@ -340,6 +342,20 @@ export default function CartPage() {
               </p>
             </div>
           )}
+        </div>
+
+        {/* Delivery Notes */}
+        <div className="bg-card rounded-2xl p-4 shadow-sm border border-border space-y-2">
+          <h2 className="font-bold text-card-foreground">Notes for Driver</h2>
+          <textarea
+            value={deliveryNotes}
+            onChange={(e) => setDeliveryNotes(e.target.value)}
+            placeholder="e.g., Gate code 1234, Leave at the guard house, Call when arriving"
+            className="w-full rounded-xl border border-border bg-background p-3 text-sm text-card-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent min-h-[80px]"
+            maxLength={500}
+            aria-label="Delivery notes for driver"
+          />
+          <p className="text-[10px] text-muted-foreground text-right">{deliveryNotes.length}/500</p>
         </div>
 
         {/* Total Bill */}

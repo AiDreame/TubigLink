@@ -86,6 +86,7 @@ type RecentOrder = {
   total: number;
   paymentMethod: string;
   paymentStatus: string;
+  notes: string | null;
   createdAt: string;
   customer: { name: string | null; email: string | null; phone: string | null };
   station: { name: string; slug: string; city: string };
@@ -499,6 +500,13 @@ export default function AdminTransactionsPage() {
                   <p className="text-xs text-slate-500">Order Date</p>
                   <p className="text-sm font-bold text-slate-900 dark:text-white mt-1">{formatDate(selectedOrder.createdAt)}</p>
                 </div>
+
+                {selectedOrder.notes && (
+                  <div className="p-3 rounded-xl bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800">
+                    <p className="text-xs text-orange-600 dark:text-orange-400 font-bold uppercase tracking-wider mb-1">Delivery Notes</p>
+                    <p className="text-sm text-slate-900 dark:text-slate-200">{selectedOrder.notes}</p>
+                  </div>
+                )}
               </div>
             </>
           )}

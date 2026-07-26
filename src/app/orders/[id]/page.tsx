@@ -287,6 +287,17 @@ export default function OrderDetailPage() {
           </div>
         </div>
 
+        {/* Delivery Notes */}
+        {order.notes && (
+          <div className="bg-card rounded-3xl p-6 shadow-sm border border-border space-y-4">
+            <h2 className="font-bold text-sm text-muted-foreground uppercase tracking-wider">Notes for Driver</h2>
+            <div className="flex gap-3">
+              <MessageSquare className="h-5 w-5 text-blue-500 shrink-0" aria-hidden="true" />
+              <p className="text-sm text-card-foreground">{order.notes}</p>
+            </div>
+          </div>
+        )}
+
         {/* Cancel Order Button — only for PENDING orders */}
         {order.status === "PENDING" && (
           <div className="space-y-4">
