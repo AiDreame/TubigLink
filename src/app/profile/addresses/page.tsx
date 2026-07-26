@@ -156,7 +156,7 @@ export default function AddressesPage() {
             street: values.street,
             barangay: values.barangay,
             city: values.city,
-            province: values.region,
+            province: values.province,
             isDefault: values.isDefault,
             userId,
           }),
@@ -180,7 +180,7 @@ export default function AddressesPage() {
             street: values.street,
             barangay: values.barangay,
             city: values.city,
-            province: values.region,
+            province: values.province,
             isDefault: values.isDefault,
             userId,
           }),
@@ -218,8 +218,7 @@ export default function AddressesPage() {
       street: editingAddress.street,
       barangay: editingAddress.barangay,
       city: editingAddress.city,
-      region: "",
-      islandGroup: "",
+      province: editingAddress.province,
       isDefault: editingAddress.isDefault,
     };
   };
