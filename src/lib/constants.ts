@@ -13,8 +13,7 @@ export interface DocumentTypeInfo {
 }
 
 export const DOCUMENT_TYPE_LABELS: Record<string, DocumentTypeInfo> = {
-  DTI_CERT: { label: "DTI / SEC Certificate", validityMonths: 60 },          // DTI: 5 years (60 months)
-  SEC_CERT: { label: "SEC Certificate", validityMonths: 0 },                  // SEC: perpetual, no expiry
+  BUSINESS_REGISTRATION: { label: "Business Registration (DTI or SEC)", validityMonths: 60 },  // DTI: 5 years / SEC: perpetual (60mo default for tracking)
   BIR_2303: { label: "BIR Form 2303", validityMonths: 0 },                   // BIR 2303: permanent, no renewal
   MAYORS_PERMIT: { label: "Mayor's Permit", validityMonths: 12 },            // Annual renewal (every January)
   BARANGAY_CLEARANCE: { label: "Barangay Clearance", validityMonths: 12 },   // 1 year
@@ -28,14 +27,23 @@ export const DOCUMENT_TYPE_LABELS: Record<string, DocumentTypeInfo> = {
   VIDEO_WALKTHROUGH: { label: "Video Walkthrough", validityMonths: 0 },       // No expiry
 };
 
+/**
+ * Normalize legacy document types (DTI_CERT, SEC_CERT) to the combined BUSINESS_REGISTRATION type.
+ * This ensures backward compatibility for documents uploaded before the merge.
+ */
+export function normalizeDocumentType(type: string): string {
+  if (type === "DTI_CERT" || type === "SEC_CERT") return "BUSINESS_REGISTRATION";
+  return type;
+}
+
 /** Helper to get the label string from a document type code (backward compatible) */
 export function getDocumentTypeLabel(type: string): string {
-  return DOCUMENT_TYPE_LABELS[type]?.label ?? type;
+  return DOCUMENT_TYPE_LABELS[normalizeDocumentType(type)]?.label ?? type;
 }
 
 /** Helper to get validity months for a document type */
 export function getDocumentValidityMonths(type: string): number {
-  return DOCUMENT_TYPE_LABELS[type]?.validityMonths ?? 0;
+  return DOCUMENT_TYPE_LABELS[normalizeDocumentType(type)]?.validityMonths ?? 0;
 }
 // PH Regions
 export const PH_REGIONS = [

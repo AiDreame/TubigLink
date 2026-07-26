@@ -55,7 +55,7 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { DOCUMENT_TYPE_LABELS, getDocumentTypeLabel, getDocumentValidityMonths } from "@/lib/constants";
+import { DOCUMENT_TYPE_LABELS, getDocumentTypeLabel, getDocumentValidityMonths, normalizeDocumentType } from "@/lib/constants";
 
 // ─── Types ───────────────────────────────────────────
 
@@ -516,7 +516,11 @@ export default function DashboardDocumentsPage() {
     (d) => d.verificationStatus === "REJECTED" || d.verificationStatus === "EXPIRED"
   ).length;
 
-  const documentMap = new Map(documents.map((d) => [d.type, d]));
+  const documentMap = new Map<string, Document>();
+  for (const doc of documents) {
+    const normalized = normalizeDocumentType(doc.type);
+    documentMap.set(normalized, doc); // Last occurrence wins (most recent upload per category)
+  }
 
   // ─── Loading state ─────────────────────────────────
 

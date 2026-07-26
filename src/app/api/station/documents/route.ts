@@ -33,12 +33,17 @@ export async function GET(req: NextRequest) {
     // Build filter
     const where: any = { stationId: station.id };
     if (type && [
-      "DTI_CERT", "SEC_CERT", "BIR_2303", "MAYORS_PERMIT",
+      "BUSINESS_REGISTRATION", "DTI_CERT", "SEC_CERT", "BIR_2303", "MAYORS_PERMIT",
       "BARANGAY_CLEARANCE", "SANITARY_PERMIT", "WATER_TEST_BACTERIOLOGICAL",
       "WATER_TEST_PHYSICAL_CHEMICAL", "GOVT_ID", "FIRE_SAFETY_CERT",
       "PROOF_OF_ADDRESS", "STATION_PHOTO", "VIDEO_WALKTHROUGH",
     ].includes(type)) {
-      where.type = type;
+      // Normalize legacy types to BUSINESS_REGISTRATION for backward compatibility
+      if (type === "DTI_CERT" || type === "SEC_CERT") {
+        where.type = { in: ["DTI_CERT", "SEC_CERT", "BUSINESS_REGISTRATION"] };
+      } else {
+        where.type = type;
+      }
     }
     if (verificationStatus && ["PENDING", "VERIFIED", "REJECTED", "EXPIRED"].includes(verificationStatus)) {
       where.verificationStatus = verificationStatus;
