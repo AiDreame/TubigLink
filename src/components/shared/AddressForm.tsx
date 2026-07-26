@@ -1,18 +1,26 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { MapPin, Home, Briefcase, Building2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { AddressAutocomplete } from "@/components/shared/AddressAutocomplete";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { PROVINCES_BY_ISLAND, CITIES_BY_PROVINCE, SAMPLE_BARANGAYS } from "@/lib/constants";
 
 export interface AddressFormValues {
   label: string;
   name: string;
   phone: string;
   street: string;
+  islandGroup: string;
   province: string;
   city: string;
   barangay: string;
@@ -37,6 +45,7 @@ const DEFAULT_VALUES: AddressFormValues = {
   name: "",
   phone: "",
   street: "",
+  islandGroup: "",
   province: "",
   city: "",
   barangay: "",
@@ -50,28 +59,43 @@ export function AddressForm({ initialValues, onSave, onCancel, isSaving }: Addre
   });
   const [errors, setErrors] = useState<Partial<Record<keyof AddressFormValues, string>>>({});
 
+  // Derived data for cascading dropdowns
+  const islandGroups = useMemo(() => Object.keys(PROVINCES_BY_ISLAND), []);
+
+  const provincesForIsland = useMemo(() => {
+    if (!form.islandGroup) return [];
+    return PROVINCES_BY_ISLAND[form.islandGroup] || [];
+  }, [form.islandGroup]);
+
+  const citiesForProvince = useMemo(() => {
+    if (!form.province) return [];
+    return CITIES_BY_PROVINCE[form.province] || [];
+  }, [form.province]);
+
+  const barangaysForCity = useMemo(() => {
+    if (!form.city) return [];
+    return SAMPLE_BARANGAYS[form.city] || [];
+  }, [form.city]);
+
   const handleChange = useCallback(
     (field: keyof AddressFormValues, value: string | boolean) => {
-      setForm((prev) => ({ ...prev, [field]: value as any }));
+      setForm((prev) => {
+        const updates: Partial<AddressFormValues> = { [field]: value as any };
+        // Reset cascading fields when a parent changes
+        if (field === "islandGroup") {
+          updates.province = "";
+          updates.city = "";
+          updates.barangay = "";
+        } else if (field === "province") {
+          updates.city = "";
+          updates.barangay = "";
+        } else if (field === "city") {
+          updates.barangay = "";
+        }
+        return { ...prev, ...updates };
+      });
+      // Clear error for this field
       setErrors((prev) => ({ ...prev, [field]: undefined }));
-    },
-    []
-  );
-
-  const handleLocationChange = useCallback(
-    (result: { barangay: string; city: string; province: string }) => {
-      setForm((prev) => ({
-        ...prev,
-        barangay: result.barangay,
-        city: result.city,
-        province: result.province,
-      }));
-      setErrors((prev) => ({
-        ...prev,
-        barangay: undefined,
-        city: undefined,
-        province: undefined,
-      }));
     },
     []
   );
@@ -83,9 +107,10 @@ export function AddressForm({ initialValues, onSave, onCancel, isSaving }: Addre
     else if (!/^(\+63|0)\d{10}$/.test(form.phone.replace(/\s/g, "")))
       newErrors.phone = "Invalid phone number (e.g., +639123456789)";
     if (!form.street.trim()) newErrors.street = "Street address is required";
-    if (!form.province) newErrors.province = "Select a location";
-    if (!form.city) newErrors.city = "Select a location";
-    if (!form.barangay) newErrors.barangay = "Select a location";
+    if (!form.islandGroup) newErrors.islandGroup = "Select an island group";
+    if (!form.province) newErrors.province = "Select a province";
+    if (!form.city) newErrors.city = "Select a city";
+    if (!form.barangay) newErrors.barangay = "Select a barangay";
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   }, [form]);
@@ -160,22 +185,104 @@ export function AddressForm({ initialValues, onSave, onCancel, isSaving }: Addre
         </div>
       </div>
 
-      {/* Location autocomplete replaces island/province/city/barangay cascade */}
-      <div className="space-y-1.5">
-        <Label className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-          Location
-        </Label>
-        <AddressAutocomplete
-          placeholder="Search barangay, city, or province..."
-          defaultBarangay={form.barangay}
-          defaultCity={form.city}
-          defaultProvince={form.province}
-          onChange={handleLocationChange}
-          error={errors.barangay || errors.city || errors.province}
-        />
-        <p className="text-xs text-muted-foreground">
-          Start typing to find your barangay, city, or province
-        </p>
+      {/* Island Group → Province → City → Barangay cascade */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {/* Island Group */}
+        <div className="space-y-1.5">
+          <Label className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+            Island Group
+          </Label>
+          <Select
+            value={form.islandGroup}
+            onValueChange={(v) => handleChange("islandGroup", v)}
+          >
+            <SelectTrigger className={errors.islandGroup ? "border-red-500" : ""}>
+              <SelectValue placeholder="Select island group" />
+            </SelectTrigger>
+            <SelectContent>
+              {islandGroups.map((group) => (
+                <SelectItem key={group} value={group}>
+                  {group}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {errors.islandGroup && <p className="text-xs text-red-500">{errors.islandGroup}</p>}
+        </div>
+
+        {/* Province */}
+        <div className="space-y-1.5">
+          <Label className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+            Province
+          </Label>
+          <Select
+            value={form.province}
+            onValueChange={(v) => handleChange("province", v)}
+            disabled={!form.islandGroup}
+          >
+            <SelectTrigger className={errors.province ? "border-red-500" : ""}>
+              <SelectValue placeholder={form.islandGroup ? "Select province" : "Select island first"} />
+            </SelectTrigger>
+            <SelectContent>
+              {provincesForIsland.map((p) => (
+                <SelectItem key={p} value={p}>
+                  {p}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {errors.province && <p className="text-xs text-red-500">{errors.province}</p>}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {/* City */}
+        <div className="space-y-1.5">
+          <Label className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+            City / Municipality
+          </Label>
+          <Select
+            value={form.city}
+            onValueChange={(v) => handleChange("city", v)}
+            disabled={!form.province}
+          >
+            <SelectTrigger className={errors.city ? "border-red-500" : ""}>
+              <SelectValue placeholder={form.province ? "Select city" : "Select province first"} />
+            </SelectTrigger>
+            <SelectContent>
+              {citiesForProvince.map((city) => (
+                <SelectItem key={city.id} value={city.id}>
+                  {city.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {errors.city && <p className="text-xs text-red-500">{errors.city}</p>}
+        </div>
+
+        {/* Barangay */}
+        <div className="space-y-1.5">
+          <Label className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+            Barangay
+          </Label>
+          <Select
+            value={form.barangay}
+            onValueChange={(v) => handleChange("barangay", v)}
+            disabled={!form.city}
+          >
+            <SelectTrigger className={errors.barangay ? "border-red-500" : ""}>
+              <SelectValue placeholder={form.city ? "Select barangay" : "Select city first"} />
+            </SelectTrigger>
+            <SelectContent>
+              {barangaysForCity.map((b) => (
+                <SelectItem key={b} value={b}>
+                  {b}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {errors.barangay && <p className="text-xs text-red-500">{errors.barangay}</p>}
+        </div>
       </div>
 
       {/* Street Address */}

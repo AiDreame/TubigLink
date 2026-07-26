@@ -24,7 +24,6 @@ import {
   User,
   MapPinned,
 } from "lucide-react";
-import { AddressAutocomplete } from "@/components/shared/AddressAutocomplete";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -565,23 +564,38 @@ export default function StationOnboardingPage() {
           className="min-h-[48px]"
         />
       </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-2">
+          <Label htmlFor="stationCity">City *</Label>
+          <Input
+            id="stationCity"
+            placeholder="e.g. Tagbilaran"
+            value={stationCity}
+            onChange={(e) => setStationCity(e.target.value)}
+            required
+            className="min-h-[48px]"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="stationBarangay">Barangay *</Label>
+          <Input
+            id="stationBarangay"
+            placeholder="e.g. Poblacion"
+            value={stationBarangay}
+            onChange={(e) => setStationBarangay(e.target.value)}
+            required
+            className="min-h-[48px]"
+          />
+        </div>
+      </div>
       <div className="space-y-2">
-        <Label htmlFor="stationLocation">Location *</Label>
-        <AddressAutocomplete
-          id="stationLocation"
-          placeholder="Search barangay, city, or province..."
-          defaultBarangay={stationBarangay}
-          defaultCity={stationCity}
-          defaultProvince={stationProvince}
-          onChange={(result) => {
-            setStationBarangay(result.barangay);
-            setStationCity(result.city);
-            setStationProvince(result.province);
-          }}
+        <Label htmlFor="stationProvince">Province</Label>
+        <Input
+          id="stationProvince"
+          value={stationProvince}
+          onChange={(e) => setStationProvince(e.target.value)}
+          className="min-h-[48px]"
         />
-        <p className="text-xs text-muted-foreground">
-          Start typing to find your barangay, city, or province
-        </p>
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-2">

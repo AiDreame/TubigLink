@@ -10,7 +10,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { CitySelector } from "@/components/shared/CitySelector";
 import { AddressSearch } from "@/components/shared/AddressSearch";
-import { AddressAutocomplete } from "@/components/shared/AddressAutocomplete";
 import { BarangayAutocomplete } from "@/components/shared/BarangayAutocomplete";
 import { ThemeToggle } from "@/components/shared/ThemeToggle";
 import dynamic from "next/dynamic";
@@ -34,7 +33,6 @@ export default function HomePage() {
   const { selectedCity, selectedProvince, getProvinceTagline } = useCityStore();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedBarangay, setSelectedBarangay] = useState("");
-  const [heroLocation, setHeroLocation] = useState<{ city: string; barangay: string; province: string }>({ city: selectedCity, barangay: "", province: "" });
   const [userAddress, setUserAddress] = useState<{ city: string; barangay: string } | null>(null);
   const [nearbyStations, setNearbyStations] = useState<any[]>([]);
   const [isLoadingNearby, setIsLoadingNearby] = useState(false);
@@ -335,48 +333,21 @@ export default function HomePage() {
 
                     {/* Search Bar with Address Autocomplete */}
                     <div className="relative max-w-xl">
-                      <form
-                        onSubmit={(e) => {
-                          e.preventDefault();
-                          const params = new URLSearchParams();
-                          if (heroLocation.city) params.append("city", heroLocation.city);
-                          if (heroLocation.barangay) params.append("barangay", heroLocation.barangay);
-                          window.location.href = `/stations?${params.toString()}`;
-                        }}
-                        className="flex items-center gap-2"
-                      >
-                        <div className="flex-1">
-                          <AddressAutocomplete
-                            onChange={(result) => {
-                              setHeroLocation(result);
-                              if (result.city) {
-                                const { setCity } = useCityStore.getState();
-                                setCity(result.city);
-                              }
-                            }}
-                            defaultCity={selectedCity}
-                            placeholder="Search barangay, city, or province..."
-                            className="w-full"
-                          />
-                        </div>
-                        <Button
-                          type="submit"
-                          className="rounded-xl bg-white text-blue-600 hover:bg-blue-50 shrink-0 px-6 h-[44px] font-bold"
-                        >
-                          <Search className="h-4 w-4 mr-2" />
-                          Search
-                        </Button>
-                      </form>
+                      <AddressSearch
+                        variant="hero"
+                        onSearch={handleAddressSearch}
+                        className="mb-2"
+                      />
                       <div className="flex items-center gap-2 mt-2">
                         <p className="text-xs text-blue-200 flex items-center gap-1">
                           <MapPin className="h-3 w-3" />
-                          Service area: {isNationwide ? "Nationwide" : heroLocation.city || selectedCity}
+                          Service area: {isNationwide ? "Nationwide" : selectedCity}
                         </p>
-                        {heroLocation.barangay && (
+                        {selectedBarangay && (
                           <>
                             <span className="text-blue-300 text-xs">•</span>
                             <p className="text-xs text-blue-200">
-                              Brgy. {heroLocation.barangay}
+                              Brgy. {selectedBarangay}
                             </p>
                           </>
                         )}

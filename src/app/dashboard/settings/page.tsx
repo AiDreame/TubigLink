@@ -21,7 +21,6 @@ import {
   X,
   Droplets,
 } from "lucide-react";
-import { AddressAutocomplete } from "@/components/shared/AddressAutocomplete";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -420,30 +419,55 @@ export default function DashboardSettingsPage() {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Location Autocomplete */}
+            {/* Province */}
             <div className="space-y-2">
-              <Label htmlFor="station-location" className="text-sm font-bold">
-                Location <span className="text-red-500">*</span>
+              <Label htmlFor="province" className="text-sm font-bold">
+                Province <span className="text-red-500">*</span>
               </Label>
-              <AddressAutocomplete
-                id="station-location"
-                placeholder="Search barangay, city, or province..."
-                defaultBarangay={form.barangay}
-                defaultCity={form.city}
-                defaultProvince={form.province}
-                onChange={(result) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    barangay: result.barangay,
-                    city: result.city,
-                    province: result.province,
-                  }))
-                }
-                error={errors.barangay || errors.city || errors.province}
+              <Input
+                id="province"
+                value={form.province || ""}
+                onChange={(e) => setForm((prev) => ({ ...prev, province: e.target.value }))}
+                className={`rounded-xl bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 min-h-[44px] ${
+                  errors.province ? "border-red-500" : ""
+                }`}
+                placeholder="e.g. Bohol"
               />
-              <p className="text-xs text-muted-foreground">
-                Start typing to find your barangay, city, or province
-              </p>
+              {errors.province && <p className="text-xs text-red-500">{errors.province}</p>}
+            </div>
+
+            {/* City */}
+            <div className="space-y-2">
+              <Label htmlFor="city" className="text-sm font-bold">
+                City <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="city"
+                value={form.city || ""}
+                onChange={(e) => setForm((prev) => ({ ...prev, city: e.target.value }))}
+                className={`rounded-xl bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 min-h-[44px] ${
+                  errors.city ? "border-red-500" : ""
+                }`}
+                placeholder="e.g. Tagbilaran"
+              />
+              {errors.city && <p className="text-xs text-red-500">{errors.city}</p>}
+            </div>
+
+            {/* Barangay */}
+            <div className="space-y-2">
+              <Label htmlFor="barangay" className="text-sm font-bold">
+                Barangay <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="barangay"
+                value={form.barangay || ""}
+                onChange={(e) => setForm((prev) => ({ ...prev, barangay: e.target.value }))}
+                className={`rounded-xl bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 min-h-[44px] ${
+                  errors.barangay ? "border-red-500" : ""
+                }`}
+                placeholder="e.g. Poblacion"
+              />
+              {errors.barangay && <p className="text-xs text-red-500">{errors.barangay}</p>}
             </div>
 
             {/* Street Address */}
@@ -708,25 +732,28 @@ export default function DashboardSettingsPage() {
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            {/* Location Autocomplete */}
+            {/* City */}
             <div className="space-y-2">
-              <Label htmlFor="zone-location" className="text-sm font-bold">Location</Label>
-              <AddressAutocomplete
-                id="zone-location"
-                placeholder="Search barangay, city, or province..."
-                defaultBarangay={zoneForm.barangay}
-                defaultCity={zoneForm.city}
-                onChange={(result) =>
-                  setZoneForm((prev) => ({
-                    ...prev,
-                    barangay: result.barangay,
-                    city: result.city,
-                  }))
-                }
+              <Label htmlFor="zone-city" className="text-sm font-bold">City</Label>
+              <Input
+                id="zone-city"
+                value={zoneForm.city}
+                onChange={(e) => setZoneForm((prev) => ({ ...prev, city: e.target.value }))}
+                className="rounded-xl bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 min-h-[44px]"
+                placeholder="e.g. Tagbilaran"
               />
-              <p className="text-xs text-muted-foreground">
-                Start typing to find your delivery zone
-              </p>
+            </div>
+
+            {/* Barangay */}
+            <div className="space-y-2">
+              <Label htmlFor="zone-barangay" className="text-sm font-bold">Barangay</Label>
+              <Input
+                id="zone-barangay"
+                value={zoneForm.barangay}
+                onChange={(e) => setZoneForm((prev) => ({ ...prev, barangay: e.target.value }))}
+                className="rounded-xl bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 min-h-[44px]"
+                placeholder="e.g. Poblacion"
+              />
             </div>
 
             {/* Delivery Fee */}
