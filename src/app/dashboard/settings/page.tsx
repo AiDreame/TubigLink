@@ -52,6 +52,7 @@ import {
 import { useSession } from "next-auth/react";
 import toast from "react-hot-toast";
 import { METRO_MANILA_CITIES, CEBU_CITIES, MINDANAO_CITIES, SAMPLE_BARANGAYS } from "@/lib/constants";
+import { BarangayInput } from "@/components/shared/BarangayInput";
 
 interface DeliveryZone {
   id?: string;
@@ -235,10 +236,6 @@ export default function DashboardSettingsPage() {
     setDeliveryZones(newZones);
     setConfirmDelete(null);
     toast.success("Delivery zone removed");
-  };
-
-  const getCityBarangays = (city: string): string[] => {
-    return SAMPLE_BARANGAYS[city] || [];
   };
 
   if (loading) {
@@ -493,35 +490,13 @@ export default function DashboardSettingsPage() {
               <Label htmlFor="barangay" className="text-sm font-bold">
                 Barangay <span className="text-red-500">*</span>
               </Label>
-              {form.city && getCityBarangays(form.city).length > 0 ? (
-                <Select
-                  value={form.barangay || ""}
-                  onValueChange={(v) => setForm((prev) => ({ ...prev, barangay: v }))}
-                >
-                  <SelectTrigger className={`rounded-xl bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 min-h-[44px] ${
-                    errors.barangay ? "border-red-500" : ""
-                  }`}>
-                    <SelectValue placeholder="Select barangay" />
-                  </SelectTrigger>
-                  <SelectContent className="rounded-xl dark:bg-gray-800 dark:border-gray-700 max-h-[280px]">
-                    {getCityBarangays(form.city).map((bg) => (
-                      <SelectItem key={bg} value={bg} className="dark:text-gray-300 dark:focus:bg-gray-700">
-                        {bg}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <Input
-                  id="barangay"
-                  value={form.barangay || ""}
-                  onChange={(e) => setForm((prev) => ({ ...prev, barangay: e.target.value }))}
-                  className={`rounded-xl bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 min-h-[44px] ${
-                    errors.barangay ? "border-red-500" : ""
-                  }`}
-                  placeholder="Enter barangay"
-                />
-              )}
+              <BarangayInput
+                id="barangay"
+                value={form.barangay || ""}
+                onChange={(v) => setForm((prev) => ({ ...prev, barangay: v }))}
+                onCityChange={(v) => setForm((prev) => ({ ...prev, city: v }))}
+                placeholder="e.g. Poblacion"
+              />
               {errors.barangay && <p className="text-xs text-red-500">{errors.barangay}</p>}
             </div>
 
@@ -808,28 +783,13 @@ export default function DashboardSettingsPage() {
             {/* Barangay */}
             <div className="space-y-2">
               <Label htmlFor="zone-barangay" className="text-sm font-bold">Barangay</Label>
-              {zoneForm.city && getCityBarangays(zoneForm.city).length > 0 ? (
-                <Select
-                  value={zoneForm.barangay}
-                  onValueChange={(v) => setZoneForm((prev) => ({ ...prev, barangay: v }))}
-                >
-                  <SelectTrigger className="rounded-xl bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 min-h-[44px]">
-                    <SelectValue placeholder="Select barangay" />
-                  </SelectTrigger>
-                  <SelectContent className="rounded-xl dark:bg-gray-800 dark:border-gray-700 max-h-[280px]">
-                    {getCityBarangays(zoneForm.city).map((bg) => (
-                      <SelectItem key={bg} value={bg} className="dark:text-gray-300 dark:focus:bg-gray-700">{bg}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <Input
-                  value={zoneForm.barangay}
-                  onChange={(e) => setZoneForm((prev) => ({ ...prev, barangay: e.target.value }))}
-                  className="rounded-xl bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 min-h-[44px]"
-                  placeholder="Enter barangay name"
-                />
-              )}
+              <BarangayInput
+                id="zone-barangay"
+                value={zoneForm.barangay}
+                onChange={(v) => setZoneForm((prev) => ({ ...prev, barangay: v }))}
+                onCityChange={(v) => setZoneForm((prev) => ({ ...prev, city: v }))}
+                placeholder="e.g. Poblacion"
+              />
             </div>
 
             {/* Delivery Fee */}

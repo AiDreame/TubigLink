@@ -36,7 +36,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import toast from "react-hot-toast";
-import { MESSAGES, WATER_TYPES, PRODUCT_SIZES, ALL_SUPPORTED_CITIES, SAMPLE_BARANGAYS } from "@/lib/constants";
+import { MESSAGES, WATER_TYPES, PRODUCT_SIZES, ALL_SUPPORTED_CITIES } from "@/lib/constants";
+import { BarangayInput } from "@/components/shared/BarangayInput";
 
 const STEPS = [
   { id: 1, label: "Account", icon: User },
@@ -352,13 +353,6 @@ export default function StationOnboardingPage() {
     setZones(updated);
   };
 
-  const getBarangays = () => {
-    if (stationCity && SAMPLE_BARANGAYS[stationCity]) {
-      return SAMPLE_BARANGAYS[stationCity];
-    }
-    return [];
-  };
-
   const renderStepIndicator = () => (
     <div className="flex items-center justify-between px-2 mb-8">
       {STEPS.map((s, i) => (
@@ -541,16 +535,13 @@ export default function StationOnboardingPage() {
         </div>
         <div className="space-y-2">
           <Label htmlFor="stationBarangay">Barangay *</Label>
-          <Select value={stationBarangay} onValueChange={setStationBarangay} disabled={!stationCity}>
-            <SelectTrigger id="stationBarangay" className="min-h-[48px]">
-              <SelectValue placeholder={stationCity ? "Select barangay" : "Pick city first"} />
-            </SelectTrigger>
-            <SelectContent>
-              {getBarangays().map((b) => (
-                <SelectItem key={b} value={b}>{b}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <BarangayInput
+            id="stationBarangay"
+            placeholder="e.g. Poblacion"
+            value={stationBarangay}
+            onChange={setStationBarangay}
+            onCityChange={setStationCity}
+          />
         </div>
       </div>
       <div className="space-y-2">
@@ -712,7 +703,6 @@ export default function StationOnboardingPage() {
   );
 
   const renderStep4 = () => {
-    const barangays = getBarangays();
     return (
       <div className="space-y-5">
         <div className="text-center mb-6">
@@ -742,20 +732,11 @@ export default function StationOnboardingPage() {
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Barangay</Label>
-                <Select
+                <BarangayInput
                   value={zone.barangay}
-                  onValueChange={(v) => updateZone(i, "barangay", v)}
-                  disabled={!stationCity}
-                >
-                  <SelectTrigger className="min-h-[44px]">
-                    <SelectValue placeholder={stationCity ? "Select barangay" : "Set city in Step 2 first"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {barangays.map((b) => (
-                      <SelectItem key={b} value={b}>{b}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  onChange={(v) => updateZone(i, "barangay", v)}
+                  placeholder="e.g. Poblacion"
+                />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
