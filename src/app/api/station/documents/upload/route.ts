@@ -49,6 +49,11 @@ export async function POST(req: NextRequest) {
     const documentType = formData.get("type") as string | null;
     const expiryDateStr = formData.get("expiryDate") as string | null;
 
+    // New metadata fields
+    const permitNumber = formData.get("permitNumber") as string | null;
+    const issuingAuthority = formData.get("issuingAuthority") as string | null;
+    const issueDateStr = formData.get("issueDate") as string | null;
+
     if (!file) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
@@ -56,6 +61,38 @@ export async function POST(req: NextRequest) {
     if (!documentType || !VALID_DOCUMENT_TYPES.includes(documentType)) {
       return NextResponse.json(
         { error: `Invalid document type. Must be one of: ${VALID_DOCUMENT_TYPES.join(", ")}` },
+        { status: 400 }
+      );
+    }
+
+    // Validate required metadata fields
+    if (!permitNumber || !permitNumber.trim()) {
+      return NextResponse.json(
+        { error: "Permit / Certificate Number is required" },
+        { status: 400 }
+      );
+    }
+
+    if (!issuingAuthority || !issuingAuthority.trim()) {
+      return NextResponse.json(
+        { error: "Issuing Authority is required" },
+        { status: 400 }
+      );
+    }
+
+    if (!issueDateStr) {
+      return NextResponse.json(
+        { error: "Issue Date is required" },
+        { status: 400 }
+      );
+    }
+
+    // Parse issue date
+    let issueDate: Date;
+    issueDate = new Date(issueDateStr);
+    if (isNaN(issueDate.getTime())) {
+      return NextResponse.json(
+        { error: "Invalid issueDate format" },
         { status: 400 }
       );
     }
@@ -114,6 +151,9 @@ export async function POST(req: NextRequest) {
         mimeType: file.type || ext === ".pdf" ? "application/pdf" : ext === ".png" ? "image/png" : "image/jpeg",
         verificationStatus: "PENDING",
         expiryDate: expiryDate ?? null,
+        permitNumber: permitNumber!.trim(),
+        issuingAuthority: issuingAuthority!.trim(),
+        issueDate: issueDate,
       },
     });
 

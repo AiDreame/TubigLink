@@ -253,6 +253,15 @@ model StationDocument {
   uploadedAt         DateTime  @default(now())
   notes              String?
 
+  // ── Resubmission cooldown fields ──
+  rejectedAt         DateTime? // When the document was last rejected
+  resubmitAvailableAt DateTime? // rejectedAt + 24 hours; when provider can resubmit
+
+  // ── Document metadata fields ──
+  permitNumber       String?   // Permit / Certificate Number
+  issuingAuthority   String?   // e.g., "DTI Region VII", "LGU Tagbilaran"
+  issueDate          DateTime? // Date the permit/certificate was issued
+
   station            Station   @relation(fields: [stationId], references: [id])
   verifiedBy         User?     @relation("DocumentVerifier", fields: [verifiedById], references: [id])
 

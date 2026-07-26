@@ -66,6 +66,13 @@ export async function POST(req: NextRequest) {
 
     // Update document verification status
     const newStatus = action === "REVERT" ? "PENDING" : action === "APPROVE" ? "VERIFIED" : "REJECTED";
+
+    // Calculate resubmission cooldown (24 hours after rejection)
+    const now = new Date();
+    const resubmitAvailableAt = action === "REJECT"
+      ? new Date(now.getTime() + 24 * 60 * 60 * 1000)
+      : action === "REVERT" ? null : undefined;
+
     const updatedDocument = await prisma.stationDocument.update({
       where: { id: documentId },
       data: {
@@ -73,6 +80,8 @@ export async function POST(req: NextRequest) {
         rejectionReason: action === "REVERT" ? null : action === "REJECT" ? rejectionReason : null,
         verifiedById: action === "REVERT" ? null : adminId,
         verifiedAt: action === "REVERT" ? null : new Date(),
+        rejectedAt: action === "REJECT" ? now : action === "REVERT" ? null : undefined,
+        resubmitAvailableAt: resubmitAvailableAt as Date | null | undefined,
       },
     });
 

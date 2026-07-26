@@ -18,6 +18,7 @@ import {
   XCircle,
   ShieldAlert,
   HelpCircle,
+  Timer,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -69,6 +70,11 @@ interface Document {
   expiryDate?: string | null;
   verificationStatus: "PENDING" | "VERIFIED" | "REJECTED" | "EXPIRED";
   rejectionReason?: string;
+  rejectedAt?: string | null;
+  resubmitAvailableAt?: string | null;
+  permitNumber?: string | null;
+  issuingAuthority?: string | null;
+  issueDate?: string | null;
   uploadedAt: string;
 }
 
@@ -91,6 +97,15 @@ function formatDate(dateStr: string): string {
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+  });
+}
+
+function formatDateOnly(dateStr: string): string {
+  const d = new Date(dateStr);
+  return d.toLocaleDateString("en-PH", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
   });
 }
 
@@ -118,6 +133,32 @@ function getStatusBadge(status: string) {
       {status}
     </Badge>
   );
+}
+
+/** Format a countdown from seconds to HH:MM:SS */
+function formatCountdown(seconds: number): string {
+  if (seconds <= 0) return "00:00:00";
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  return [h, m, s].map((v) => v.toString().padStart(2, "0")).join(":");
+}
+
+/** Check if a rejected document is still in cooldown */
+function isInCooldown(doc: Document): boolean {
+  if (doc.verificationStatus !== "REJECTED") return false;
+  if (!doc.resubmitAvailableAt) return false;
+  return new Date(doc.resubmitAvailableAt).getTime() > Date.now();
+}
+
+/** Get remaining seconds until resubmission is available */
+function getCooldownSeconds(doc: Document): number {
+  if (!doc.resubmitAvailableAt) return 0;
+  const remaining =
+    Math.ceil(
+      (new Date(doc.resubmitAvailableAt).getTime() - Date.now()) / 1000
+    );
+  return Math.max(0, remaining);
 }
 
 function getChecklistStatus(doc: Document | undefined) {
@@ -154,11 +195,22 @@ function getChecklistStatus(doc: Document | undefined) {
         label: doc.fileName,
       };
     case "REJECTED":
+      if (isInCooldown(doc)) {
+        return {
+          icon: <Timer className="h-5 w-5 text-orange-500" />,
+          badge: (
+            <Badge variant="outline" className="bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400 font-medium">
+              Resubmit in: {formatCountdown(getCooldownSeconds(doc))}
+            </Badge>
+          ),
+          label: doc.rejectionReason ? `Rejected: ${doc.rejectionReason}` : doc.fileName,
+        };
+      }
       return {
         icon: <XCircle className="h-5 w-5 text-red-500" />,
         badge: (
-          <Badge variant="outline" className="bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 font-medium">
-            Rejected
+          <Badge variant="outline" className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 font-medium">
+            Ready to resubmit
           </Badge>
         ),
         label: doc.rejectionReason ? `Rejected: ${doc.rejectionReason}` : doc.fileName,
@@ -270,6 +322,11 @@ export default function DashboardDocumentsPage() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
+  // Upload metadata fields
+  const [uploadPermitNumber, setUploadPermitNumber] = useState("");
+  const [uploadIssuingAuthority, setUploadIssuingAuthority] = useState("");
+  const [uploadIssueDate, setUploadIssueDate] = useState("");
+
   // View document detail dialog
   const [viewDocument, setViewDocument] = useState<Document | null>(null);
 
@@ -277,6 +334,13 @@ export default function DashboardDocumentsPage() {
   const [deleteTarget, setDeleteTarget] = useState<Document | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // Countdown ticker — force re-render every second for live countdowns
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const interval = setInterval(() => setTick((t) => t + 1), 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // ─── Fetch documents ───────────────────────────────
 
@@ -314,12 +378,27 @@ export default function DashboardDocumentsPage() {
       setUploadError("Please select a document type");
       return;
     }
+    if (!uploadPermitNumber.trim()) {
+      setUploadError("Permit / Certificate Number is required");
+      return;
+    }
+    if (!uploadIssuingAuthority.trim()) {
+      setUploadError("Issuing Authority is required");
+      return;
+    }
+    if (!uploadIssueDate) {
+      setUploadError("Issue Date is required");
+      return;
+    }
 
     setIsUploading(true);
     try {
       const fd = new FormData();
       fd.append("file", uploadFile);
       fd.append("type", uploadType);
+      fd.append("permitNumber", uploadPermitNumber.trim());
+      fd.append("issuingAuthority", uploadIssuingAuthority.trim());
+      fd.append("issueDate", new Date(uploadIssueDate).toISOString());
 
       // Auto-calculate expiry date from validity period
       const validityMonths = getDocumentValidityMonths(uploadType);
@@ -341,6 +420,9 @@ export default function DashboardDocumentsPage() {
       // Reset and close
       setUploadFile(null);
       setUploadType("");
+      setUploadPermitNumber("");
+      setUploadIssuingAuthority("");
+      setUploadIssueDate("");
       setIsUploadOpen(false);
       await fetchDocuments();
     } catch (err: any) {
@@ -395,12 +477,31 @@ export default function DashboardDocumentsPage() {
 
   const handleCardClick = (docType: string, doc: Document | undefined) => {
     if (doc) {
+      // For rejected documents in cooldown: show detail view, not upload
+      if (isInCooldown(doc)) {
+        setViewDocument(doc);
+        return;
+      }
+      // For rejected documents past cooldown: open upload dialog pre-filled
+      if (doc.verificationStatus === "REJECTED") {
+        setUploadType(docType);
+        setUploadFile(null);
+        setUploadPermitNumber(doc.permitNumber || "");
+        setUploadIssuingAuthority(doc.issuingAuthority || "");
+        setUploadIssueDate(doc.issueDate ? doc.issueDate.split("T")[0] : "");
+        setUploadError(null);
+        setIsUploadOpen(true);
+        return;
+      }
       // Show document details for submitted documents
       setViewDocument(doc);
     } else {
       // Open upload dialog with type pre-selected
       setUploadType(docType);
       setUploadFile(null);
+      setUploadPermitNumber("");
+      setUploadIssuingAuthority("");
+      setUploadIssueDate("");
       setUploadError(null);
       setIsUploadOpen(true);
     }
@@ -453,7 +554,18 @@ export default function DashboardDocumentsPage() {
             Upload and manage your station&apos;s compliance documents
           </p>
         </div>
-        <Button className="rounded-xl" onClick={() => setIsUploadOpen(true)}>
+        <Button
+          className="rounded-xl"
+          onClick={() => {
+            setUploadType("");
+            setUploadFile(null);
+            setUploadPermitNumber("");
+            setUploadIssuingAuthority("");
+            setUploadIssueDate("");
+            setUploadError(null);
+            setIsUploadOpen(true);
+          }}
+        >
           <Plus className="h-4 w-4 mr-2" /> Upload Document
         </Button>
       </div>
@@ -514,6 +626,7 @@ export default function DashboardDocumentsPage() {
             const daysUntilExpiry = expiryDate ? Math.ceil((expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)) : null;
             const isExpiringSoon = hasExpiryWarning && daysUntilExpiry !== null && daysUntilExpiry <= 30 && daysUntilExpiry > 0;
             const isExpired = hasExpiryWarning && daysUntilExpiry !== null && daysUntilExpiry <= 0;
+            const inCooldown = doc ? isInCooldown(doc) : false;
             return (
               <Card
                 key={key}
@@ -524,6 +637,8 @@ export default function DashboardDocumentsPage() {
                     ? "bg-red-50/50 dark:bg-red-900/10 border-red-300 dark:border-red-700/60"
                     : isExpiringSoon
                     ? "bg-amber-50/50 dark:bg-amber-900/10 border-amber-300 dark:border-amber-700/60"
+                    : inCooldown
+                    ? "bg-orange-50/50 dark:bg-orange-900/10 border-orange-300 dark:border-orange-700/60"
                     : doc.verificationStatus === "VERIFIED"
                     ? "bg-green-50/50 dark:bg-green-900/10 border-green-200 dark:border-green-800/40"
                     : doc.verificationStatus === "REJECTED" || doc.verificationStatus === "EXPIRED"
@@ -616,57 +731,76 @@ export default function DashboardDocumentsPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                documents.map((doc) => (
-                  <TableRow
-                    key={doc.id}
-                    className="hover:bg-slate-50 dark:hover:bg-slate-800/30"
-                  >
-                    <TableCell>
-                      <p className="text-sm font-medium text-slate-900 dark:text-white">
-                        {getDocumentTypeLabel(doc.type)}
-                      </p>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        {getFileIcon(doc.fileName)}
-                        <span className="text-sm text-slate-700 dark:text-slate-300 truncate max-w-[180px]">
-                          {doc.fileName}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell">
-                      <p className="text-xs text-slate-500 flex items-center gap-1">
-                        <Clock className="h-3 w-3" />
-                        {formatDate(doc.uploadedAt)}
-                      </p>
-                    </TableCell>
-                    <TableCell>{getStatusBadge(doc.verificationStatus)}</TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="min-h-[36px] min-w-[36px]"
-                          onClick={() =>
-                            window.open(doc.fileUrl, "_blank")
-                          }
-                          title="View document"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="min-h-[36px] min-w-[36px] text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
-                          onClick={() => setDeleteTarget(doc)}
-                          title="Delete document"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
+                documents.map((doc) => {
+                  const inCooldown = isInCooldown(doc);
+                  const cooldownSecs = inCooldown ? getCooldownSeconds(doc) : 0;
+                  return (
+                    <TableRow
+                      key={doc.id}
+                      className="hover:bg-slate-50 dark:hover:bg-slate-800/30"
+                    >
+                      <TableCell>
+                        <p className="text-sm font-medium text-slate-900 dark:text-white">
+                          {getDocumentTypeLabel(doc.type)}
+                        </p>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          {getFileIcon(doc.fileName)}
+                          <span className="text-sm text-slate-700 dark:text-slate-300 truncate max-w-[180px]">
+                            {doc.fileName}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        <p className="text-xs text-slate-500 flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          {formatDate(doc.uploadedAt)}
+                        </p>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col gap-1">
+                          {getStatusBadge(doc.verificationStatus)}
+                          {inCooldown && (
+                            <span className="text-xs text-orange-600 dark:text-orange-400 font-mono flex items-center gap-1">
+                              <Timer className="h-3 w-3" />
+                              {formatCountdown(cooldownSecs)}
+                            </span>
+                          )}
+                          {doc.verificationStatus === "REJECTED" && !inCooldown && (
+                            <span className="text-xs text-green-600 dark:text-green-400">
+                              Ready to resubmit
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="min-h-[36px] min-w-[36px]"
+                            onClick={() =>
+                              window.open(doc.fileUrl, "_blank")
+                            }
+                            title="View document"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="min-h-[36px] min-w-[36px] text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                            onClick={() => setDeleteTarget(doc)}
+                            title="Delete document"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               )}
             </TableBody>
           </Table>
@@ -681,11 +815,14 @@ export default function DashboardDocumentsPage() {
             setIsUploadOpen(false);
             setUploadFile(null);
             setUploadType("");
+            setUploadPermitNumber("");
+            setUploadIssuingAuthority("");
+            setUploadIssueDate("");
             setUploadError(null);
           }
         }}
       >
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Upload className="h-5 w-5" /> Upload Document
@@ -713,6 +850,68 @@ export default function DashboardDocumentsPage() {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Permit / Certificate Number */}
+            <div className="space-y-2">
+              <Label htmlFor="permit-number">
+                Permit / Certificate Number <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="permit-number"
+                type="text"
+                placeholder="e.g., 2024-DTI-123456"
+                value={uploadPermitNumber}
+                onChange={(e) => setUploadPermitNumber(e.target.value)}
+                className="rounded-xl"
+              />
+            </div>
+
+            {/* Issuing Authority */}
+            <div className="space-y-2">
+              <Label htmlFor="issuing-authority">
+                Issuing Authority <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="issuing-authority"
+                type="text"
+                placeholder="e.g., DTI Region VII, LGU Tagbilaran"
+                value={uploadIssuingAuthority}
+                onChange={(e) => setUploadIssuingAuthority(e.target.value)}
+                className="rounded-xl"
+              />
+            </div>
+
+            {/* Issue Date */}
+            <div className="space-y-2">
+              <Label htmlFor="issue-date">
+                Issue Date <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="issue-date"
+                type="date"
+                value={uploadIssueDate}
+                onChange={(e) => setUploadIssueDate(e.target.value)}
+                className="rounded-xl"
+              />
+            </div>
+
+            {/* Expiry Date (auto-calculated, read-only display) */}
+            {uploadType && getDocumentValidityMonths(uploadType) > 0 && (
+              <div className="space-y-2">
+                <Label>Expiry Date (auto-calculated)</Label>
+                <p className="text-sm text-slate-500 dark:text-slate-400 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+                  {(() => {
+                    const d = new Date();
+                    d.setMonth(d.getMonth() + getDocumentValidityMonths(uploadType));
+                    return d.toLocaleDateString("en-PH", {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                    });
+                  })()}
+                </p>
+              </div>
+            )}
 
             {/* File Picker */}
             <div className="space-y-2">
@@ -748,6 +947,9 @@ export default function DashboardDocumentsPage() {
                 setIsUploadOpen(false);
                 setUploadFile(null);
                 setUploadType("");
+                setUploadPermitNumber("");
+                setUploadIssuingAuthority("");
+                setUploadIssueDate("");
                 setUploadError(null);
               }}
               className="rounded-xl"
@@ -854,7 +1056,7 @@ export default function DashboardDocumentsPage() {
           if (!open) setViewDocument(null);
         }}
       >
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileText className="h-5 w-5" /> Document Details
@@ -898,8 +1100,45 @@ export default function DashboardDocumentsPage() {
                 </div>
               </div>
 
+              {/* Metadata fields */}
+              {viewDocument.permitNumber && (
+                <div className="space-y-1">
+                  <Label className="text-xs">Permit / Certificate Number</Label>
+                  <p className="text-sm text-slate-700 dark:text-slate-300">
+                    {viewDocument.permitNumber}
+                  </p>
+                </div>
+              )}
+
+              {viewDocument.issuingAuthority && (
+                <div className="space-y-1">
+                  <Label className="text-xs">Issuing Authority</Label>
+                  <p className="text-sm text-slate-700 dark:text-slate-300">
+                    {viewDocument.issuingAuthority}
+                  </p>
+                </div>
+              )}
+
+              {viewDocument.issueDate && (
+                <div className="space-y-1">
+                  <Label className="text-xs">Issue Date</Label>
+                  <p className="text-sm text-slate-700 dark:text-slate-300">
+                    {formatDateOnly(viewDocument.issueDate)}
+                  </p>
+                </div>
+              )}
+
+              {viewDocument.expiryDate && (
+                <div className="space-y-1">
+                  <Label className="text-xs">Expiry Date</Label>
+                  <p className="text-sm text-slate-700 dark:text-slate-300">
+                    {formatDateOnly(viewDocument.expiryDate)}
+                  </p>
+                </div>
+              )}
+
               <div className="space-y-2">
-                <Label className="text-xs">Status</Label>
+                <Label className="text-xs">Verification Status</Label>
                 <div>{getStatusBadge(viewDocument.verificationStatus)}</div>
                 {viewDocument.rejectionReason && (
                   <p className="text-sm text-red-600 dark:text-red-400 mt-1">
@@ -907,6 +1146,25 @@ export default function DashboardDocumentsPage() {
                   </p>
                 )}
               </div>
+
+              {/* Resubmission cooldown for rejected documents */}
+              {viewDocument.verificationStatus === "REJECTED" && isInCooldown(viewDocument) && (
+                <div className="p-3 rounded-xl bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-700/50">
+                  <p className="text-sm text-orange-700 dark:text-orange-400 flex items-center gap-2">
+                    <Timer className="h-4 w-4" />
+                    Resubmission available in: {formatCountdown(getCooldownSeconds(viewDocument))}
+                  </p>
+                </div>
+              )}
+
+              {viewDocument.verificationStatus === "REJECTED" && !isInCooldown(viewDocument) && (
+                <div className="p-3 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700/50">
+                  <p className="text-sm text-green-700 dark:text-green-400 flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4" />
+                    Resubmission window is now open
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
@@ -919,12 +1177,32 @@ export default function DashboardDocumentsPage() {
               Close
             </Button>
             {viewDocument && (
-              <Button
-                onClick={() => window.open(viewDocument.fileUrl, "_blank")}
-                className="rounded-xl"
-              >
-                <Eye className="h-4 w-4 mr-2" /> View File
-              </Button>
+              <>
+                <Button
+                  onClick={() => window.open(viewDocument.fileUrl, "_blank")}
+                  className="rounded-xl"
+                >
+                  <Eye className="h-4 w-4 mr-2" /> View File
+                </Button>
+                {viewDocument.verificationStatus === "REJECTED" && !isInCooldown(viewDocument) && (
+                  <Button
+                    onClick={() => {
+                      const docType = viewDocument.type;
+                      setViewDocument(null);
+                      setUploadType(docType);
+                      setUploadFile(null);
+                      setUploadPermitNumber(viewDocument.permitNumber || "");
+                      setUploadIssuingAuthority(viewDocument.issuingAuthority || "");
+                      setUploadIssueDate(viewDocument.issueDate ? viewDocument.issueDate.split("T")[0] : "");
+                      setUploadError(null);
+                      setIsUploadOpen(true);
+                    }}
+                    className="rounded-xl bg-green-600 hover:bg-green-700"
+                  >
+                    <Upload className="h-4 w-4 mr-2" /> Resubmit Now
+                  </Button>
+                )}
+              </>
             )}
           </DialogFooter>
         </DialogContent>
