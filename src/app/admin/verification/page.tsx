@@ -298,6 +298,33 @@ export default function AdminVerificationPage() {
     }
   };
 
+  const [unverifyConfirmOpen, setUnverifyConfirmOpen] = useState(false);
+  const [stationToUnverify, setStationToUnverify] = useState<string | null>(null);
+
+  const handleUnverify = async (stationId: string) => {
+    setActionLoading(stationId);
+    try {
+      const res = await fetch("/api/admin/verification/unverify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stationId }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        await fetchStations();
+        if (selectedStation?.id === stationId) {
+          openStationDetail({ id: stationId } as any);
+        }
+      }
+    } catch (err) {
+      console.error("Unverify error:", err);
+    } finally {
+      setActionLoading(null);
+      setUnverifyConfirmOpen(false);
+      setStationToUnverify(null);
+    }
+  };
+
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return "—";
     const d = new Date(dateStr);
@@ -593,6 +620,16 @@ export default function AdminVerificationPage() {
               </Tabs>
 
               <DialogFooter className="mt-6 flex-col sm:flex-row gap-2">
+                {selectedStation.approvedAt && (
+                  <>
+                    <Button variant="outline" className="rounded-xl flex-1 text-amber-600 border-amber-200 hover:bg-amber-50 dark:border-amber-800 dark:hover:bg-amber-900/20"
+                      onClick={() => { setStationToUnverify(selectedStation.id); setUnverifyConfirmOpen(true); }}
+                      disabled={actionLoading === selectedStation.id}>
+                      {actionLoading === selectedStation.id ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <XCircle className="h-4 w-4 mr-2" />}
+                      Unverify Station
+                    </Button>
+                  </>
+                )}
                 {!selectedStation.approvedAt && !selectedStation.rejectionReason && (
                   <>
                     <Button variant="default" className="rounded-xl flex-1 bg-green-600 hover:bg-green-700"
@@ -623,6 +660,31 @@ export default function AdminVerificationPage() {
               </DialogFooter>
             </>
           ) : null}
+        </DialogContent>
+      </Dialog>
+
+      {/* Unverify Confirmation Dialog */}
+      <Dialog open={unverifyConfirmOpen} onOpenChange={setUnverifyConfirmOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Unverify Station</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to revoke verification for this station? This will deactivate the station and return it to pending review status. The station owner will need to re-submit for verification.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button variant="outline" className="rounded-xl flex-1"
+              onClick={() => { setUnverifyConfirmOpen(false); setStationToUnverify(null); }}
+              disabled={actionLoading === stationToUnverify}>
+              Cancel
+            </Button>
+            <Button variant="default" className="rounded-xl flex-1 bg-amber-600 hover:bg-amber-700"
+              onClick={() => stationToUnverify && handleUnverify(stationToUnverify)}
+              disabled={actionLoading === stationToUnverify}>
+              {actionLoading === stationToUnverify ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <AlertCircle className="h-4 w-4 mr-2" />}
+              Yes, Unverify
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

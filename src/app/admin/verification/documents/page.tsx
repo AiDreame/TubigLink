@@ -194,8 +194,34 @@ export default function AdminVerificationDocumentsPage() {
     }
   };
 
+  // Revert document back to pending via review API
+  const handleRevert = async (doc: AdminDocument) => {
+    setActionLoading(doc.id);
+    try {
+      const res = await fetch("/api/admin/verification/review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          stationId: doc.stationId,
+          documentId: doc.id,
+          action: "REVERT",
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        await fetchDocuments();
+        if (selectedDoc?.id === doc.id) setSelectedDoc(null);
+      } else {
+        setError(json.error || "Failed to revert document");
+      }
+    } catch (err) {
+      setError("Failed to revert document");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const getFileIcon = (fileName: string) => {
-    if (fileName.endsWith(".pdf")) return <FileText className="h-5 w-5 text-red-500" />;
     if (fileName.match(/\.(jpg|jpeg|png|gif|webp)$/i)) return <FileImage className="h-5 w-5 text-blue-500" />;
     if (fileName.match(/\.(xlsx|xls|csv)$/i)) return <FileSpreadsheet className="h-5 w-5 text-green-500" />;
     return <File className="h-5 w-5 text-slate-400" />;
@@ -393,6 +419,14 @@ export default function AdminVerificationDocumentsPage() {
                             </Button>
                           </>
                         )}
+                        {(doc.verificationStatus === "VERIFIED" || doc.verificationStatus === "REJECTED" || doc.verificationStatus === "EXPIRED") && (
+                          <Button variant="ghost" size="sm" className="min-h-[36px] min-w-[36px] text-amber-600"
+                            onClick={() => handleRevert(doc)}
+                            disabled={actionLoading === doc.id}
+                            title="Revert to Pending">
+                            {actionLoading === doc.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Clock className="h-4 w-4" />}
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -485,6 +519,22 @@ export default function AdminVerificationDocumentsPage() {
                         {rejectionReason ? "Reject" : "Add reason to reject"}
                       </Button>
                     </div>
+                  </div>
+                )}
+                {(selectedDoc.verificationStatus === "VERIFIED" || selectedDoc.verificationStatus === "REJECTED" || selectedDoc.verificationStatus === "EXPIRED") && (
+                  <div className="space-y-3">
+                    <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50">
+                      <p className="text-sm font-medium text-amber-700 dark:text-amber-400">Change Status</p>
+                      <p className="text-xs text-amber-600 dark:text-amber-300 mt-1">
+                        This document is currently <strong>{selectedDoc.verificationStatus.toLowerCase()}</strong>. Revert it back to pending if you need to re-review.
+                      </p>
+                    </div>
+                    <Button variant="outline" className="w-full rounded-xl text-amber-600 border-amber-200 hover:bg-amber-50 dark:border-amber-800 dark:hover:bg-amber-900/20"
+                      onClick={() => handleRevert(selectedDoc)}
+                      disabled={actionLoading === selectedDoc.id}>
+                      {actionLoading === selectedDoc.id ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Clock className="h-4 w-4 mr-2" />}
+                      Revert to Pending
+                    </Button>
                   </div>
                 )}
               </div>

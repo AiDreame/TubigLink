@@ -23,9 +23,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!["APPROVE", "REJECT"].includes(action)) {
+    if (!["APPROVE", "REJECT", "REVERT"].includes(action)) {
       return NextResponse.json(
-        { error: "Action must be either APPROVE or REJECT" },
+        { error: "Action must be APPROVE, REJECT, or REVERT" },
         { status: 400 }
       );
     }
@@ -46,37 +46,54 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Document not found" }, { status: 404 });
     }
 
-    if (document.verificationStatus !== "PENDING") {
-      return NextResponse.json(
-        { error: `Document has already been ${document.verificationStatus.toLowerCase()}. Cannot review again.` },
-        { status: 400 }
-      );
+    // REVERT can be applied to VERIFIED or REJECTED documents
+    if (action === "REVERT") {
+      if (document.verificationStatus === "PENDING") {
+        return NextResponse.json(
+          { error: "Document is already pending. Nothing to revert." },
+          { status: 400 }
+        );
+      }
+    } else {
+      // APPROVE/REJECT can only apply to PENDING documents
+      if (document.verificationStatus !== "PENDING") {
+        return NextResponse.json(
+          { error: `Document has already been ${document.verificationStatus.toLowerCase()}. Cannot review again.` },
+          { status: 400 }
+        );
+      }
     }
 
     // Update document verification status
-    const newStatus = action === "APPROVE" ? "VERIFIED" : "REJECTED";
+    const newStatus = action === "REVERT" ? "PENDING" : action === "APPROVE" ? "VERIFIED" : "REJECTED";
     const updatedDocument = await prisma.stationDocument.update({
       where: { id: documentId },
       data: {
         verificationStatus: newStatus,
-        rejectionReason: action === "REJECT" ? rejectionReason : null,
-        verifiedById: adminId,
-        verifiedAt: new Date(),
+        rejectionReason: action === "REVERT" ? null : action === "REJECT" ? rejectionReason : null,
+        verifiedById: action === "REVERT" ? null : adminId,
+        verifiedAt: action === "REVERT" ? null : new Date(),
       },
     });
 
     // Create verification log entry
+    const logActionMap: Record<string, string> = {
+      APPROVE: "DOCUMENT_VERIFIED",
+      REJECT: "DOCUMENT_REJECTED",
+      REVERT: "DOCUMENT_REJECTED", // reused action type for audit trail
+    };
     await prisma.verificationLog.create({
       data: {
         stationId,
-        action: action === "APPROVE" ? "DOCUMENT_VERIFIED" : "DOCUMENT_REJECTED",
+        action: logActionMap[action],
         performedById: adminId,
         details: JSON.stringify({
           documentId,
           documentType: document.type,
           fileName: document.fileName,
           newStatus,
-          rejectionReason: action === "REJECT" ? rejectionReason : null,
+          previousStatus: document.verificationStatus,
+          rejectionReason: action === "REJECT" ? rejectionReason : action === "REVERT" ? "Reverted to pending by admin" : null,
         }),
       },
     });
@@ -166,10 +183,15 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    const messageMap: Record<string, string> = {
+      APPROVE: "Document approved successfully",
+      REJECT: "Document rejected successfully",
+      REVERT: "Document reverted to pending successfully",
+    };
     return NextResponse.json({
       success: true,
       data: updatedDocument,
-      message: `Document ${action === "APPROVE" ? "approved" : "rejected"} successfully`,
+      message: messageMap[action],
     });
   } catch (error) {
     console.error("Admin review action error:", error);
