@@ -566,7 +566,11 @@ export default function AdminVerificationPage() {
 
                 <TabsContent value="documents" className="space-y-3 mt-4">
                   {selectedStation.documents.length === 0 ? (
-                    <p className="text-sm text-slate-500 text-center py-8">No documents uploaded yet.</p>
+                    <div className="text-center py-8 text-slate-500">
+                      <FileText className="h-12 w-12 mx-auto mb-3 text-slate-300" />
+                      <p className="font-medium text-slate-700 dark:text-slate-300">No Documents</p>
+                      <p className="text-sm mt-1">This station hasn't uploaded any documents yet.</p>
+                    </div>
                   ) : (
                     selectedStation.documents.map((doc) => (
                       <div key={doc.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border dark:border-slate-700">

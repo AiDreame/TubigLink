@@ -6,12 +6,16 @@ import {
   ChevronLeft,
   ChevronRight,
   Loader2,
-  RefreshCw,
   ShoppingBag,
   CreditCard,
   Banknote,
   Smartphone,
   AlertCircle,
+  Filter,
+  ChevronDown,
+  User,
+  Store,
+  Eye,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -24,12 +28,27 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const STATUS_COLORS: Record<string, string> = {
   PENDING: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400 border-amber-200 dark:border-amber-800",
@@ -38,6 +57,13 @@ const STATUS_COLORS: Record<string, string> = {
   OUT_FOR_DELIVERY: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400 border-orange-200 dark:border-orange-800",
   DELIVERED: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border-green-200 dark:border-green-800",
   CANCELLED: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800",
+};
+
+const PAYMENT_COLORS: Record<string, string> = {
+  COD: "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700",
+  GCASH: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 border-blue-200 dark:border-blue-800",
+  CARD: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400 border-purple-200 dark:border-purple-800",
+  PAYMAYA: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border-green-200 dark:border-green-800",
 };
 
 const PAYMENT_ICONS: Record<string, React.ElementType> = {
@@ -80,6 +106,7 @@ export default function AdminTransactionsPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [selectedOrder, setSelectedOrder] = useState<RecentOrder | null>(null);
 
   const fetchOrders = useCallback(async (pageNum = 1) => {
     setLoading(true);
@@ -125,63 +152,101 @@ export default function AdminTransactionsPage() {
   const formatCurrency = (amount: number) =>
     `₱${amount.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+  const summaryData = {
+    total: pagination.total,
+    delivered: orders.filter((o) => o.status === "DELIVERED").length,
+    pending: orders.filter((o) => o.status === "PENDING" || o.status === "ACCEPTED" || o.status === "PREPARING" || o.status === "OUT_FOR_DELIVERY").length,
+    cancelled: orders.filter((o) => o.status === "CANCELLED").length,
+  };
+
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
             Transactions
           </h2>
-          <p className="text-slate-500 dark:text-slate-400">
+          <p className="text-slate-500 dark:text-slate-400 mt-1">
             View and manage all orders across the platform
           </p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => fetchOrders(pagination.page)}
-          disabled={loading}
-          className="gap-2"
-        >
-          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-          Refresh
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            className="rounded-xl"
+            onClick={() => fetchOrders(pagination.page)}
+            disabled={loading}
+          >
+            <Loader2 className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+            Refresh
+          </Button>
+        </div>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+        <Card className="bg-white dark:bg-gray-800/50 border-none shadow-sm">
+          <CardContent className="p-4 text-center">
+            <p className="text-2xl font-bold text-slate-900 dark:text-white">{summaryData.total}</p>
+            <p className="text-xs text-slate-500 mt-1">Total</p>
+          </CardContent>
+        </Card>
+        <Card className="bg-green-50 dark:bg-green-900/20 border-green-100 dark:border-green-800/50 shadow-sm">
+          <CardContent className="p-4 text-center">
+            <p className="text-2xl font-bold text-green-700 dark:text-green-400">{summaryData.delivered}</p>
+            <p className="text-xs text-green-600 dark:text-green-500 mt-1">Delivered</p>
+          </CardContent>
+        </Card>
+        <Card className="bg-blue-50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-800/50 shadow-sm">
+          <CardContent className="p-4 text-center">
+            <p className="text-2xl font-bold text-blue-700 dark:text-blue-400">{summaryData.pending}</p>
+            <p className="text-xs text-blue-600 dark:text-blue-500 mt-1">In Progress</p>
+          </CardContent>
+        </Card>
+        <Card className="bg-red-50 dark:bg-red-900/20 border-red-100 dark:border-red-800/50 shadow-sm">
+          <CardContent className="p-4 text-center">
+            <p className="text-2xl font-bold text-red-700 dark:text-red-400">{summaryData.cancelled}</p>
+            <p className="text-xs text-red-600 dark:text-red-500 mt-1">Cancelled</p>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Filters */}
-      <Card className="border-none shadow-sm bg-white dark:bg-gray-800/50">
-        <CardContent className="p-4">
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <Input
-                placeholder="Search by order ID or customer name..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                className="pl-9"
-              />
-            </div>
-            <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); }}>
-              <SelectTrigger className="w-full sm:w-[180px]">
-                <SelectValue placeholder="All Statuses" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value=" ">All Statuses</SelectItem>
-                <SelectItem value="PENDING">Pending</SelectItem>
-                <SelectItem value="ACCEPTED">Accepted</SelectItem>
-                <SelectItem value="PREPARING">Preparing</SelectItem>
-                <SelectItem value="OUT_FOR_DELIVERY">Out for Delivery</SelectItem>
-                <SelectItem value="DELIVERED">Delivered</SelectItem>
-                <SelectItem value="CANCELLED">Cancelled</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button onClick={handleSearch} disabled={loading}>
-              Search
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+          <Input
+            placeholder="Search by order ID or customer name..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+            className="pl-10 rounded-xl bg-white dark:bg-gray-800/50"
+          />
+        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" className="rounded-xl min-w-[140px]">
+              <Filter className="h-4 w-4 mr-2" />
+              {statusFilter || "All Statuses"}
+              <ChevronDown className="h-4 w-4 ml-2" />
             </Button>
-          </div>
-        </CardContent>
-      </Card>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuItem onClick={() => { setStatusFilter(""); }}>All Statuses</DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => setStatusFilter("PENDING")}>Pending</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setStatusFilter("ACCEPTED")}>Accepted</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setStatusFilter("PREPARING")}>Preparing</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setStatusFilter("OUT_FOR_DELIVERY")}>Out for Delivery</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setStatusFilter("DELIVERED")}>Delivered</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setStatusFilter("CANCELLED")}>Cancelled</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <Button onClick={handleSearch} disabled={loading} className="rounded-xl">
+          Search
+        </Button>
+      </div>
 
       {/* Error State */}
       {error && (
@@ -196,7 +261,10 @@ export default function AdminTransactionsPage() {
       {/* Loading State */}
       {loading && (
         <div className="flex items-center justify-center py-20">
-          <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+          <div className="text-center space-y-3">
+            <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto" />
+            <p className="text-sm text-slate-500">Loading transactions...</p>
+          </div>
         </div>
       )}
 
@@ -219,84 +287,101 @@ export default function AdminTransactionsPage() {
 
       {/* Transactions Table */}
       {!loading && !error && orders.length > 0 && (
-        <Card className="border-none shadow-sm bg-white dark:bg-gray-800/50">
-          <CardContent className="p-0 overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
-                  <th className="text-left p-4 font-semibold text-slate-600 dark:text-slate-400">Order ID</th>
-                  <th className="text-left p-4 font-semibold text-slate-600 dark:text-slate-400">Customer</th>
-                  <th className="text-left p-4 font-semibold text-slate-600 dark:text-slate-400">Station</th>
-                  <th className="text-left p-4 font-semibold text-slate-600 dark:text-slate-400">Items</th>
-                  <th className="text-right p-4 font-semibold text-slate-600 dark:text-slate-400">Amount</th>
-                  <th className="text-left p-4 font-semibold text-slate-600 dark:text-slate-400">Payment</th>
-                  <th className="text-left p-4 font-semibold text-slate-600 dark:text-slate-400">Status</th>
-                  <th className="text-left p-4 font-semibold text-slate-600 dark:text-slate-400">Date</th>
-                </tr>
-              </thead>
-              <tbody>
+        <Card className="border-none shadow-sm bg-white dark:bg-gray-800/50 overflow-hidden">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-slate-50 dark:bg-slate-800/50">
+                  <TableHead className="font-bold text-xs uppercase tracking-wider">Order ID</TableHead>
+                  <TableHead className="font-bold text-xs uppercase tracking-wider">Customer</TableHead>
+                  <TableHead className="font-bold text-xs uppercase tracking-wider hidden md:table-cell">Station</TableHead>
+                  <TableHead className="font-bold text-xs uppercase tracking-wider hidden lg:table-cell">Items</TableHead>
+                  <TableHead className="font-bold text-xs uppercase tracking-wider text-right">Amount</TableHead>
+                  <TableHead className="font-bold text-xs uppercase tracking-wider">Payment</TableHead>
+                  <TableHead className="font-bold text-xs uppercase tracking-wider">Status</TableHead>
+                  <TableHead className="font-bold text-xs uppercase tracking-wider hidden lg:table-cell">Date</TableHead>
+                  <TableHead className="font-bold text-xs uppercase tracking-wider text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {orders.map((order) => {
                   const PaymentIcon = PAYMENT_ICONS[order.paymentMethod] || CreditCard;
                   return (
-                    <tr
+                    <TableRow
                       key={order.id}
-                      className="border-b dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors"
+                      className="hover:bg-slate-50 dark:hover:bg-slate-800/30 cursor-pointer"
+                      onClick={() => setSelectedOrder(order)}
                     >
-                      <td className="p-4 font-mono text-xs text-slate-700 dark:text-slate-300">
-                        {order.id.slice(0, 8)}...
-                      </td>
-                      <td className="p-4">
-                        <div className="font-medium text-slate-900 dark:text-slate-100">
+                      <TableCell>
+                        <span className="font-mono text-xs text-slate-700 dark:text-slate-300">
+                          {order.id.slice(0, 8)}...
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <div className="font-medium text-sm text-slate-900 dark:text-slate-100">
                           {order.customer.name || "Unknown"}
                         </div>
                         <div className="text-xs text-slate-500 dark:text-slate-400">
                           {order.customer.email || order.customer.phone || ""}
                         </div>
-                      </td>
-                      <td className="p-4">
-                        <div className="font-medium text-slate-900 dark:text-slate-100">
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        <div className="font-medium text-sm text-slate-900 dark:text-slate-100">
                           {order.station.name}
                         </div>
                         <div className="text-xs text-slate-500 dark:text-slate-400">
                           {order.station.city}
                         </div>
-                      </td>
-                      <td className="p-4">
-                        <div className="text-slate-700 dark:text-slate-300">
+                      </TableCell>
+                      <TableCell className="hidden lg:table-cell">
+                        <div className="text-sm text-slate-700 dark:text-slate-300">
                           {order.items.slice(0, 2).map((i) => i.name).join(", ")}
                           {order.items.length > 2 && (
                             <span className="text-slate-400"> +{order.items.length - 2} more</span>
                           )}
                         </div>
-                      </td>
-                      <td className="p-4 text-right font-semibold text-slate-900 dark:text-slate-100">
-                        {formatCurrency(order.total)}
-                      </td>
-                      <td className="p-4">
-                        <div className="flex items-center gap-2">
-                          <PaymentIcon className="h-4 w-4 text-slate-400" />
-                          <span className="text-slate-700 dark:text-slate-300">
-                            {order.paymentMethod}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="p-4">
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <span className="font-semibold text-sm text-slate-900 dark:text-slate-100">
+                          {formatCurrency(order.total)}
+                        </span>
+                      </TableCell>
+                      <TableCell>
                         <Badge
                           variant="outline"
-                          className={`${STATUS_COLORS[order.status] || "bg-slate-100 text-slate-800"} border`}
+                          className={`${PAYMENT_COLORS[order.paymentMethod] || "bg-slate-100 text-slate-800"} font-medium`}
+                        >
+                          <PaymentIcon className="h-3 w-3 mr-1 inline" />
+                          {order.paymentMethod}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="outline"
+                          className={`${STATUS_COLORS[order.status] || "bg-slate-100 text-slate-800"} font-medium`}
                         >
                           {order.status.replace(/_/g, " ")}
                         </Badge>
-                      </td>
-                      <td className="p-4 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                      </TableCell>
+                      <TableCell className="hidden lg:table-cell text-xs text-slate-500 whitespace-nowrap">
                         {formatDate(order.createdAt)}
-                      </td>
-                    </tr>
+                      </TableCell>
+                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="min-h-[36px] min-w-[36px]"
+                          onClick={() => setSelectedOrder(order)}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
                   );
                 })}
-              </tbody>
-            </table>
-          </CardContent>
+              </TableBody>
+            </Table>
+          </div>
         </Card>
       )}
 
@@ -312,6 +397,7 @@ export default function AdminTransactionsPage() {
             <Button
               variant="outline"
               size="sm"
+              className="rounded-xl"
               onClick={() => fetchOrders(pagination.page - 1)}
               disabled={pagination.page <= 1}
             >
@@ -323,6 +409,7 @@ export default function AdminTransactionsPage() {
             <Button
               variant="outline"
               size="sm"
+              className="rounded-xl"
               onClick={() => fetchOrders(pagination.page + 1)}
               disabled={pagination.page >= pagination.totalPages}
             >
@@ -331,6 +418,92 @@ export default function AdminTransactionsPage() {
           </div>
         </div>
       )}
+
+      {/* Order Detail Dialog */}
+      <Dialog open={!!selectedOrder} onOpenChange={(open) => !open && setSelectedOrder(null)}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          {selectedOrder && (
+            <>
+              <DialogHeader>
+                <div className="flex items-center gap-3">
+                  <div className="h-12 w-12 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400">
+                    <ShoppingBag className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <DialogTitle className="text-lg">Order Details</DialogTitle>
+                    <DialogDescription className="flex items-center gap-2">
+                      <span className="font-mono text-xs">{selectedOrder.id.slice(0, 8)}...</span>
+                      <span>•</span>
+                      <Badge
+                        variant="outline"
+                        className={`${STATUS_COLORS[selectedOrder.status] || "bg-slate-100 text-slate-800"} font-medium`}
+                      >
+                        {selectedOrder.status.replace(/_/g, " ")}
+                      </Badge>
+                    </DialogDescription>
+                  </div>
+                </div>
+              </DialogHeader>
+
+              <div className="space-y-4 mt-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border dark:border-slate-700">
+                    <p className="text-xs text-slate-500">Customer</p>
+                    <p className="text-sm font-bold text-slate-900 dark:text-white mt-1 flex items-center gap-1.5">
+                      <User className="h-3.5 w-3.5 text-slate-400" />
+                      {selectedOrder.customer.name || "Unknown"}
+                    </p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border dark:border-slate-700">
+                    <p className="text-xs text-slate-500">Station</p>
+                    <p className="text-sm font-bold text-slate-900 dark:text-white mt-1 flex items-center gap-1.5">
+                      <Store className="h-3.5 w-3.5 text-slate-400" />
+                      {selectedOrder.station.name}
+                    </p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border dark:border-slate-700">
+                    <p className="text-xs text-slate-500">Payment Method</p>
+                    <p className="text-sm font-bold text-slate-900 dark:text-white mt-1">
+                      {(() => {
+                        const PIcon = PAYMENT_ICONS[selectedOrder.paymentMethod] || CreditCard;
+                        return <span className="flex items-center gap-1.5"><PIcon className="h-3.5 w-3.5" />{selectedOrder.paymentMethod}</span>;
+                      })()}
+                    </p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border dark:border-slate-700">
+                    <p className="text-xs text-slate-500">Total Amount</p>
+                    <p className="text-lg font-bold text-slate-900 dark:text-white mt-1">
+                      {formatCurrency(selectedOrder.total)}
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Order Items</p>
+                  <div className="space-y-2">
+                    {selectedOrder.items.map((item, idx) => (
+                      <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border dark:border-slate-700">
+                        <div>
+                          <p className="text-sm font-medium text-slate-900 dark:text-white">{item.name}</p>
+                          <p className="text-xs text-slate-500">{item.type} • x{item.quantity}</p>
+                        </div>
+                        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                          {formatCurrency(item.unitPrice * item.quantity)}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border dark:border-slate-700">
+                  <p className="text-xs text-slate-500">Order Date</p>
+                  <p className="text-sm font-bold text-slate-900 dark:text-white mt-1">{formatDate(selectedOrder.createdAt)}</p>
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
