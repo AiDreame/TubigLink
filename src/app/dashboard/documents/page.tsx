@@ -15,6 +15,9 @@ import {
   AlertTriangle,
   CheckCircle2,
   Clock,
+  XCircle,
+  ShieldAlert,
+  HelpCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -116,6 +119,72 @@ function getStatusBadge(status: string) {
   );
 }
 
+function getChecklistStatus(doc: Document | undefined) {
+  if (!doc) {
+    return {
+      icon: <HelpCircle className="h-5 w-5 text-slate-300" />,
+      badge: (
+        <Badge variant="outline" className="bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 font-medium">
+          Not submitted
+        </Badge>
+      ),
+      label: "Not yet uploaded",
+    };
+  }
+  switch (doc.verificationStatus) {
+    case "VERIFIED":
+      return {
+        icon: <CheckCircle2 className="h-5 w-5 text-green-500" />,
+        badge: (
+          <Badge variant="outline" className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 font-medium">
+            Verified
+          </Badge>
+        ),
+        label: doc.fileName,
+      };
+    case "PENDING":
+      return {
+        icon: <Clock className="h-5 w-5 text-amber-500" />,
+        badge: (
+          <Badge variant="outline" className="bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400 font-medium">
+            Pending review
+          </Badge>
+        ),
+        label: doc.fileName,
+      };
+    case "REJECTED":
+      return {
+        icon: <XCircle className="h-5 w-5 text-red-500" />,
+        badge: (
+          <Badge variant="outline" className="bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 font-medium">
+            Rejected
+          </Badge>
+        ),
+        label: doc.rejectionReason ? `Rejected: ${doc.rejectionReason}` : doc.fileName,
+      };
+    case "EXPIRED":
+      return {
+        icon: <ShieldAlert className="h-5 w-5 text-slate-500" />,
+        badge: (
+          <Badge variant="outline" className="bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-400 font-medium">
+            Expired
+          </Badge>
+        ),
+        label: doc.fileName,
+      };
+    default:
+      return {
+        icon: <HelpCircle className="h-5 w-5 text-slate-300" />,
+        badge: (
+          <Badge variant="outline" className="bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 font-medium">
+            Unknown
+          </Badge>
+        ),
+        label: doc.fileName,
+      };
+  }
+}
+
 // ─── Skeleton ───────────────────────────────────────
 
 function DocumentsSkeleton() {
@@ -131,6 +200,25 @@ function DocumentsSkeleton() {
             </CardContent>
           </Card>
         ))}
+      </div>
+
+      {/* Checklist skeleton */}
+      <div>
+        <Skeleton className="h-6 w-56 mb-4" />
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {[...Array(13)].map((_, i) => (
+            <Card key={i} className="border shadow-sm">
+              <CardContent className="p-4 space-y-3">
+                <div className="flex items-center gap-3">
+                  <Skeleton className="h-8 w-8 rounded-full" />
+                  <Skeleton className="h-4 flex-1" />
+                </div>
+                <Skeleton className="h-3 w-24" />
+                <Skeleton className="h-6 w-16 rounded-full" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       </div>
 
       {/* Table skeleton */}
@@ -300,6 +388,8 @@ export default function DashboardDocumentsPage() {
     (d) => d.verificationStatus === "REJECTED" || d.verificationStatus === "EXPIRED"
   ).length;
 
+  const documentMap = new Map(documents.map((d) => [d.type, d]));
+
   // ─── Loading state ─────────────────────────────────
 
   if (isLoading || sessionStatus === "loading") {
@@ -378,6 +468,61 @@ export default function DashboardDocumentsPage() {
             </CardContent>
           </Card>
         ))}
+      </div>
+
+      {/* Required Documents Checklist */}
+      <div>
+        <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-4">
+          Required Documents
+        </h3>
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {Object.entries(DOCUMENT_TYPE_LABELS).map(([key, label]) => {
+            const doc = documentMap.get(key);
+            const status = getChecklistStatus(doc);
+            return (
+              <Card
+                key={key}
+                className={`border shadow-sm transition-colors ${
+                  !doc
+                    ? "bg-slate-50/50 dark:bg-slate-800/30 border-slate-200 dark:border-slate-700"
+                    : doc.verificationStatus === "VERIFIED"
+                    ? "bg-green-50/50 dark:bg-green-900/10 border-green-200 dark:border-green-800/40"
+                    : doc.verificationStatus === "REJECTED" || doc.verificationStatus === "EXPIRED"
+                    ? "bg-red-50/50 dark:bg-red-900/10 border-red-200 dark:border-red-800/40"
+                    : "bg-amber-50/50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800/40"
+                }`}
+              >
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 shrink-0">{status.icon}</div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-slate-900 dark:text-white leading-tight">
+                        {label}
+                      </p>
+                      <p
+                        className={`text-xs mt-1 truncate ${
+                          !doc
+                            ? "text-slate-400 dark:text-slate-500 italic"
+                            : "text-slate-500 dark:text-slate-400"
+                        }`}
+                      >
+                        {status.label}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    {status.badge}
+                    {doc && (
+                      <span className="text-xs text-slate-400 dark:text-slate-500">
+                        {formatDate(doc.uploadedAt)}
+                      </span>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
       </div>
 
       {/* Documents Table */}
