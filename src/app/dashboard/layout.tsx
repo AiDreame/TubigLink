@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { 
+  FileText,
   LayoutDashboard, 
   ShoppingBag, 
   Package, 
@@ -26,6 +27,7 @@ const sidebarItems = [
   { label: "Overview", icon: LayoutDashboard, href: "/dashboard" },
   { label: "Orders", icon: ShoppingBag, href: "/dashboard/orders" },
   { label: "Products", icon: Package, href: "/dashboard/products" },
+  { label: "Documents", icon: FileText, href: "/dashboard/documents" },
   { label: "Staff", icon: Users, href: "/dashboard/staff" },
   { label: "Earnings", icon: BarChart3, href: "/dashboard/earnings" },
   { label: "Analytics", icon: BarChart3, href: "/dashboard/analytics" },

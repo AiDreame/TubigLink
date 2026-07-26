@@ -3,6 +3,24 @@
 export const APP_NAME = "AquaLink PH";
 export const APP_TAGLINE = "Tubig, delivered!";
 
+
+// ─── DOCUMENT TYPES ─────────────────────────────
+
+export const DOCUMENT_TYPE_LABELS: Record<string, string> = {
+  DTI_CERT: "DTI / SEC Certificate",
+  SEC_CERT: "SEC Certificate",
+  BIR_2303: "BIR Form 2303",
+  MAYORS_PERMIT: "Mayor's Permit",
+  BARANGAY_CLEARANCE: "Barangay Clearance",
+  SANITARY_PERMIT: "Sanitary Permit",
+  WATER_TEST_BACTERIOLOGICAL: "Water Quality Test (Bacteriological)",
+  WATER_TEST_PHYSICAL_CHEMICAL: "Water Quality Test (Physical-Chemical)",
+  GOVT_ID: "Government ID",
+  FIRE_SAFETY_CERT: "Fire Safety Certificate",
+  PROOF_OF_ADDRESS: "Proof of Address",
+  STATION_PHOTO: "Station Photo",
+  VIDEO_WALKTHROUGH: "Video Walkthrough",
+};
 // PH Regions
 export const PH_REGIONS = [
   "NCR — National Capital Region",
