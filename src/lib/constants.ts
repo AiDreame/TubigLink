@@ -6,21 +6,37 @@ export const APP_TAGLINE = "Tubig, delivered!";
 
 // ─── DOCUMENT TYPES ─────────────────────────────
 
-export const DOCUMENT_TYPE_LABELS: Record<string, string> = {
-  DTI_CERT: "DTI / SEC Certificate",
-  SEC_CERT: "SEC Certificate",
-  BIR_2303: "BIR Form 2303",
-  MAYORS_PERMIT: "Mayor's Permit",
-  BARANGAY_CLEARANCE: "Barangay Clearance",
-  SANITARY_PERMIT: "Sanitary Permit",
-  WATER_TEST_BACTERIOLOGICAL: "Water Quality Test (Bacteriological)",
-  WATER_TEST_PHYSICAL_CHEMICAL: "Water Quality Test (Physical-Chemical)",
-  GOVT_ID: "Government ID",
-  FIRE_SAFETY_CERT: "Fire Safety Certificate",
-  PROOF_OF_ADDRESS: "Proof of Address",
-  STATION_PHOTO: "Station Photo",
-  VIDEO_WALKTHROUGH: "Video Walkthrough",
+export interface DocumentTypeInfo {
+  label: string;
+  /** Validity in months. 0 = no expiry / permanent. */
+  validityMonths: number;
+}
+
+export const DOCUMENT_TYPE_LABELS: Record<string, DocumentTypeInfo> = {
+  DTI_CERT: { label: "DTI / SEC Certificate", validityMonths: 60 },          // DTI: 5 years (60 months)
+  SEC_CERT: { label: "SEC Certificate", validityMonths: 0 },                  // SEC: perpetual, no expiry
+  BIR_2303: { label: "BIR Form 2303", validityMonths: 0 },                   // BIR 2303: permanent, no renewal
+  MAYORS_PERMIT: { label: "Mayor's Permit", validityMonths: 12 },            // Annual renewal (every January)
+  BARANGAY_CLEARANCE: { label: "Barangay Clearance", validityMonths: 12 },   // 1 year
+  SANITARY_PERMIT: { label: "Sanitary Permit", validityMonths: 12 },         // 1 year
+  WATER_TEST_BACTERIOLOGICAL: { label: "Water Quality Test (Bacteriological)", validityMonths: 1 },   // Monthly
+  WATER_TEST_PHYSICAL_CHEMICAL: { label: "Water Quality Test (Physical-Chemical)", validityMonths: 6 }, // Every 6 months
+  GOVT_ID: { label: "Government ID", validityMonths: 0 },                    // Varies by ID type, no fixed validity
+  FIRE_SAFETY_CERT: { label: "Fire Safety Certificate", validityMonths: 12 }, // Annual
+  PROOF_OF_ADDRESS: { label: "Proof of Address", validityMonths: 3 },         // Usually 3 months for utility bills
+  STATION_PHOTO: { label: "Station Photo", validityMonths: 0 },              // No expiry
+  VIDEO_WALKTHROUGH: { label: "Video Walkthrough", validityMonths: 0 },       // No expiry
 };
+
+/** Helper to get the label string from a document type code (backward compatible) */
+export function getDocumentTypeLabel(type: string): string {
+  return DOCUMENT_TYPE_LABELS[type]?.label ?? type;
+}
+
+/** Helper to get validity months for a document type */
+export function getDocumentValidityMonths(type: string): number {
+  return DOCUMENT_TYPE_LABELS[type]?.validityMonths ?? 0;
+}
 // PH Regions
 export const PH_REGIONS = [
   "NCR — National Capital Region",

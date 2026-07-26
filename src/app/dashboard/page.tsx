@@ -13,7 +13,8 @@ import {
   AlertCircle,
   Plus,
   Settings,
-  Loader2
+  Loader2,
+  ShieldAlert
 } from "lucide-react";
 import { 
   Card, 
@@ -48,17 +49,47 @@ export default function DashboardHome() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [docAlertCount, setDocAlertCount] = useState(0);
 
   useEffect(() => {
     if (!session?.user) return;
 
-    fetch("/api/dashboard")
-      .then((res) => res.json())
-      .then((json) => {
-        if (json.success) {
-          setData(json.data);
+    Promise.all([
+      fetch("/api/dashboard").then((res) => res.json()),
+      fetch("/api/station/documents").then((res) => res.json()),
+    ])
+      .then(([dashJson, docsJson]) => {
+        if (dashJson.success) {
+          setData(dashJson.data);
         } else {
-          setError(json.error || "Failed to load");
+          setError(dashJson.error || "Failed to load");
+        }
+
+        // Check documents for expiry issues
+        if (docsJson.success && Array.isArray(docsJson.data)) {
+          const docs = docsJson.data;
+          const now = new Date();
+          let alertCount = 0;
+          for (const doc of docs) {
+            // Count expired docs
+            if (doc.verificationStatus === "EXPIRED") {
+              alertCount++;
+              continue;
+            }
+            // Count expiring within 30 days
+            if (doc.verificationStatus === "VERIFIED" && doc.expiryDate) {
+              const expiry = new Date(doc.expiryDate);
+              const daysLeft = Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+              if (daysLeft <= 30) {
+                alertCount++;
+              }
+            }
+            // Count rejected
+            if (doc.verificationStatus === "REJECTED") {
+              alertCount++;
+            }
+          }
+          setDocAlertCount(alertCount);
         }
       })
       .catch(() => setError("Failed to connect"))
@@ -139,6 +170,22 @@ export default function DashboardHome() {
 
   return (
     <div className="space-y-8">
+      {/* Document Alert Banner */}
+      {docAlertCount > 0 && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 p-4 flex items-start gap-3">
+          <ShieldAlert className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="font-semibold text-amber-800 dark:text-amber-300">Document attention needed</p>
+            <p className="text-sm text-amber-700 dark:text-amber-400">
+              {docAlertCount} document(s) need attention — expired, expiring soon, or rejected.{" "}
+              <Link href="/dashboard/documents" className="font-medium underline">
+                Review documents
+              </Link>
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* TIN Warning Banner */}
       {data.station && !data.station.tin && (
         <div className="rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 p-4 flex items-start gap-3">

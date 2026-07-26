@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import {
@@ -55,34 +55,87 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { getDocumentTypeLabel } from "@/lib/constants";
+import { getStationVerificationLabel } from "@/lib/provisional";
 
-type VerificationStatus = "PENDING" | "IN_REVIEW" | "VERIFIED" | "REJECTED" | "FLAGGED";
+// ─── Types ───────────────────────────────────────────
 
-interface StationVerification {
+interface StationDoc {
+  id: string;
+  type: string;
+  fileName: string;
+  fileUrl: string;
+  fileSize: number;
+  mimeType: string;
+  verificationStatus: string;
+  rejectionReason?: string;
+  expiryDate?: string;
+  uploadedAt: string;
+}
+
+interface StationDetail {
   id: string;
   name: string;
-  owner: string;
-  phone: string;
-  email: string;
   address: string;
-  city: string;
   barangay: string;
-  status: VerificationStatus;
-  submittedAt: string;
-  documents: number;
-  priority: "HIGH" | "MEDIUM" | "LOW";
-  businessType: string;
-  tin: string;
+  city: string;
+  province: string;
+  businessType?: string;
+  tin?: string;
+  onboardingStep: number;
+  onboardingSubmittedAt?: string;
+  complianceScore: number;
+  onboardingComplete: boolean;
+  approvedAt?: string;
+  rejectionReason?: string;
+  provisionalUntil?: string;
+  isActive: boolean;
+  user: { name?: string; phone?: string; email?: string };
+  documents: StationDoc[];
+  documentSummary: {
+    total: number;
+    pending: number;
+    verified: number;
+    rejected: number;
+    expired: number;
+  };
+  verificationLabel: string;
 }
+
+interface QueueStation {
+  id: string;
+  name: string;
+  city: string;
+  onboardingStep: number;
+  onboardingSubmittedAt?: string;
+  complianceScore: number;
+  onboardingComplete: boolean;
+  approvedAt?: string;
+  rejectionReason?: string;
+  provisionalUntil?: string;
+  isActive: boolean;
+  user: { name?: string; phone?: string; email?: string };
+  documentSummary: {
+    total: number;
+    pending: number;
+    verified: number;
+    rejected: number;
+    expired: number;
+  };
+}
+
+// ─── Component ────────────────────────────────────────
 
 export default function AdminVerificationPage() {
   const { data: session, status: sessionStatus } = useSession();
   const router = useRouter();
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<VerificationStatus | "ALL">("ALL");
-  const [selectedStation, setSelectedStation] = useState<StationVerification | null>(null);
+  const [statusFilter, setStatusFilter] = useState<string>("ALL");
+  const [selectedStation, setSelectedStation] = useState<StationDetail | null>(null);
+  const [stationDetailLoading, setStationDetailLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [stations, setStations] = useState<QueueStation[]>([]);
 
   // Check admin role
   useEffect(() => {
@@ -91,129 +144,162 @@ export default function AdminVerificationPage() {
       router.push("/auth/login?callbackUrl=/admin/verification");
       return;
     }
-    setIsLoading(false);
   }, [session, sessionStatus, router]);
 
-  // Placeholder data — will be replaced with fetch calls
-  const [verifications, setVerifications] = useState<StationVerification[]>([
-    {
-      id: "ST-001", name: "AquaPure Makati", owner: "Juan Dela Cruz", phone: "09171234567",
-      email: "juan@aquapure.com", address: "123 Rizal St.", city: "Makati", barangay: "Poblacion",
-      status: "PENDING", submittedAt: "2026-07-10T08:30:00", documents: 3, priority: "HIGH",
-      businessType: "SOLE_PROP", tin: "123-456-789-000",
-    },
-    {
-      id: "ST-002", name: "Healthy Drops BGC", owner: "Maria Clara", phone: "09179876543",
-      email: "maria@healthydrops.com", address: "456 5th Ave.", city: "Taguig", barangay: "Bonifacio Global City",
-      status: "IN_REVIEW", submittedAt: "2026-07-09T14:00:00", documents: 5, priority: "MEDIUM",
-      businessType: "CORPORATION", tin: "987-654-321-000",
-    },
-    {
-      id: "ST-003", name: "Clear Water QC", owner: "Santi Ramos", phone: "09175551234",
-      email: "santi@clearwater.com", address: "789 Commonwealth", city: "Quezon City", barangay: "Diliman",
-      status: "VERIFIED", submittedAt: "2026-07-08T10:00:00", documents: 4, priority: "LOW",
-      businessType: "SOLE_PROP", tin: "456-789-123-000",
-    },
-    {
-      id: "ST-004", name: "Spring Fresh Manila", owner: "Elena Garcia", phone: "09174443333",
-      email: "elena@springfresh.com", address: "321 Taft Ave.", city: "Manila", barangay: "Ermita",
-      status: "REJECTED", submittedAt: "2026-07-07T09:00:00", documents: 2, priority: "HIGH",
-      businessType: "PARTNERSHIP", tin: "789-123-456-000",
-    },
-    {
-      id: "ST-005", name: "Davao Pure Water", owner: "Pedro Santos", phone: "09176667777",
-      email: "pedro@davaopure.com", address: "555 Rizal St.", city: "Davao City", barangay: "Ecoland",
-      status: "FLAGGED", submittedAt: "2026-07-06T16:00:00", documents: 3, priority: "MEDIUM",
-      businessType: "SOLE_PROP", tin: "321-654-987-000",
-    },
-    {
-      id: "ST-006", name: "Cebu H2O Station", owner: "Ana Lim", phone: "09178889999",
-      email: "ana@cebuh2o.com", address: "888 Osmeña Blvd", city: "Cebu City", barangay: "Lahug",
-      status: "PENDING", submittedAt: "2026-07-11T07:00:00", documents: 2, priority: "HIGH",
-      businessType: "COOPERATIVE", tin: "654-321-789-000",
-    },
-  ]);
+  // Fetch stations from queue API
+  const fetchStations = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/verification/queue?limit=50");
+      const json = await res.json();
+      if (json.success) {
+        setStations(json.data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch verification queue:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
-  const getStatusBadge = (status: VerificationStatus) => {
-    const styles: Record<VerificationStatus, { color: string; label: string }> = {
+  useEffect(() => {
+    if (sessionStatus !== "loading" && session) {
+      fetchStations();
+    }
+  }, [session, sessionStatus, fetchStations]);
+
+  // Fetch station detail when selected
+  const openStationDetail = async (station: QueueStation) => {
+    setStationDetailLoading(true);
+    try {
+      const res = await fetch(`/api/admin/verification/${station.id}`);
+      const json = await res.json();
+      if (json.success) {
+        setSelectedStation(json.data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch station detail:", err);
+    } finally {
+      setStationDetailLoading(false);
+    }
+  };
+
+  // Map station to status filter category
+  const getStationFilterStatus = (s: QueueStation): string => {
+    if (s.approvedAt) return "VERIFIED";
+    if (s.rejectionReason) return "REJECTED";
+    if (s.onboardingSubmittedAt && s.documentSummary.pending > 0) return "PENDING";
+    if (s.onboardingSubmittedAt) return "IN_REVIEW";
+    return "PENDING";
+  };
+
+  const getStatusBadge = (status: string) => {
+    const styles: Record<string, { color: string; label: string }> = {
       PENDING: { color: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400 border-amber-200 dark:border-amber-800", label: "Pending" },
       IN_REVIEW: { color: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 border-blue-200 dark:border-blue-800", label: "In Review" },
       VERIFIED: { color: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border-green-200 dark:border-green-800", label: "Verified" },
       REJECTED: { color: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800", label: "Rejected" },
       FLAGGED: { color: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400 border-purple-200 dark:border-purple-800", label: "Flagged" },
     };
-    const s = styles[status];
+    const s = styles[status] || styles.PENDING;
     return <Badge variant="outline" className={`${s.color} font-medium`}>{s.label}</Badge>;
   };
 
-  const getPriorityBadge = (priority: "HIGH" | "MEDIUM" | "LOW") => {
-    const styles = {
-      HIGH: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
-      MEDIUM: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
-      LOW: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-400",
+  const getDocStatusBadge = (status: string) => {
+    const styles: Record<string, string> = {
+      PENDING: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400",
+      VERIFIED: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
+      REJECTED: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
+      EXPIRED: "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-400",
     };
-    return <Badge variant="outline" className={`${styles[priority]} text-xs`}>{priority}</Badge>;
+    return <Badge variant="outline" className={`${styles[status] || styles.PENDING} font-medium`}>{status}</Badge>;
   };
 
-  const filteredVerifications = verifications.filter((v) => {
+  const filteredStations = stations.filter((s) => {
     const matchesSearch = searchTerm === "" ||
-      v.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      v.owner.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      v.id.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === "ALL" || v.status === statusFilter;
+      s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (s.user?.name || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      s.id.toLowerCase().includes(searchTerm.toLowerCase());
+    const sStatus = getStationFilterStatus(s);
+    const matchesStatus = statusFilter === "ALL" || sStatus === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
   const counts = {
-    PENDING: verifications.filter((v) => v.status === "PENDING").length,
-    IN_REVIEW: verifications.filter((v) => v.status === "IN_REVIEW").length,
-    VERIFIED: verifications.filter((v) => v.status === "VERIFIED").length,
-    REJECTED: verifications.filter((v) => v.status === "REJECTED").length,
-    FLAGGED: verifications.filter((v) => v.status === "FLAGGED").length,
+    PENDING: stations.filter((s) => getStationFilterStatus(s) === "PENDING").length,
+    IN_REVIEW: stations.filter((s) => getStationFilterStatus(s) === "IN_REVIEW").length,
+    VERIFIED: stations.filter((s) => getStationFilterStatus(s) === "VERIFIED").length,
+    REJECTED: stations.filter((s) => getStationFilterStatus(s) === "REJECTED").length,
+    FLAGGED: stations.filter((s) => getStationFilterStatus(s) === "FLAGGED").length,
   };
 
-  const handleApprove = async (id: string) => {
-    setActionLoading(id);
-    // Placeholder — will be replaced with actual API call
-    await new Promise((r) => setTimeout(r, 1000));
-    setVerifications((prev) =>
-      prev.map((v) => (v.id === id ? { ...v, status: "VERIFIED" as VerificationStatus } : v))
-    );
-    setActionLoading(null);
-    if (selectedStation?.id === id) setSelectedStation((prev) => prev ? { ...prev, status: "VERIFIED" } : null);
+  const handleApprove = async (stationId: string) => {
+    setActionLoading(stationId);
+    try {
+      const res = await fetch("/api/admin/verification/approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stationId }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        await fetchStations();
+        if (selectedStation?.id === stationId) {
+          openStationDetail({ id: stationId } as any);
+        }
+      }
+    } catch (err) {
+      console.error("Approve error:", err);
+    } finally {
+      setActionLoading(null);
+    }
   };
 
-  const handleReject = async (id: string) => {
-    setActionLoading(id);
-    await new Promise((r) => setTimeout(r, 1000));
-    setVerifications((prev) =>
-      prev.map((v) => (v.id === id ? { ...v, status: "REJECTED" as VerificationStatus } : v))
-    );
-    setActionLoading(null);
-    if (selectedStation?.id === id) setSelectedStation((prev) => prev ? { ...prev, status: "REJECTED" } : null);
+  const handleReject = async (stationId: string, reason?: string) => {
+    setActionLoading(stationId);
+    try {
+      const res = await fetch("/api/admin/verification/reject", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stationId, rejectionReason: reason || "Rejected by admin" }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        await fetchStations();
+        if (selectedStation?.id === stationId) {
+          openStationDetail({ id: stationId } as any);
+        }
+      }
+    } catch (err) {
+      console.error("Reject error:", err);
+    } finally {
+      setActionLoading(null);
+    }
   };
 
-  const handleFlag = async (id: string) => {
-    setActionLoading(id);
-    await new Promise((r) => setTimeout(r, 1000));
-    setVerifications((prev) =>
-      prev.map((v) => (v.id === id ? { ...v, status: "FLAGGED" as VerificationStatus } : v))
-    );
-    setActionLoading(null);
-    if (selectedStation?.id === id) setSelectedStation((prev) => prev ? { ...prev, status: "FLAGGED" } : null);
+  const handleGrantProvisional = async (stationId: string) => {
+    setActionLoading(stationId);
+    try {
+      const res = await fetch("/api/admin/verification/provisional", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stationId }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        await fetchStations();
+        if (selectedStation?.id === stationId) {
+          openStationDetail({ id: stationId } as any);
+        }
+      }
+    } catch (err) {
+      console.error("Provisional error:", err);
+    } finally {
+      setActionLoading(null);
+    }
   };
 
-  const handleStartReview = async (id: string) => {
-    setActionLoading(id);
-    await new Promise((r) => setTimeout(r, 800));
-    setVerifications((prev) =>
-      prev.map((v) => (v.id === id ? { ...v, status: "IN_REVIEW" as VerificationStatus } : v))
-    );
-    setActionLoading(null);
-    if (selectedStation?.id === id) setSelectedStation((prev) => prev ? { ...prev, status: "IN_REVIEW" } : null);
-  };
-
-  const formatDate = (dateStr: string) => {
+  const formatDate = (dateStr?: string) => {
+    if (!dateStr) return "—";
     const d = new Date(dateStr);
     return d.toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" });
   };
@@ -242,8 +328,8 @@ export default function AdminVerificationPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" className="rounded-xl" onClick={() => window.location.reload()}>
-            <Download className="h-4 w-4 mr-2" /> Export
+          <Button variant="outline" className="rounded-xl" onClick={fetchStations}>
+            <Download className="h-4 w-4 mr-2" /> Refresh
           </Button>
         </div>
       </div>
@@ -253,7 +339,7 @@ export default function AdminVerificationPage() {
         <Card className="bg-white dark:bg-gray-800/50 border-none shadow-sm cursor-pointer hover:shadow-md transition-shadow"
           onClick={() => setStatusFilter("ALL")}>
           <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-slate-900 dark:text-white">{verifications.length}</p>
+            <p className="text-2xl font-bold text-slate-900 dark:text-white">{stations.length}</p>
             <p className="text-xs text-slate-500 mt-1">Total</p>
           </CardContent>
         </Card>
@@ -328,13 +414,13 @@ export default function AdminVerificationPage() {
                 <TableHead className="font-bold text-xs uppercase tracking-wider hidden md:table-cell">Owner</TableHead>
                 <TableHead className="font-bold text-xs uppercase tracking-wider hidden lg:table-cell">Location</TableHead>
                 <TableHead className="font-bold text-xs uppercase tracking-wider">Status</TableHead>
-                <TableHead className="font-bold text-xs uppercase tracking-wider hidden md:table-cell">Priority</TableHead>
+                <TableHead className="font-bold text-xs uppercase tracking-wider hidden md:table-cell">Compliance</TableHead>
                 <TableHead className="font-bold text-xs uppercase tracking-wider hidden lg:table-cell">Submitted</TableHead>
                 <TableHead className="font-bold text-xs uppercase tracking-wider text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredVerifications.length === 0 ? (
+              {filteredStations.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center py-12 text-slate-500">
                     <Shield className="h-8 w-8 mx-auto mb-2 text-slate-300" />
@@ -342,47 +428,46 @@ export default function AdminVerificationPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredVerifications.map((v) => (
-                  <TableRow key={v.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 cursor-pointer"
-                    onClick={() => setSelectedStation(v)}>
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold text-sm">
-                          {v.name[0]}
+                filteredStations.map((s) => {
+                  const sStatus = getStationFilterStatus(s);
+                  return (
+                    <TableRow key={s.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 cursor-pointer"
+                      onClick={() => openStationDetail(s)}>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <div className="h-10 w-10 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold text-sm">
+                            {s.name[0]}
+                          </div>
+                          <div>
+                            <p className="font-bold text-sm text-slate-900 dark:text-white">{s.name}</p>
+                            <p className="text-xs text-slate-500">{s.id.slice(0, 8)}...</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="font-bold text-sm text-slate-900 dark:text-white">{v.name}</p>
-                          <p className="text-xs text-slate-500">{v.id}</p>
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell">
-                      <p className="text-sm text-slate-700 dark:text-slate-300">{v.owner}</p>
-                    </TableCell>
-                    <TableCell className="hidden lg:table-cell">
-                      <p className="text-sm text-slate-700 dark:text-slate-300">{v.city}</p>
-                    </TableCell>
-                    <TableCell>{getStatusBadge(v.status)}</TableCell>
-                    <TableCell className="hidden md:table-cell">{getPriorityBadge(v.priority)}</TableCell>
-                    <TableCell className="hidden lg:table-cell">
-                      <p className="text-xs text-slate-500">{formatDate(v.submittedAt)}</p>
-                    </TableCell>
-                    <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex justify-end gap-1">
-                        <Button variant="ghost" size="sm" className="min-h-[36px] min-w-[36px]"
-                          onClick={() => setSelectedStation(v)}>
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        {v.status === "PENDING" && (
-                          <Button variant="ghost" size="sm" className="min-h-[36px] min-w-[36px] text-blue-600"
-                            onClick={() => handleStartReview(v.id)} disabled={actionLoading === v.id}>
-                            {actionLoading === v.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Shield className="h-4 w-4" />}
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        <p className="text-sm text-slate-700 dark:text-slate-300">{s.user?.name || "—"}</p>
+                      </TableCell>
+                      <TableCell className="hidden lg:table-cell">
+                        <p className="text-sm text-slate-700 dark:text-slate-300">{s.city}</p>
+                      </TableCell>
+                      <TableCell>{getStatusBadge(sStatus)}</TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        <p className="text-sm font-medium">{Math.round(s.complianceScore * 100)}%</p>
+                      </TableCell>
+                      <TableCell className="hidden lg:table-cell">
+                        <p className="text-xs text-slate-500">{formatDate(s.onboardingSubmittedAt)}</p>
+                      </TableCell>
+                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex justify-end gap-1">
+                          <Button variant="ghost" size="sm" className="min-h-[36px] min-w-[36px]"
+                            onClick={() => openStationDetail(s)}>
+                            <Eye className="h-4 w-4" />
                           </Button>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               )}
             </TableBody>
           </Table>
@@ -392,7 +477,11 @@ export default function AdminVerificationPage() {
       {/* Station Detail Dialog */}
       <Dialog open={!!selectedStation} onOpenChange={(open) => !open && setSelectedStation(null)}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          {selectedStation && (
+          {stationDetailLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+            </div>
+          ) : selectedStation ? (
             <>
               <DialogHeader>
                 <div className="flex items-center gap-3 mb-2">
@@ -401,7 +490,9 @@ export default function AdminVerificationPage() {
                   </div>
                   <div>
                     <DialogTitle className="text-xl">{selectedStation.name}</DialogTitle>
-                    <DialogDescription>{selectedStation.id} • {getStatusBadge(selectedStation.status)}</DialogDescription>
+                    <DialogDescription>
+                      {selectedStation.id.slice(0, 8)}... • {getStatusBadge(getStationFilterStatus(selectedStation as any))}
+                    </DialogDescription>
                   </div>
                 </div>
               </DialogHeader>
@@ -409,7 +500,7 @@ export default function AdminVerificationPage() {
               <Tabs defaultValue="details" className="mt-4">
                 <TabsList className="w-full grid grid-cols-3">
                   <TabsTrigger value="details">Details</TabsTrigger>
-                  <TabsTrigger value="documents">Documents ({selectedStation.documents})</TabsTrigger>
+                  <TabsTrigger value="documents">Documents ({selectedStation.documentSummary?.total || 0})</TabsTrigger>
                   <TabsTrigger value="compliance">Compliance</TabsTrigger>
                 </TabsList>
 
@@ -417,19 +508,19 @@ export default function AdminVerificationPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Owner</p>
-                      <p className="text-sm flex items-center gap-2"><User className="h-3.5 w-3.5 text-slate-400" /> {selectedStation.owner}</p>
+                      <p className="text-sm flex items-center gap-2"><User className="h-3.5 w-3.5 text-slate-400" /> {selectedStation.user?.name || "—"}</p>
                     </div>
                     <div className="space-y-1">
                       <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Phone</p>
-                      <p className="text-sm flex items-center gap-2"><Phone className="h-3.5 w-3.5 text-slate-400" /> {selectedStation.phone}</p>
+                      <p className="text-sm flex items-center gap-2"><Phone className="h-3.5 w-3.5 text-slate-400" /> {selectedStation.user?.phone || "—"}</p>
                     </div>
                     <div className="space-y-1">
                       <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Email</p>
-                      <p className="text-sm text-slate-700 dark:text-slate-300">{selectedStation.email}</p>
+                      <p className="text-sm text-slate-700 dark:text-slate-300">{selectedStation.user?.email || "—"}</p>
                     </div>
                     <div className="space-y-1">
                       <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Business Type</p>
-                      <p className="text-sm">{selectedStation.businessType.replace("_", " ")}</p>
+                      <p className="text-sm">{(selectedStation.businessType || "—").replace("_", " ")}</p>
                     </div>
                     <div className="space-y-1 col-span-2">
                       <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Address</p>
@@ -441,129 +532,97 @@ export default function AdminVerificationPage() {
                     </div>
                     <div className="space-y-1">
                       <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Submitted</p>
-                      <p className="text-sm">{formatDate(selectedStation.submittedAt)}</p>
+                      <p className="text-sm">{formatDate(selectedStation.onboardingSubmittedAt)}</p>
                     </div>
                   </div>
                 </TabsContent>
 
                 <TabsContent value="documents" className="space-y-3 mt-4">
-                  {[
-                    { name: "DTI/SEC Certificate", status: "UPLOADED", type: "PDF" },
-                    { name: "Barangay Clearance", status: selectedStation.status === "VERIFIED" ? "VERIFIED" : "PENDING", type: "PDF" },
-                    { name: "Sanitary Permit", status: selectedStation.status === "VERIFIED" ? "VERIFIED" : "UPLOADED", type: "PDF" },
-                    { name: "Water Quality Test", status: selectedStation.status === "VERIFIED" ? "VERIFIED" : "PENDING", type: "PDF" },
-                  ].map((doc, i) => (
-                    <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border dark:border-slate-700">
-                      <div className="flex items-center gap-3">
-                        <FileText className="h-5 w-5 text-slate-400" />
-                        <div>
-                          <p className="text-sm font-medium text-slate-900 dark:text-white">{doc.name}</p>
-                          <p className="text-xs text-slate-500">{doc.type}</p>
+                  {selectedStation.documents.length === 0 ? (
+                    <p className="text-sm text-slate-500 text-center py-8">No documents uploaded yet.</p>
+                  ) : (
+                    selectedStation.documents.map((doc) => (
+                      <div key={doc.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border dark:border-slate-700">
+                        <div className="flex items-center gap-3">
+                          <FileText className="h-5 w-5 text-slate-400" />
+                          <div>
+                            <p className="text-sm font-medium text-slate-900 dark:text-white">{getDocumentTypeLabel(doc.type)}</p>
+                            <p className="text-xs text-slate-500">{doc.fileName}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {getDocStatusBadge(doc.verificationStatus)}
+                          {doc.fileUrl && (
+                            <Button variant="ghost" size="sm" className="min-h-[36px] min-w-[36px]"
+                              onClick={() => window.open(doc.fileUrl, "_blank")}>
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        {doc.status === "VERIFIED" ? (
-                          <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-none">Verified</Badge>
-                        ) : doc.status === "UPLOADED" ? (
-                          <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border-none">Uploaded</Badge>
-                        ) : (
-                          <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-none">Pending</Badge>
-                        )}
-                        <Button variant="ghost" size="sm" className="min-h-[36px] min-w-[36px]">
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </TabsContent>
 
                 <TabsContent value="compliance" className="space-y-3 mt-4">
                   <div className="grid grid-cols-2 gap-3">
                     <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border dark:border-slate-700 text-center">
-                      <p className="text-2xl font-bold text-slate-900 dark:text-white">{selectedStation.documents}/5</p>
+                      <p className="text-2xl font-bold text-slate-900 dark:text-white">{selectedStation.documentSummary?.total || 0}</p>
                       <p className="text-xs text-slate-500 mt-1">Documents Uploaded</p>
                     </div>
                     <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border dark:border-slate-700 text-center">
                       <p className="text-2xl font-bold text-slate-900 dark:text-white">
-                        {selectedStation.status === "VERIFIED" ? "100%" : selectedStation.status === "REJECTED" ? "40%" : "60%"}
+                        {Math.round((selectedStation.complianceScore || 0) * 100)}%
                       </p>
                       <p className="text-xs text-slate-500 mt-1">Compliance Score</p>
                     </div>
                   </div>
                   <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/50">
-                    <p className="text-sm font-medium text-blue-800 dark:text-blue-300">Verification Checklist</p>
-                    <div className="mt-2 space-y-2">
-                      {[
-                        { label: "Business Registration", done: true },
-                        { label: "Permits & Licenses", done: selectedStation.status !== "REJECTED" },
-                        { label: "Water Quality Test", done: selectedStation.status === "VERIFIED" },
-                        { label: "Owner Identity Verified", done: selectedStation.status !== "PENDING" },
-                        { label: "Location Verified", done: selectedStation.status === "VERIFIED" },
-                      ].map((item, i) => (
-                        <div key={i} className="flex items-center gap-2 text-sm">
-                          {item.done ? (
-                            <CheckCircle2 className="h-4 w-4 text-green-500" />
-                          ) : (
-                            <AlertCircle className="h-4 w-4 text-amber-500" />
-                          )}
-                          <span className={item.done ? "text-slate-600 dark:text-slate-400" : "text-slate-500 dark:text-slate-500"}>
-                            {item.label}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
+                    <p className="text-sm font-medium text-blue-800 dark:text-blue-300">Verification Status</p>
+                    <p className="text-sm text-blue-700 dark:text-blue-400 mt-1">
+                      {getStationVerificationLabel({
+                        onboardingComplete: selectedStation.onboardingComplete,
+                        provisionalUntil: selectedStation.provisionalUntil ? new Date(selectedStation.provisionalUntil) : null,
+                        rejectionReason: selectedStation.rejectionReason ?? null,
+                        approvedAt: selectedStation.approvedAt ? new Date(selectedStation.approvedAt) : null,
+                        isActive: selectedStation.isActive,
+                      })}
+                    </p>
                   </div>
                 </TabsContent>
               </Tabs>
 
               <DialogFooter className="mt-6 flex-col sm:flex-row gap-2">
-                {selectedStation.status === "PENDING" && (
-                  <Button variant="outline" className="rounded-xl flex-1"
-                    onClick={() => handleStartReview(selectedStation.id)}
-                    disabled={actionLoading === selectedStation.id}>
-                    {actionLoading === selectedStation.id ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Shield className="h-4 w-4 mr-2" />}
-                    Start Review
-                  </Button>
-                )}
-                {selectedStation.status === "IN_REVIEW" && (
+                {!selectedStation.approvedAt && !selectedStation.rejectionReason && (
                   <>
                     <Button variant="default" className="rounded-xl flex-1 bg-green-600 hover:bg-green-700"
                       onClick={() => handleApprove(selectedStation.id)}
                       disabled={actionLoading === selectedStation.id}>
                       {actionLoading === selectedStation.id ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
-                      Approve
+                      Approve Station
+                    </Button>
+                    <Button variant="outline" className="rounded-xl flex-1 text-blue-600"
+                      onClick={() => handleGrantProvisional(selectedStation.id)}
+                      disabled={actionLoading === selectedStation.id}>
+                      <Clock className="h-4 w-4 mr-2" /> Grant Provisional
                     </Button>
                     <Button variant="outline" className="rounded-xl flex-1 text-red-600 border-red-200 hover:bg-red-50 dark:border-red-800 dark:hover:bg-red-900/20"
-                      onClick={() => handleFlag(selectedStation.id)}
-                      disabled={actionLoading === selectedStation.id}>
-                      <AlertCircle className="h-4 w-4 mr-2" />
-                      Flag
-                    </Button>
-                    <Button variant="outline" className="rounded-xl flex-1 text-slate-600"
-                      onClick={() => handleReject(selectedStation.id)}
-                      disabled={actionLoading === selectedStation.id}>
-                      <XCircle className="h-4 w-4 mr-2" />
-                      Reject
-                    </Button>
-                  </>
-                )}
-                {selectedStation.status === "FLAGGED" && (
-                  <>
-                    <Button variant="default" className="rounded-xl flex-1 bg-green-600 hover:bg-green-700"
-                      onClick={() => handleApprove(selectedStation.id)}
-                      disabled={actionLoading === selectedStation.id}>
-                      <CheckCircle2 className="h-4 w-4 mr-2" /> Approve After Review
-                    </Button>
-                    <Button variant="outline" className="rounded-xl flex-1 text-red-600"
-                      onClick={() => handleReject(selectedStation.id)}
+                      onClick={() => handleReject(selectedStation.id, "Does not meet requirements")}
                       disabled={actionLoading === selectedStation.id}>
                       <XCircle className="h-4 w-4 mr-2" /> Reject
                     </Button>
                   </>
                 )}
+                {selectedStation.rejectionReason && (
+                  <Button variant="default" className="rounded-xl flex-1 bg-green-600 hover:bg-green-700"
+                    onClick={() => handleApprove(selectedStation.id)}
+                    disabled={actionLoading === selectedStation.id}>
+                    <CheckCircle2 className="h-4 w-4 mr-2" /> Re-evaluate & Approve
+                  </Button>
+                )}
               </DialogFooter>
             </>
-          )}
+          ) : null}
         </DialogContent>
       </Dialog>
     </div>

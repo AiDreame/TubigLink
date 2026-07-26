@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import {
@@ -54,33 +54,37 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { getDocumentTypeLabel } from "@/lib/constants";
 
-interface Document {
+// ─── Types ───────────────────────────────────────────
+
+interface AdminDocument {
   id: string;
   stationId: string;
-  stationName: string;
   type: string;
   fileName: string;
-  fileSize: string;
+  fileUrl: string;
+  fileSize: number;
+  mimeType: string;
+  expiryDate?: string;
+  verificationStatus: "PENDING" | "VERIFIED" | "REJECTED" | "EXPIRED";
+  rejectionReason?: string;
+  verifiedById?: string;
+  verifiedAt?: string;
   uploadedAt: string;
-  status: "PENDING" | "VERIFIED" | "REJECTED" | "EXPIRED";
-  reviewedBy?: string;
+  station: {
+    id: string;
+    name: string;
+    city: string;
+    onboardingStep: number;
+    onboardingSubmittedAt?: string;
+  };
+  verifiedBy?: {
+    name?: string;
+  };
 }
 
-const DOC_TYPES = [
-  "DTI/SEC Certificate",
-  "Barangay Clearance",
-  "Sanitary Permit",
-  "Water Quality Test (Bacteriological)",
-  "Water Quality Test (Physical-Chemical)",
-  "Mayor's Permit",
-  "BIR 2303",
-  "Fire Safety Certificate",
-  "Proof of Address",
-  "Government ID",
-  "Station Photo",
-  "Video Walkthrough",
-];
+// ─── Component ────────────────────────────────────────
 
 export default function AdminVerificationDocumentsPage() {
   const { data: session, status: sessionStatus } = useSession();
@@ -88,10 +92,12 @@ export default function AdminVerificationDocumentsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [typeFilter, setTypeFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
-  const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
+  const [selectedDoc, setSelectedDoc] = useState<AdminDocument | null>(null);
   const [rejectionReason, setRejectionReason] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [documents, setDocuments] = useState<AdminDocument[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (sessionStatus === "loading") return;
@@ -99,37 +105,93 @@ export default function AdminVerificationDocumentsPage() {
       router.push("/auth/login?callbackUrl=/admin/verification/documents");
       return;
     }
-    setIsLoading(false);
   }, [session, sessionStatus, router]);
 
-  const [documents, setDocuments] = useState<Document[]>([
-    { id: "DOC-001", stationId: "ST-001", stationName: "AquaPure Makati", type: "DTI/SEC Certificate", fileName: "dti_cert_aquapure.pdf", fileSize: "2.4 MB", uploadedAt: "2026-07-10T08:30:00", status: "PENDING" },
-    { id: "DOC-002", stationId: "ST-001", stationName: "AquaPure Makati", type: "Barangay Clearance", fileName: "brgy_clearance.pdf", fileSize: "1.1 MB", uploadedAt: "2026-07-10T08:35:00", status: "VERIFIED", reviewedBy: "Admin" },
-    { id: "DOC-003", stationId: "ST-002", stationName: "Healthy Drops BGC", type: "Sanitary Permit", fileName: "sanitary_permit.pdf", fileSize: "3.2 MB", uploadedAt: "2026-07-09T14:00:00", status: "PENDING" },
-    { id: "DOC-004", stationId: "ST-002", stationName: "Healthy Drops BGC", type: "Mayor's Permit", fileName: "mayors_permit.jpg", fileSize: "1.8 MB", uploadedAt: "2026-07-09T14:05:00", status: "REJECTED" },
-    { id: "DOC-005", stationId: "ST-003", stationName: "Clear Water QC", type: "Water Quality Test (Bacteriological)", fileName: "water_test_bact.pdf", fileSize: "4.5 MB", uploadedAt: "2026-07-08T10:00:00", status: "VERIFIED", reviewedBy: "Admin" },
-    { id: "DOC-006", stationId: "ST-003", stationName: "Clear Water QC", type: "Government ID", fileName: "govt_id_santi.png", fileSize: "0.8 MB", uploadedAt: "2026-07-08T10:10:00", status: "VERIFIED", reviewedBy: "Admin" },
-    { id: "DOC-007", stationId: "ST-005", stationName: "Davao Pure Water", type: "DTI/SEC Certificate", fileName: "dti_cert_davao.pdf", fileSize: "2.1 MB", uploadedAt: "2026-07-06T16:00:00", status: "EXPIRED" },
-    { id: "DOC-008", stationId: "ST-006", stationName: "Cebu H2O Station", type: "Station Photo", fileName: "station_photo.jpg", fileSize: "5.2 MB", uploadedAt: "2026-07-11T07:00:00", status: "PENDING" },
-    { id: "DOC-009", stationId: "ST-006", stationName: "Cebu H2O Station", type: "Water Quality Test (Physical-Chemical)", fileName: "water_test_chem.pdf", fileSize: "3.7 MB", uploadedAt: "2026-07-11T07:05:00", status: "PENDING" },
-  ]);
+  // Fetch documents from API
+  const fetchDocuments = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams();
+      params.set("limit", "50");
+      if (statusFilter !== "ALL") params.set("verificationStatus", statusFilter);
+      if (typeFilter !== "ALL") params.set("type", typeFilter);
 
-  const handleVerify = async (docId: string) => {
-    setActionLoading(docId);
-    await new Promise((r) => setTimeout(r, 800));
-    setDocuments((prev) => prev.map((d) => d.id === docId ? { ...d, status: "VERIFIED" as const, reviewedBy: "Admin" } : d));
-    setActionLoading(null);
-    if (selectedDoc?.id === docId) setSelectedDoc((prev) => prev ? { ...prev, status: "VERIFIED", reviewedBy: "Admin" } : null);
+      const res = await fetch(`/api/admin/verification/documents?${params.toString()}`);
+      const json = await res.json();
+      if (json.success) {
+        setDocuments(json.data);
+      } else {
+        setError(json.error || "Failed to fetch documents");
+      }
+    } catch (err) {
+      setError("Failed to connect");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [statusFilter, typeFilter]);
+
+  useEffect(() => {
+    if (sessionStatus !== "loading" && session) {
+      fetchDocuments();
+    }
+  }, [session, sessionStatus, fetchDocuments]);
+
+  // Verify document via review API
+  const handleVerify = async (doc: AdminDocument) => {
+    setActionLoading(doc.id);
+    try {
+      const res = await fetch("/api/admin/verification/review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          stationId: doc.stationId,
+          documentId: doc.id,
+          action: "APPROVE",
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        await fetchDocuments();
+        if (selectedDoc?.id === doc.id) setSelectedDoc(null);
+      } else {
+        setError(json.error || "Failed to verify document");
+      }
+    } catch (err) {
+      setError("Failed to verify document");
+    } finally {
+      setActionLoading(null);
+    }
   };
 
-  const handleReject = async (docId: string) => {
-    if (!rejectionReason && selectedDoc?.id === docId) return;
-    setActionLoading(docId);
-    await new Promise((r) => setTimeout(r, 800));
-    setDocuments((prev) => prev.map((d) => d.id === docId ? { ...d, status: "REJECTED" as const } : d));
-    setActionLoading(null);
-    setRejectionReason("");
-    if (selectedDoc?.id === docId) setSelectedDoc((prev) => prev ? { ...prev, status: "REJECTED" } : null);
+  // Reject document via review API
+  const handleReject = async (doc: AdminDocument) => {
+    if (!rejectionReason && selectedDoc?.id === doc.id) return;
+    setActionLoading(doc.id);
+    try {
+      const res = await fetch("/api/admin/verification/review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          stationId: doc.stationId,
+          documentId: doc.id,
+          action: "REJECT",
+          rejectionReason: rejectionReason || "Rejected by admin",
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        await fetchDocuments();
+        setRejectionReason("");
+        if (selectedDoc?.id === doc.id) setSelectedDoc(null);
+      } else {
+        setError(json.error || "Failed to reject document");
+      }
+    } catch (err) {
+      setError("Failed to reject document");
+    } finally {
+      setActionLoading(null);
+    }
   };
 
   const getFileIcon = (fileName: string) => {
@@ -151,18 +213,25 @@ export default function AdminVerificationDocumentsPage() {
 
   const filteredDocs = documents.filter((d) => {
     const matchesSearch = searchTerm === "" ||
-      d.stationName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      d.type.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      d.station?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      getDocumentTypeLabel(d.type).toLowerCase().includes(searchTerm.toLowerCase()) ||
       d.fileName.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesType = typeFilter === "ALL" || d.type === typeFilter;
-    const matchesStatus = statusFilter === "ALL" || d.status === statusFilter;
-    return matchesSearch && matchesType && matchesStatus;
+    return matchesSearch;
   });
 
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr);
     return d.toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" });
   };
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+  };
+
+  // Document type options for filter (dynamic from constants)
+  const docTypeOptions = Array.from(new Set(documents.map((d) => d.type)));
 
   if (isLoading || sessionStatus === "loading") {
     return (
@@ -186,18 +255,26 @@ export default function AdminVerificationDocumentsPage() {
             Review uploaded documents from water station applications
           </p>
         </div>
-        <Button variant="outline" className="rounded-xl">
-          <Download className="h-4 w-4 mr-2" /> Export
+        <Button variant="outline" className="rounded-xl" onClick={fetchDocuments}>
+          <Download className="h-4 w-4 mr-2" /> Refresh
         </Button>
       </div>
+
+      {error && (
+        <div className="p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50">
+          <p className="text-sm text-red-600 dark:text-red-400 flex items-center gap-2">
+            <AlertCircle className="h-4 w-4" /> {error}
+          </p>
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
         {[
           { label: "Total Documents", value: documents.length, color: "bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700" },
-          { label: "Pending Review", value: documents.filter((d) => d.status === "PENDING").length, color: "bg-amber-50 dark:bg-amber-900/20 border-amber-100 dark:border-amber-800/50" },
-          { label: "Verified", value: documents.filter((d) => d.status === "VERIFIED").length, color: "bg-green-50 dark:bg-green-900/20 border-green-100 dark:border-green-800/50" },
-          { label: "Rejected/Expired", value: documents.filter((d) => d.status === "REJECTED" || d.status === "EXPIRED").length, color: "bg-red-50 dark:bg-red-900/20 border-red-100 dark:border-red-800/50" },
+          { label: "Pending Review", value: documents.filter((d) => d.verificationStatus === "PENDING").length, color: "bg-amber-50 dark:bg-amber-900/20 border-amber-100 dark:border-amber-800/50" },
+          { label: "Verified", value: documents.filter((d) => d.verificationStatus === "VERIFIED").length, color: "bg-green-50 dark:bg-green-900/20 border-green-100 dark:border-green-800/50" },
+          { label: "Rejected/Expired", value: documents.filter((d) => d.verificationStatus === "REJECTED" || d.verificationStatus === "EXPIRED").length, color: "bg-red-50 dark:bg-red-900/20 border-red-100 dark:border-red-800/50" },
         ].map((stat) => (
           <Card key={stat.label} className={`${stat.color} border shadow-sm`}>
             <CardContent className="p-4 text-center">
@@ -223,15 +300,15 @@ export default function AdminVerificationDocumentsPage() {
           <DropdownMenuTrigger asChild>
             <Button variant="outline" className="rounded-xl min-w-[160px]">
               <Filter className="h-4 w-4 mr-2" />
-              {typeFilter === "ALL" ? "All Types" : typeFilter.length > 20 ? typeFilter.substring(0, 20) + "..." : typeFilter}
+              {typeFilter === "ALL" ? "All Types" : getDocumentTypeLabel(typeFilter)}
               <ChevronDown className="h-4 w-4 ml-2" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-64 max-h-60 overflow-y-auto">
             <DropdownMenuItem onClick={() => setTypeFilter("ALL")}>All Types</DropdownMenuItem>
             <DropdownMenuSeparator />
-            {DOC_TYPES.map((t) => (
-              <DropdownMenuItem key={t} onClick={() => setTypeFilter(t)}>{t}</DropdownMenuItem>
+            {docTypeOptions.map((t) => (
+              <DropdownMenuItem key={t} onClick={() => setTypeFilter(t)}>{getDocumentTypeLabel(t)}</DropdownMenuItem>
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
@@ -284,28 +361,37 @@ export default function AdminVerificationDocumentsPage() {
                     <TableCell>
                       <div className="flex items-center gap-3">
                         {getFileIcon(doc.fileName)}
-                        <p className="text-sm font-medium text-slate-900 dark:text-white">{doc.fileName}</p>
+                        <p className="text-sm font-medium text-slate-900 dark:text-white truncate max-w-[150px]">{doc.fileName}</p>
                       </div>
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
-                      <p className="text-sm text-slate-700 dark:text-slate-300">{doc.stationName}</p>
+                      <p className="text-sm text-slate-700 dark:text-slate-300">{doc.station?.name || "—"}</p>
                     </TableCell>
-                    <TableCell><p className="text-sm text-slate-600 dark:text-slate-400">{doc.type}</p></TableCell>
-                    <TableCell className="hidden lg:table-cell"><p className="text-sm text-slate-500">{doc.fileSize}</p></TableCell>
-                    <TableCell>{getStatusBadge(doc.status)}</TableCell>
+                    <TableCell><p className="text-sm text-slate-600 dark:text-slate-400">{getDocumentTypeLabel(doc.type)}</p></TableCell>
+                    <TableCell className="hidden lg:table-cell"><p className="text-sm text-slate-500">{formatFileSize(doc.fileSize)}</p></TableCell>
+                    <TableCell>{getStatusBadge(doc.verificationStatus)}</TableCell>
                     <TableCell className="hidden lg:table-cell"><p className="text-xs text-slate-500">{formatDate(doc.uploadedAt)}</p></TableCell>
                     <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex justify-end gap-1">
-                        <Button variant="ghost" size="sm" className="min-h-[36px] min-w-[36px]"
-                          onClick={() => setSelectedDoc(doc)}>
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        {doc.status === "PENDING" && (
-                          <Button variant="ghost" size="sm" className="min-h-[36px] min-w-[36px] text-green-600"
-                            onClick={() => handleVerify(doc.id)}
-                            disabled={actionLoading === doc.id}>
-                            {actionLoading === doc.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                        {doc.fileUrl && (
+                          <Button variant="ghost" size="sm" className="min-h-[36px] min-w-[36px]"
+                            onClick={() => window.open(doc.fileUrl, "_blank")}>
+                            <Eye className="h-4 w-4" />
                           </Button>
+                        )}
+                        {doc.verificationStatus === "PENDING" && (
+                          <>
+                            <Button variant="ghost" size="sm" className="min-h-[36px] min-w-[36px] text-green-600"
+                              onClick={() => handleVerify(doc)}
+                              disabled={actionLoading === doc.id}>
+                              {actionLoading === doc.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                            </Button>
+                            <Button variant="ghost" size="sm" className="min-h-[36px] min-w-[36px] text-red-600"
+                              onClick={() => setSelectedDoc(doc)}
+                              disabled={actionLoading === doc.id}>
+                              <XCircle className="h-4 w-4" />
+                            </Button>
+                          </>
                         )}
                       </div>
                     </TableCell>
@@ -327,7 +413,7 @@ export default function AdminVerificationDocumentsPage() {
                   {getFileIcon(selectedDoc.fileName)}
                   <div>
                     <DialogTitle className="text-lg">{selectedDoc.fileName}</DialogTitle>
-                    <DialogDescription>{selectedDoc.type} • {selectedDoc.stationName}</DialogDescription>
+                    <DialogDescription>{getDocumentTypeLabel(selectedDoc.type)} • {selectedDoc.station?.name || "—"}</DialogDescription>
                   </div>
                 </div>
               </DialogHeader>
@@ -336,20 +422,26 @@ export default function AdminVerificationDocumentsPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Status</p>
-                    <div className="mt-1">{getStatusBadge(selectedDoc.status)}</div>
+                    <div className="mt-1">{getStatusBadge(selectedDoc.verificationStatus)}</div>
                   </div>
                   <div>
                     <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">File Size</p>
-                    <p className="text-sm mt-1">{selectedDoc.fileSize}</p>
+                    <p className="text-sm mt-1">{formatFileSize(selectedDoc.fileSize)}</p>
                   </div>
                   <div>
                     <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Uploaded</p>
                     <p className="text-sm mt-1 flex items-center gap-1"><Clock className="h-3 w-3" /> {formatDate(selectedDoc.uploadedAt)}</p>
                   </div>
-                  {selectedDoc.reviewedBy && (
+                  {selectedDoc.verifiedBy?.name && (
                     <div>
                       <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Reviewed By</p>
-                      <p className="text-sm mt-1 flex items-center gap-1"><User className="h-3 w-3" /> {selectedDoc.reviewedBy}</p>
+                      <p className="text-sm mt-1 flex items-center gap-1"><User className="h-3 w-3" /> {selectedDoc.verifiedBy.name}</p>
+                    </div>
+                  )}
+                  {selectedDoc.expiryDate && (
+                    <div className="col-span-2">
+                      <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Expiry Date</p>
+                      <p className="text-sm mt-1">{formatDate(selectedDoc.expiryDate)}</p>
                     </div>
                   )}
                 </div>
@@ -357,19 +449,20 @@ export default function AdminVerificationDocumentsPage() {
                 <div className="rounded-xl bg-slate-50 dark:bg-slate-800/50 p-8 text-center border-2 border-dashed border-slate-200 dark:border-slate-700">
                   <FileText className="h-12 w-12 mx-auto text-slate-300 mb-2" />
                   <p className="text-sm text-slate-500">Document preview</p>
-                  <Button variant="outline" size="sm" className="mt-3 rounded-lg">
+                  <Button variant="outline" size="sm" className="mt-3 rounded-lg"
+                    onClick={() => selectedDoc.fileUrl && window.open(selectedDoc.fileUrl, "_blank")}>
                     <Eye className="h-4 w-4 mr-2" /> View Full Document
                   </Button>
                 </div>
 
-                {selectedDoc.status === "REJECTED" && (
+                {selectedDoc.verificationStatus === "REJECTED" && selectedDoc.rejectionReason && (
                   <div className="p-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50">
                     <p className="text-sm font-medium text-red-700 dark:text-red-400">Rejection Reason</p>
-                    <p className="text-sm text-red-600 dark:text-red-300 mt-1">Document is blurry and unreadable. Please re-upload a clearer copy.</p>
+                    <p className="text-sm text-red-600 dark:text-red-300 mt-1">{selectedDoc.rejectionReason}</p>
                   </div>
                 )}
 
-                {selectedDoc.status === "PENDING" && (
+                {selectedDoc.verificationStatus === "PENDING" && (
                   <div className="space-y-3">
                     <Textarea
                       placeholder="Optional: Add notes or rejection reason..."
@@ -380,13 +473,13 @@ export default function AdminVerificationDocumentsPage() {
                     />
                     <div className="flex gap-2">
                       <Button className="flex-1 rounded-xl bg-green-600 hover:bg-green-700"
-                        onClick={() => handleVerify(selectedDoc.id)}
+                        onClick={() => handleVerify(selectedDoc)}
                         disabled={actionLoading === selectedDoc.id}>
                         {actionLoading === selectedDoc.id ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
                         Verify & Approve
                       </Button>
                       <Button variant="outline" className="flex-1 rounded-xl text-red-600 border-red-200 hover:bg-red-50 dark:border-red-800 dark:hover:bg-red-900/20"
-                        onClick={() => handleReject(selectedDoc.id)}
+                        onClick={() => handleReject(selectedDoc)}
                         disabled={actionLoading === selectedDoc.id || !rejectionReason}>
                         {actionLoading === selectedDoc.id ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <XCircle className="h-4 w-4 mr-2" />}
                         {rejectionReason ? "Reject" : "Add reason to reject"}

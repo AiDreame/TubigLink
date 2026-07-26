@@ -47,6 +47,7 @@ export async function POST(req: NextRequest) {
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
     const documentType = formData.get("type") as string | null;
+    const expiryDateStr = formData.get("expiryDate") as string | null;
 
     if (!file) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
@@ -57,6 +58,18 @@ export async function POST(req: NextRequest) {
         { error: `Invalid document type. Must be one of: ${VALID_DOCUMENT_TYPES.join(", ")}` },
         { status: 400 }
       );
+    }
+
+    // Parse expiry date if provided
+    let expiryDate: Date | null = null;
+    if (expiryDateStr) {
+      expiryDate = new Date(expiryDateStr);
+      if (isNaN(expiryDate.getTime())) {
+        return NextResponse.json(
+          { error: "Invalid expiryDate format" },
+          { status: 400 }
+        );
+      }
     }
 
     // Validate file type
@@ -100,6 +113,7 @@ export async function POST(req: NextRequest) {
         fileSize: file.size,
         mimeType: file.type || ext === ".pdf" ? "application/pdf" : ext === ".png" ? "image/png" : "image/jpeg",
         verificationStatus: "PENDING",
+        expiryDate: expiryDate ?? null,
       },
     });
 

@@ -54,7 +54,7 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { DOCUMENT_TYPE_LABELS } from "@/lib/constants";
+import { DOCUMENT_TYPE_LABELS, getDocumentTypeLabel, getDocumentValidityMonths } from "@/lib/constants";
 
 // ─── Types ───────────────────────────────────────────
 
@@ -66,6 +66,7 @@ interface Document {
   fileName: string;
   fileSize: number;
   mimeType: string;
+  expiryDate?: string | null;
   verificationStatus: "PENDING" | "VERIFIED" | "REJECTED" | "EXPIRED";
   rejectionReason?: string;
   uploadedAt: string;
@@ -320,6 +321,14 @@ export default function DashboardDocumentsPage() {
       fd.append("file", uploadFile);
       fd.append("type", uploadType);
 
+      // Auto-calculate expiry date from validity period
+      const validityMonths = getDocumentValidityMonths(uploadType);
+      if (validityMonths > 0) {
+        const expiryDate = new Date();
+        expiryDate.setMonth(expiryDate.getMonth() + validityMonths);
+        fd.append("expiryDate", expiryDate.toISOString());
+      }
+
       const res = await fetch("/api/station/documents/upload", {
         method: "POST",
         body: fd,
@@ -494,15 +503,27 @@ export default function DashboardDocumentsPage() {
           Required Documents
         </h3>
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {Object.entries(DOCUMENT_TYPE_LABELS).map(([key, label]) => {
+          {Object.entries(DOCUMENT_TYPE_LABELS).map(([key, info]) => {
             const doc = documentMap.get(key);
             const status = getChecklistStatus(doc);
+            // Determine expiry warning
+            const validityMonths = info.validityMonths;
+            const hasExpiryWarning = doc && validityMonths > 0 && doc.verificationStatus === "VERIFIED" && doc.expiryDate;
+            const now = new Date();
+            const expiryDate = doc?.expiryDate ? new Date(doc.expiryDate) : null;
+            const daysUntilExpiry = expiryDate ? Math.ceil((expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)) : null;
+            const isExpiringSoon = hasExpiryWarning && daysUntilExpiry !== null && daysUntilExpiry <= 30 && daysUntilExpiry > 0;
+            const isExpired = hasExpiryWarning && daysUntilExpiry !== null && daysUntilExpiry <= 0;
             return (
               <Card
                 key={key}
                 className={`border shadow-sm transition-colors cursor-pointer hover:shadow-md hover:scale-[1.02] transition-transform ${
                   !doc
                     ? "bg-slate-50/50 dark:bg-slate-800/30 border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-700"
+                    : isExpired
+                    ? "bg-red-50/50 dark:bg-red-900/10 border-red-300 dark:border-red-700/60"
+                    : isExpiringSoon
+                    ? "bg-amber-50/50 dark:bg-amber-900/10 border-amber-300 dark:border-amber-700/60"
                     : doc.verificationStatus === "VERIFIED"
                     ? "bg-green-50/50 dark:bg-green-900/10 border-green-200 dark:border-green-800/40"
                     : doc.verificationStatus === "REJECTED" || doc.verificationStatus === "EXPIRED"
@@ -516,7 +537,7 @@ export default function DashboardDocumentsPage() {
                     <div className="mt-0.5 shrink-0">{status.icon}</div>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium text-slate-900 dark:text-white leading-tight">
-                        {label}
+                        {info.label}
                       </p>
                       <p
                         className={`text-xs mt-1 truncate ${
@@ -529,8 +550,20 @@ export default function DashboardDocumentsPage() {
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center justify-between">
-                    {status.badge}
+                  <div className="flex items-center justify-between flex-wrap gap-1">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {status.badge}
+                      {isExpired && (
+                        <Badge variant="outline" className="bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 font-medium text-xs border-red-200">
+                          Expired {daysUntilExpiry !== null ? `${Math.abs(daysUntilExpiry)}d ago` : ""}
+                        </Badge>
+                      )}
+                      {isExpiringSoon && (
+                        <Badge variant="outline" className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 font-medium text-xs border-amber-200">
+                          Expiring in {daysUntilExpiry}d
+                        </Badge>
+                      )}
+                    </div>
                     {doc && (
                       <span className="text-xs text-slate-400 dark:text-slate-500">
                         {formatDate(doc.uploadedAt)}
@@ -590,7 +623,7 @@ export default function DashboardDocumentsPage() {
                   >
                     <TableCell>
                       <p className="text-sm font-medium text-slate-900 dark:text-white">
-                        {DOCUMENT_TYPE_LABELS[doc.type] || doc.type}
+                        {getDocumentTypeLabel(doc.type)}
                       </p>
                     </TableCell>
                     <TableCell>
@@ -672,9 +705,9 @@ export default function DashboardDocumentsPage() {
                   <SelectValue placeholder="Select document type..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {Object.entries(DOCUMENT_TYPE_LABELS).map(([key, label]) => (
+                  {Object.entries(DOCUMENT_TYPE_LABELS).map(([key, info]) => (
                     <SelectItem key={key} value={key}>
-                      {label}
+                      {info.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -771,7 +804,7 @@ export default function DashboardDocumentsPage() {
                     {deleteTarget.fileName}
                   </p>
                   <p className="text-xs text-slate-500">
-                    {DOCUMENT_TYPE_LABELS[deleteTarget.type] || deleteTarget.type}{" "}
+                    {getDocumentTypeLabel(deleteTarget.type)} 
                     • {formatFileSize(deleteTarget.fileSize)}
                   </p>
                 </div>
@@ -836,7 +869,7 @@ export default function DashboardDocumentsPage() {
               <div className="space-y-2">
                 <Label>Document Type</Label>
                 <p className="text-sm font-medium text-slate-900 dark:text-white">
-                  {DOCUMENT_TYPE_LABELS[viewDocument.type] || viewDocument.type}
+                  {getDocumentTypeLabel(viewDocument.type)}
                 </p>
               </div>
 
