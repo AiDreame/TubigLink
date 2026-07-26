@@ -36,7 +36,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import toast from "react-hot-toast";
-import { MESSAGES, WATER_TYPES, PRODUCT_SIZES, UNLIMITED_STOCK_SIZES, UNLIMITED_STOCK_SENTINEL } from "@/lib/constants";
+import { MESSAGES, WATER_TYPES, PRODUCT_SIZES, ALL_SUPPORTED_CITIES } from "@/lib/constants";
+import { BarangayInput } from "@/components/shared/BarangayInput";
 
 const STEPS = [
   { id: 1, label: "Account", icon: User },
@@ -69,9 +70,6 @@ export default function StationOnboardingPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
-  const [showConvertPrompt, setShowConvertPrompt] = useState(false);
-  const [convertPhone, setConvertPhone] = useState("");
-  const [convertData, setConvertData] = useState<any>(null);
 
   // If logged in, fetch existing onboarding progress and skip to correct step
   useEffect(() => {
@@ -147,7 +145,7 @@ export default function StationOnboardingPage() {
   const [stationAddress, setStationAddress] = useState("");
   const [stationBarangay, setStationBarangay] = useState("");
   const [stationCity, setStationCity] = useState("");
-  const [stationProvince, setStationProvince] = useState("");
+  const [stationProvince, setStationProvince] = useState("Metro Manila");
   const [stationPhone, setStationPhone] = useState("");
   const [businessType, setBusinessType] = useState("");
   const [tin, setTin] = useState("");
@@ -185,13 +183,6 @@ export default function StationOnboardingPage() {
       });
       const json = await res.json();
       if (!res.ok) {
-        // Check if this is a "can convert" response
-        if (json.canConvert) {
-          setConvertPhone(phone);
-          setConvertData({ name, phone, email, password, stationName: stationName || "My Water Station" });
-          setShowConvertPrompt(true);
-          return;
-        }
         toast.error(json.error || "Registration failed.");
         return;
       }
@@ -206,40 +197,9 @@ export default function StationOnboardingPage() {
     }
   };
 
-  const handleConvertConfirm = async () => {
-    setIsLoading(true);
-    setShowConvertPrompt(false);
-    try {
-      const res = await fetch("/api/onboarding/station", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          step: 1,
-          data: { ...convertData, convertAccount: true },
-        }),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        toast.error(json.error || "Conversion failed.");
-        return;
-      }
-      setUserId(json.data.userId);
-      toast.success("Account converted! Log in to continue.");
-      router.push("/auth/login?callbackUrl=/onboarding/station");
-    } catch {
-      toast.error("Something went wrong. Please try again.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const handleStep2 = async () => {
     if (!stationName || !stationAddress || !stationBarangay || !stationCity) {
       toast.error("Station name, address, barangay, and city are required.");
-      return;
-    }
-    if (!tin || !tin.trim()) {
-      toast.error("TIN is required for BIR compliance. Please enter your Tax Identification Number.");
       return;
     }
     setIsLoading(true);
@@ -277,14 +237,9 @@ export default function StationOnboardingPage() {
   };
 
   const handleStep3 = async () => {
-    const validProducts = products.filter((p) => {
-      if (!p.price) return false;
-      // 5-gallon doesn't need stock; other sizes do
-      if (UNLIMITED_STOCK_SIZES.includes(p.size)) return true;
-      return !!p.stock;
-    });
+    const validProducts = products.filter((p) => p.price && p.stock);
     if (validProducts.length === 0) {
-      toast.error("Add at least one product with a price.");
+      toast.error("Add at least one product with a price and stock.");
       return;
     }
     setIsLoading(true);
@@ -567,24 +522,25 @@ export default function StationOnboardingPage() {
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-2">
           <Label htmlFor="stationCity">City *</Label>
-          <Input
-            id="stationCity"
-            placeholder="e.g. Tagbilaran"
-            value={stationCity}
-            onChange={(e) => setStationCity(e.target.value)}
-            required
-            className="min-h-[48px]"
-          />
+          <Select value={stationCity} onValueChange={setStationCity}>
+            <SelectTrigger id="stationCity" className="min-h-[48px]">
+              <SelectValue placeholder="Select city" />
+            </SelectTrigger>
+            <SelectContent>
+              {ALL_SUPPORTED_CITIES.map((c) => (
+                <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <div className="space-y-2">
           <Label htmlFor="stationBarangay">Barangay *</Label>
-          <Input
+          <BarangayInput
             id="stationBarangay"
             placeholder="e.g. Poblacion"
             value={stationBarangay}
-            onChange={(e) => setStationBarangay(e.target.value)}
-            required
-            className="min-h-[48px]"
+            onChange={setStationBarangay}
+            onCityChange={setStationCity}
           />
         </div>
       </div>
@@ -613,18 +569,14 @@ export default function StationOnboardingPage() {
           </Select>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="tin">TIN Number *</Label>
+          <Label htmlFor="tin">TIN (optional)</Label>
           <Input
             id="tin"
             placeholder="XXX-XXX-XXX-XXX"
             value={tin}
             onChange={(e) => setTin(e.target.value)}
-            required
             className="min-h-[48px]"
           />
-          <p className="text-xs text-muted-foreground">
-            Required to sell — your TIN is needed for BIR compliance
-          </p>
         </div>
       </div>
 
@@ -711,26 +663,17 @@ export default function StationOnboardingPage() {
                   className="min-h-[44px]"
                 />
               </div>
-              {!UNLIMITED_STOCK_SIZES.includes(product.size) ? (
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Stock (units)</Label>
-                  <Input
-                    type="number"
-                    placeholder="50"
-                    value={product.stock}
-                    onChange={(e) => updateProduct(i, "stock", e.target.value)}
-                    min="0"
-                    className="min-h-[44px]"
-                  />
-                </div>
-              ) : (
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Stock</Label>
-                  <div className="min-h-[44px] flex items-center text-sm text-muted-foreground bg-muted/50 rounded-md px-3">
-                    Unlimited — filled on demand
-                  </div>
-                </div>
-              )}
+              <div className="space-y-1.5">
+                <Label className="text-xs">Stock (units)</Label>
+                <Input
+                  type="number"
+                  placeholder="50"
+                  value={product.stock}
+                  onChange={(e) => updateProduct(i, "stock", e.target.value)}
+                  min="0"
+                  className="min-h-[44px]"
+                />
+              </div>
             </div>
           </div>
         ))}
@@ -789,11 +732,10 @@ export default function StationOnboardingPage() {
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Barangay</Label>
-                <Input
-                  placeholder="e.g. Poblacion"
+                <BarangayInput
                   value={zone.barangay}
-                  onChange={(e) => updateZone(i, "barangay", e.target.value)}
-                  className="min-h-[44px]"
+                  onChange={(v) => updateZone(i, "barangay", v)}
+                  placeholder="e.g. Poblacion"
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -828,6 +770,7 @@ export default function StationOnboardingPage() {
           variant="outline"
           onClick={addZone}
           className="w-full rounded-xl border-dashed min-h-[48px]"
+          disabled={!stationCity}
         >
           <Plus className="h-5 w-5 mr-2" /> Add Another Zone
         </Button>
@@ -990,45 +933,6 @@ export default function StationOnboardingPage() {
           {step === 5 && renderStep5()}
         </div>
       </div>
-
-      {/* Convert Account Prompt Modal */}
-      {showConvertPrompt && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div
-            className="absolute inset-0 bg-black/30 dark:bg-black/50 backdrop-blur-sm"
-            onClick={() => setShowConvertPrompt(false)}
-          />
-          <div className="relative bg-card rounded-2xl shadow-xl p-6 mx-4 max-w-sm w-full border border-border">
-            <h3 className="text-lg font-bold mb-2">Existing Account Found</h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              This phone number already has a customer account. Would you like to convert it to a water station provider account?
-            </p>
-            <p className="text-xs text-muted-foreground mb-4">
-              Phone: <strong>{convertPhone}</strong>
-            </p>
-            <div className="flex gap-3">
-              <Button
-                variant="outline"
-                className="flex-1 rounded-xl"
-                onClick={() => setShowConvertPrompt(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                className="flex-1 rounded-xl bg-blue-600 hover:bg-blue-700"
-                onClick={handleConvertConfirm}
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  "Yes, Convert"
-                )}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

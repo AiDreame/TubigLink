@@ -28,6 +28,13 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Card,
   CardContent,
   CardDescription,
@@ -44,6 +51,9 @@ import {
 } from "@/components/ui/dialog";
 import { useSession } from "next-auth/react";
 import toast from "react-hot-toast";
+import { METRO_MANILA_CITIES, CEBU_CITIES, MINDANAO_CITIES, SAMPLE_BARANGAYS } from "@/lib/constants";
+import { BarangayInput } from "@/components/shared/BarangayInput";
+
 interface DeliveryZone {
   id?: string;
   barangay: string;
@@ -75,6 +85,8 @@ interface StationData {
   deliveryZones: DeliveryZone[];
   products?: { id: string; name: string; type: string }[];
 }
+
+const ALL_CITIES = [...METRO_MANILA_CITIES, ...CEBU_CITIES, ...MINDANAO_CITIES];
 
 export default function DashboardSettingsPage() {
   const { data: session } = useSession();
@@ -424,15 +436,27 @@ export default function DashboardSettingsPage() {
               <Label htmlFor="province" className="text-sm font-bold">
                 Province <span className="text-red-500">*</span>
               </Label>
-              <Input
-                id="province"
+              <Select
                 value={form.province || ""}
-                onChange={(e) => setForm((prev) => ({ ...prev, province: e.target.value }))}
-                className={`rounded-xl bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 min-h-[44px] ${
+                onValueChange={(v) => setForm((prev) => ({ ...prev, province: v }))}
+              >
+                <SelectTrigger className={`rounded-xl bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 min-h-[44px] ${
                   errors.province ? "border-red-500" : ""
-                }`}
-                placeholder="e.g. Bohol"
-              />
+                }`}>
+                  <SelectValue placeholder="Select province" />
+                </SelectTrigger>
+                <SelectContent className="rounded-xl dark:bg-gray-800 dark:border-gray-700">
+                  <SelectItem value="Metro Manila" className="dark:text-gray-300 dark:focus:bg-gray-700">Metro Manila</SelectItem>
+                  <SelectItem value="Cebu" className="dark:text-gray-300 dark:focus:bg-gray-700">Cebu</SelectItem>
+                  <SelectItem value="Davao del Sur" className="dark:text-gray-300 dark:focus:bg-gray-700">Davao del Sur</SelectItem>
+                  <SelectItem value="Misamis Oriental" className="dark:text-gray-300 dark:focus:bg-gray-700">Misamis Oriental</SelectItem>
+                  <SelectItem value="South Cotabato" className="dark:text-gray-300 dark:focus:bg-gray-700">South Cotabato</SelectItem>
+                  <SelectItem value="Rizal" className="dark:text-gray-300 dark:focus:bg-gray-700">Rizal</SelectItem>
+                  <SelectItem value="Laguna" className="dark:text-gray-300 dark:focus:bg-gray-700">Laguna</SelectItem>
+                  <SelectItem value="Cavite" className="dark:text-gray-300 dark:focus:bg-gray-700">Cavite</SelectItem>
+                  <SelectItem value="Bulacan" className="dark:text-gray-300 dark:focus:bg-gray-700">Bulacan</SelectItem>
+                </SelectContent>
+              </Select>
               {errors.province && <p className="text-xs text-red-500">{errors.province}</p>}
             </div>
 
@@ -441,15 +465,23 @@ export default function DashboardSettingsPage() {
               <Label htmlFor="city" className="text-sm font-bold">
                 City <span className="text-red-500">*</span>
               </Label>
-              <Input
-                id="city"
+              <Select
                 value={form.city || ""}
-                onChange={(e) => setForm((prev) => ({ ...prev, city: e.target.value }))}
-                className={`rounded-xl bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 min-h-[44px] ${
+                onValueChange={(v) => setForm((prev) => ({ ...prev, city: v }))}
+              >
+                <SelectTrigger className={`rounded-xl bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 min-h-[44px] ${
                   errors.city ? "border-red-500" : ""
-                }`}
-                placeholder="e.g. Tagbilaran"
-              />
+                }`}>
+                  <SelectValue placeholder="Select city" />
+                </SelectTrigger>
+                <SelectContent className="rounded-xl dark:bg-gray-800 dark:border-gray-700 max-h-[280px]">
+                  {ALL_CITIES.map((city) => (
+                    <SelectItem key={city} value={city} className="dark:text-gray-300 dark:focus:bg-gray-700">
+                      {city}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               {errors.city && <p className="text-xs text-red-500">{errors.city}</p>}
             </div>
 
@@ -458,13 +490,11 @@ export default function DashboardSettingsPage() {
               <Label htmlFor="barangay" className="text-sm font-bold">
                 Barangay <span className="text-red-500">*</span>
               </Label>
-              <Input
+              <BarangayInput
                 id="barangay"
                 value={form.barangay || ""}
-                onChange={(e) => setForm((prev) => ({ ...prev, barangay: e.target.value }))}
-                className={`rounded-xl bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 min-h-[44px] ${
-                  errors.barangay ? "border-red-500" : ""
-                }`}
+                onChange={(v) => setForm((prev) => ({ ...prev, barangay: v }))}
+                onCityChange={(v) => setForm((prev) => ({ ...prev, city: v }))}
                 placeholder="e.g. Poblacion"
               />
               {errors.barangay && <p className="text-xs text-red-500">{errors.barangay}</p>}
@@ -735,23 +765,29 @@ export default function DashboardSettingsPage() {
             {/* City */}
             <div className="space-y-2">
               <Label htmlFor="zone-city" className="text-sm font-bold">City</Label>
-              <Input
-                id="zone-city"
+              <Select
                 value={zoneForm.city}
-                onChange={(e) => setZoneForm((prev) => ({ ...prev, city: e.target.value }))}
-                className="rounded-xl bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 min-h-[44px]"
-                placeholder="e.g. Tagbilaran"
-              />
+                onValueChange={(v) => setZoneForm((prev) => ({ ...prev, city: v, barangay: "" }))}
+              >
+                <SelectTrigger className="rounded-xl bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 min-h-[44px]">
+                  <SelectValue placeholder="Select city" />
+                </SelectTrigger>
+                <SelectContent className="rounded-xl dark:bg-gray-800 dark:border-gray-700 max-h-[280px]">
+                  {ALL_CITIES.map((c) => (
+                    <SelectItem key={c} value={c} className="dark:text-gray-300 dark:focus:bg-gray-700">{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Barangay */}
             <div className="space-y-2">
               <Label htmlFor="zone-barangay" className="text-sm font-bold">Barangay</Label>
-              <Input
+              <BarangayInput
                 id="zone-barangay"
                 value={zoneForm.barangay}
-                onChange={(e) => setZoneForm((prev) => ({ ...prev, barangay: e.target.value }))}
-                className="rounded-xl bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 min-h-[44px]"
+                onChange={(v) => setZoneForm((prev) => ({ ...prev, barangay: v }))}
+                onCityChange={(v) => setZoneForm((prev) => ({ ...prev, city: v }))}
                 placeholder="e.g. Poblacion"
               />
             </div>

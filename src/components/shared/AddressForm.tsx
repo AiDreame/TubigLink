@@ -13,7 +13,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { PROVINCES_BY_ISLAND, CITIES_BY_PROVINCE, SAMPLE_BARANGAYS } from "@/lib/constants";
+import { PROVINCES_BY_ISLAND, CITIES_BY_PROVINCE } from "@/lib/constants";
+import { BarangayInput } from "@/components/shared/BarangayInput";
 
 export interface AddressFormValues {
   label: string;
@@ -71,11 +72,6 @@ export function AddressForm({ initialValues, onSave, onCancel, isSaving }: Addre
     if (!form.province) return [];
     return CITIES_BY_PROVINCE[form.province] || [];
   }, [form.province]);
-
-  const barangaysForCity = useMemo(() => {
-    if (!form.city) return [];
-    return SAMPLE_BARANGAYS[form.city] || [];
-  }, [form.city]);
 
   const handleChange = useCallback(
     (field: keyof AddressFormValues, value: string | boolean) => {
@@ -265,22 +261,12 @@ export function AddressForm({ initialValues, onSave, onCancel, isSaving }: Addre
           <Label className="text-sm font-semibold text-slate-700 dark:text-slate-300">
             Barangay
           </Label>
-          <Select
+          <BarangayInput
             value={form.barangay}
-            onValueChange={(v) => handleChange("barangay", v)}
-            disabled={!form.city}
-          >
-            <SelectTrigger className={errors.barangay ? "border-red-500" : ""}>
-              <SelectValue placeholder={form.city ? "Select barangay" : "Select city first"} />
-            </SelectTrigger>
-            <SelectContent>
-              {barangaysForCity.map((b) => (
-                <SelectItem key={b} value={b}>
-                  {b}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            onChange={(v) => handleChange("barangay", v)}
+            onCityChange={(v) => handleChange("city", v)}
+            placeholder={form.city ? "Search or type a barangay..." : "Type your barangay..."}
+          />
           {errors.barangay && <p className="text-xs text-red-500">{errors.barangay}</p>}
         </div>
       </div>
