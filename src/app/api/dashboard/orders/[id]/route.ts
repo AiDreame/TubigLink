@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { getOrderStatusNotification } from "@/lib/notifications";
 
 // PUT /api/dashboard/orders/[id] — Station owner accepting or updating order
 export async function PUT(
@@ -56,13 +57,14 @@ export async function PUT(
       },
     });
 
-    // Notify the customer about status change
+    // Notify the customer about status change with human-friendly message
+    const notification = getOrderStatusNotification(status, updatedOrder.station.name, updatedOrder.id);
     await prisma.notification.create({
       data: {
         userId: updatedOrder.userId,
         type: "ORDER_STATUS",
-        title: `Order ${status.replace("_", " ").toLowerCase()}`,
-        message: `Your order from ${updatedOrder.station.name} is now: ${status.replace("_", " ").toLowerCase()}`,
+        title: notification.title,
+        message: notification.message,
         data: JSON.stringify({ orderId: updatedOrder.id, status }),
       },
     });

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import { getOrderStatusNotification } from "@/lib/notifications";
 
 // GET /api/orders/[id] — Get single order details
 export async function GET(
@@ -71,13 +72,14 @@ export async function PUT(
       },
     });
 
-    // Notify the customer about status change
+    // Notify the customer about status change with human-friendly message
+    const notification = getOrderStatusNotification(status, order.station.name, order.id);
     await prisma.notification.create({
       data: {
         userId: order.userId,
         type: "ORDER_STATUS",
-        title: `Order ${status.replace("_", " ").toLowerCase()}`,
-        message: `Your order from ${order.station.name} is now: ${status.replace("_", " ").toLowerCase()}`,
+        title: notification.title,
+        message: notification.message,
         data: JSON.stringify({ orderId: order.id, status }),
       },
     });
@@ -151,12 +153,13 @@ export async function DELETE(
     });
 
     // Create notification for the customer confirming cancellation
+    const cancelNotification = getOrderStatusNotification("CANCELLED", updatedOrder.station.name, order.id);
     await prisma.notification.create({
       data: {
         userId: order.userId,
         type: "ORDER_STATUS",
-        title: "Order cancelled",
-        message: `Your order from ${updatedOrder.station.name} has been cancelled as requested.`,
+        title: cancelNotification.title,
+        message: cancelNotification.message,
         data: JSON.stringify({ orderId: order.id, status: "CANCELLED" }),
       },
     });

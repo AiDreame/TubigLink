@@ -21,6 +21,7 @@ import {
   RefreshCw,
   Star,
   FileText,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -28,8 +29,16 @@ import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { MESSAGES } from "@/lib/constants";
-import { format } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 import toast from "react-hot-toast";
 
 // ─── Types ────────────────────────────────────────
@@ -93,6 +102,17 @@ interface DashboardData {
   };
 }
 
+interface AppNotification {
+  id: string;
+  userId: string;
+  type: string;
+  title: string;
+  message: string;
+  data: string | null;
+  isRead: boolean;
+  createdAt: string;
+}
+
 // ─── Helpers ──────────────────────────────────────
 const getStatusColor = (status: string) => {
   switch (status) {
@@ -142,6 +162,25 @@ export default function MyDashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [reorderingId, setReorderingId] = useState<string | null>(null);
 
+  // ── Notification state ──
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [notifOpen, setNotifOpen] = useState(false);
+
+  const fetchNotifications = async () => {
+    try {
+      const res = await fetch("/api/notifications?limit=10");
+      if (!res.ok) return;
+      const json = await res.json();
+      if (json.success) {
+        setNotifications(json.data);
+        setUnreadCount(json.unreadCount);
+      }
+    } catch (err) {
+      console.error("Notifications fetch error:", err);
+    }
+  };
+
   const fetchDashboard = async () => {
     if (sessionStatus !== "authenticated" || !session?.user?.id) return;
     setIsLoading(true);
@@ -166,10 +205,49 @@ export default function MyDashboardPage() {
   useEffect(() => {
     if (sessionStatus === "authenticated" && session?.user?.id) {
       fetchDashboard();
+      fetchNotifications();
     } else if (sessionStatus === "unauthenticated") {
       router.push("/auth/login?callbackUrl=/my");
     }
   }, [sessionStatus, session?.user?.id]);
+
+  // Fetch notifications when dropdown opens
+  useEffect(() => {
+    if (notifOpen) {
+      fetchNotifications();
+    }
+  }, [notifOpen]);
+
+  const handleMarkAllRead = async () => {
+    try {
+      await fetch("/api/notifications", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ allRead: true }),
+      });
+      setUnreadCount(0);
+      setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+      toast.success("All notifications marked as read");
+    } catch (err) {
+      console.error("Mark all read error:", err);
+    }
+  };
+
+  const handleMarkOneRead = async (notificationId: string) => {
+    try {
+      await fetch("/api/notifications", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notificationIds: [notificationId] }),
+      });
+      setUnreadCount((prev) => Math.max(0, prev - 1));
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === notificationId ? { ...n, isRead: true } : n))
+      );
+    } catch (err) {
+      console.error("Mark read error:", err);
+    }
+  };
 
   const handleReorder = async (orderId: string) => {
     setReorderingId(orderId);
@@ -273,20 +351,98 @@ export default function MyDashboardPage() {
               </h1>
             </div>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="rounded-full min-h-[44px] min-w-[44px] relative"
-            onClick={() => router.push("/orders")}
-            aria-label={MESSAGES.myOrders}
-          >
-            <Bell className="h-5 w-5 text-muted-foreground" />
-            {stats.activeOrdersCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center shadow-sm">
-                {stats.activeOrdersCount > 9 ? "9+" : stats.activeOrdersCount}
-              </span>
-            )}
-          </Button>
+          <DropdownMenu open={notifOpen} onOpenChange={setNotifOpen}>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="rounded-full min-h-[44px] min-w-[44px] relative"
+                aria-label="Notifications"
+              >
+                <Bell className="h-5 w-5 text-muted-foreground" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center shadow-sm">
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </span>
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-80 max-h-[70vh] overflow-y-auto">
+              <DropdownMenuLabel className="flex items-center justify-between">
+                <span>Notifications</span>
+                {unreadCount > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs text-blue-600 h-auto py-1 px-2"
+                    onClick={handleMarkAllRead}
+                  >
+                    Mark all read
+                  </Button>
+                )}
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {notifications.length === 0 ? (
+                <div className="px-2 py-6 text-center text-sm text-muted-foreground">
+                  <Bell className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                  <p>No notifications yet</p>
+                </div>
+              ) : (
+                notifications.map((notif) => (
+                  <DropdownMenuItem
+                    key={notif.id}
+                    className={`flex flex-col items-start px-3 py-3 cursor-default ${
+                      !notif.isRead ? "bg-blue-50/50" : ""
+                    }`}
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      if (!notif.isRead) handleMarkOneRead(notif.id);
+                      // Navigate to order if it's an ORDER_STATUS notification
+                      try {
+                        const data = notif.data ? JSON.parse(notif.data) : null;
+                        if (data?.orderId) {
+                          router.push(`/orders/${data.orderId}`);
+                          setNotifOpen(false);
+                        }
+                      } catch {}
+                    }}
+                  >
+                    <div className="flex items-start justify-between w-full gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm ${!notif.isRead ? "font-semibold" : ""} truncate`}>
+                          {notif.title}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
+                          {notif.message}
+                        </p>
+                      </div>
+                      {!notif.isRead && (
+                        <span className="h-2 w-2 rounded-full bg-blue-600 shrink-0 mt-1.5" />
+                      )}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-1.5">
+                      {formatDistanceToNow(new Date(notif.createdAt), { addSuffix: true })}
+                    </p>
+                  </DropdownMenuItem>
+                ))
+              )}
+              {notifications.length > 0 && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="justify-center text-sm text-blue-600 font-medium cursor-pointer"
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      router.push("/my/notifications");
+                      setNotifOpen(false);
+                    }}
+                  >
+                    View all notifications
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </header>
 
