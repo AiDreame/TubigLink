@@ -202,6 +202,10 @@ export default function StationOnboardingPage() {
       toast.error("Station name, address, barangay, and city are required.");
       return;
     }
+    if (!tin) {
+      toast.error("TIN number is required.");
+      return;
+    }
     setIsLoading(true);
     try {
       const res = await fetch("/api/onboarding/station", {
@@ -569,12 +573,13 @@ export default function StationOnboardingPage() {
           </Select>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="tin">TIN (optional)</Label>
+          <Label htmlFor="tin">TIN Number <span className="text-red-500">*</span></Label>
           <Input
             id="tin"
             placeholder="XXX-XXX-XXX-XXX"
             value={tin}
             onChange={(e) => setTin(e.target.value)}
+            required
             className="min-h-[48px]"
           />
         </div>

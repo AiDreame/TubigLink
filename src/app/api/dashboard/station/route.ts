@@ -80,6 +80,7 @@ export async function PUT(req: NextRequest) {
       "deliveryFee", "minOrder",
       "openingTime", "closingTime",
       "isActive", "isFeatured",
+      "tin", "businessType",
     ];
 
     const filteredFields: Record<string, any> = {};
