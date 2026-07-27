@@ -194,7 +194,7 @@ export default function DashboardHome() {
             <p className="font-semibold text-amber-800 dark:text-amber-300">Complete your registration</p>
             <p className="text-sm text-amber-700 dark:text-amber-400">
               TIN is required before you can start selling.{" "}
-              <Link href="/onboarding/station" className="font-medium underline">
+              <Link href="/dashboard/settings" className="font-medium underline">
                 Add your TIN now
               </Link>
             </p>

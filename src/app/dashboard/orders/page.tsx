@@ -345,6 +345,24 @@ export default function ProviderOrdersPage() {
                       </div>
                     </div>
 
+                    {/* Address + Notes for PENDING — always visible so provider sees before accepting */}
+                    {order.status === "PENDING" && order.address && (
+                      <div className="mt-3 space-y-1.5">
+                        <div className="flex items-start gap-1.5 text-xs">
+                          <MapPin className="h-3.5 w-3.5 text-blue-500 shrink-0 mt-0.5" />
+                          <span className="text-muted-foreground leading-snug">
+                            {order.address.street}, {order.address.barangay}, {order.address.city}, {order.address.province}
+                          </span>
+                        </div>
+                        {order.notes && (
+                          <div className="flex items-start gap-1.5 text-xs">
+                            <FileText className="h-3.5 w-3.5 text-orange-500 shrink-0 mt-0.5" />
+                            <span className="text-muted-foreground leading-snug">{order.notes}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {/* Card Meta */}
                     <div className="flex items-center justify-between mt-3">
                       <div className="flex items-center gap-3">
@@ -389,9 +407,9 @@ export default function ProviderOrdersPage() {
                         </div>
                         {order.address && (
                           <div className="flex items-start justify-between text-xs">
-                            <span className="text-muted-foreground">Address</span>
+                            <span className="text-muted-foreground shrink-0 mr-2">Address</span>
                             <span className="font-medium text-right max-w-[200px]">
-                              {order.address.street}, {order.address.barangay}
+                              {order.address.street}, {order.address.barangay}, {order.address.city}, {order.address.province}
                             </span>
                           </div>
                         )}
@@ -475,6 +493,22 @@ export default function ProviderOrdersPage() {
                         <div className="flex flex-col">
                           <span className="font-bold text-sm dark:text-white">{order.user?.name || "Unknown"}</span>
                           <span className="text-[10px] text-muted-foreground">{order.user?.phone}</span>
+                          {order.status === "PENDING" && order.address && (
+                            <div className="mt-1 pt-1 border-t border-gray-100 dark:border-gray-700">
+                              <div className="flex items-start gap-1 text-[10px]">
+                                <MapPin className="h-3 w-3 text-blue-500 shrink-0 mt-0.5" />
+                                <span className="text-muted-foreground leading-snug">
+                                  {order.address.street}, {order.address.barangay}, {order.address.city}, {order.address.province}
+                                </span>
+                              </div>
+                              {order.notes && (
+                                <div className="flex items-start gap-1 text-[10px] mt-0.5">
+                                  <FileText className="h-3 w-3 text-orange-500 shrink-0 mt-0.5" />
+                                  <span className="text-muted-foreground leading-snug">{order.notes}</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell className="text-sm max-w-[200px]">
