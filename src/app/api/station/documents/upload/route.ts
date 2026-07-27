@@ -5,6 +5,7 @@ import prisma from "@/lib/prisma";
 import path from "path";
 import fs from "fs";
 import { writeFile } from "fs/promises";
+import { DOCUMENT_METADATA_CONFIG } from "@/lib/constants";
 
 const UPLOADS_BASE = path.join(process.cwd(), "uploads");
 
@@ -65,36 +66,46 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Validate required metadata fields
-    if (!permitNumber || !permitNumber.trim()) {
-      return NextResponse.json(
-        { error: "Permit / Certificate Number is required" },
-        { status: 400 }
-      );
+    // Validate required metadata fields based on document type config
+    const metadataConfig = DOCUMENT_METADATA_CONFIG[documentType];
+    
+    if (metadataConfig?.showNumberField !== false) {
+      if (!permitNumber || !permitNumber.trim()) {
+        return NextResponse.json(
+          { error: `${metadataConfig?.numberLabel || "Permit / Certificate Number"} is required` },
+          { status: 400 }
+        );
+      }
     }
-
-    if (!issuingAuthority || !issuingAuthority.trim()) {
-      return NextResponse.json(
-        { error: "Issuing Authority is required" },
-        { status: 400 }
-      );
+    
+    if (metadataConfig?.showAuthorityField !== false) {
+      if (!issuingAuthority || !issuingAuthority.trim()) {
+        return NextResponse.json(
+          { error: `${metadataConfig?.authorityLabel || "Issuing Authority"} is required` },
+          { status: 400 }
+        );
+      }
     }
-
-    if (!issueDateStr) {
-      return NextResponse.json(
-        { error: "Issue Date is required" },
-        { status: 400 }
-      );
+    
+    if (metadataConfig?.showIssueDate !== false) {
+      if (!issueDateStr) {
+        return NextResponse.json(
+          { error: "Issue Date is required" },
+          { status: 400 }
+        );
+      }
     }
 
     // Parse issue date
-    let issueDate: Date;
-    issueDate = new Date(issueDateStr);
-    if (isNaN(issueDate.getTime())) {
-      return NextResponse.json(
-        { error: "Invalid issueDate format" },
-        { status: 400 }
-      );
+    let issueDate: Date | null = null;
+    if (issueDateStr) {
+      issueDate = new Date(issueDateStr);
+      if (isNaN(issueDate.getTime())) {
+        return NextResponse.json(
+          { error: "Invalid issueDate format" },
+          { status: 400 }
+        );
+      }
     }
 
     // Parse expiry date if provided
@@ -151,8 +162,8 @@ export async function POST(req: NextRequest) {
         mimeType: file.type || ext === ".pdf" ? "application/pdf" : ext === ".png" ? "image/png" : "image/jpeg",
         verificationStatus: "PENDING",
         expiryDate: expiryDate ?? null,
-        permitNumber: permitNumber!.trim(),
-        issuingAuthority: issuingAuthority!.trim(),
+        permitNumber: permitNumber?.trim() || null,
+        issuingAuthority: issuingAuthority?.trim() || null,
         issueDate: issueDate,
       },
     });

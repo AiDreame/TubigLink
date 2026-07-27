@@ -55,7 +55,7 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { DOCUMENT_TYPE_LABELS, getDocumentTypeLabel, getDocumentValidityMonths, normalizeDocumentType } from "@/lib/constants";
+import { DOCUMENT_TYPE_LABELS, getDocumentTypeLabel, getDocumentValidityMonths, normalizeDocumentType, getDocumentMetadataConfig } from "@/lib/constants";
 
 // ─── Types ───────────────────────────────────────────
 
@@ -330,6 +330,9 @@ export default function DashboardDocumentsPage() {
   // View document detail dialog
   const [viewDocument, setViewDocument] = useState<Document | null>(null);
 
+  // Station TIN (fetched from API for BIR_2303 display)
+  const [stationTin, setStationTin] = useState<string | null>(null);
+
   // Delete dialog
   const [deleteTarget, setDeleteTarget] = useState<Document | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -354,6 +357,7 @@ export default function DashboardDocumentsPage() {
         throw new Error(data.error || "Failed to fetch documents");
       }
       setDocuments(data.data);
+      setStationTin(data.stationTin || null);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -378,15 +382,16 @@ export default function DashboardDocumentsPage() {
       setUploadError("Please select a document type");
       return;
     }
-    if (!uploadPermitNumber.trim()) {
-      setUploadError("Permit / Certificate Number is required");
+    const metadataConfig = getDocumentMetadataConfig(uploadType);
+    if (metadataConfig.showNumberField !== false && !uploadPermitNumber.trim()) {
+      setUploadError(`${metadataConfig.numberLabel} is required`);
       return;
     }
-    if (!uploadIssuingAuthority.trim()) {
-      setUploadError("Issuing Authority is required");
+    if (metadataConfig.showAuthorityField !== false && !uploadIssuingAuthority.trim()) {
+      setUploadError(`${metadataConfig.authorityLabel} is required`);
       return;
     }
-    if (!uploadIssueDate) {
+    if (metadataConfig.showIssueDate !== false && !uploadIssueDate) {
       setUploadError("Issue Date is required");
       return;
     }
@@ -855,49 +860,77 @@ export default function DashboardDocumentsPage() {
               </Select>
             </div>
 
-            {/* Permit / Certificate Number */}
-            <div className="space-y-2">
-              <Label htmlFor="permit-number">
-                Permit / Certificate Number <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="permit-number"
-                type="text"
-                placeholder="e.g., 2024-DTI-123456"
-                value={uploadPermitNumber}
-                onChange={(e) => setUploadPermitNumber(e.target.value)}
-                className="rounded-xl"
-              />
-            </div>
+            {/* Station TIN — visible for BIR_2303 */}
+            {uploadType === "BIR_2303" && stationTin && (
+              <div className="space-y-2 p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/50">
+                <Label className="text-xs text-blue-600 dark:text-blue-400">Station TIN</Label>
+                <p className="text-sm font-mono font-medium text-blue-900 dark:text-blue-200">
+                  {stationTin}
+                </p>
+              </div>
+            )}
 
-            {/* Issuing Authority */}
-            <div className="space-y-2">
-              <Label htmlFor="issuing-authority">
-                Issuing Authority <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="issuing-authority"
-                type="text"
-                placeholder="e.g., DTI Region VII, LGU Tagbilaran"
-                value={uploadIssuingAuthority}
-                onChange={(e) => setUploadIssuingAuthority(e.target.value)}
-                className="rounded-xl"
-              />
-            </div>
+            {/* Permit / Certificate Number — type-specific label */}
+            {(() => {
+              const cfg = getDocumentMetadataConfig(uploadType);
+              if (cfg.showNumberField === false) return null;
+              return (
+                <div className="space-y-2">
+                  <Label htmlFor="permit-number">
+                    {cfg.numberLabel} <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="permit-number"
+                    type="text"
+                    placeholder={`e.g., ${uploadType === "BIR_2303" ? "123-456-789-000" : "2024-DTI-123456"}`}
+                    value={uploadPermitNumber}
+                    onChange={(e) => setUploadPermitNumber(e.target.value)}
+                    className="rounded-xl"
+                  />
+                </div>
+              );
+            })()}
 
-            {/* Issue Date */}
-            <div className="space-y-2">
-              <Label htmlFor="issue-date">
-                Issue Date <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="issue-date"
-                type="date"
-                value={uploadIssueDate}
-                onChange={(e) => setUploadIssueDate(e.target.value)}
-                className="rounded-xl"
-              />
-            </div>
+            {/* Issuing Authority — type-specific label */}
+            {(() => {
+              const cfg = getDocumentMetadataConfig(uploadType);
+              if (cfg.showAuthorityField === false) return null;
+              return (
+                <div className="space-y-2">
+                  <Label htmlFor="issuing-authority">
+                    {cfg.authorityLabel} <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="issuing-authority"
+                    type="text"
+                    placeholder={`e.g., ${uploadType === "FIRE_SAFETY_CERT" ? "BFP NCR" : "DTI Region VII, LGU Tagbilaran"}`}
+                    value={uploadIssuingAuthority}
+                    onChange={(e) => setUploadIssuingAuthority(e.target.value)}
+                    className="rounded-xl"
+                  />
+                </div>
+              );
+            })()}
+
+            {/* Issue Date — hidden for STATION_PHOTO */}
+            {(() => {
+              const cfg = getDocumentMetadataConfig(uploadType);
+              if (cfg.showIssueDate === false) return null;
+              return (
+                <div className="space-y-2">
+                  <Label htmlFor="issue-date">
+                    Issue Date <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="issue-date"
+                    type="date"
+                    value={uploadIssueDate}
+                    onChange={(e) => setUploadIssueDate(e.target.value)}
+                    className="rounded-xl"
+                  />
+                </div>
+              );
+            })()}
 
             {/* Expiry Date (auto-calculated, read-only display) */}
             {uploadType && getDocumentValidityMonths(uploadType) > 0 && (
@@ -1079,6 +1112,26 @@ export default function DashboardDocumentsPage() {
                 </p>
               </div>
 
+              {/* Station TIN — prominent for BIR_2303, always shown if available */}
+              {stationTin && (
+                <div className={`p-3 rounded-xl border ${
+                  viewDocument.type === "BIR_2303"
+                    ? "bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-700/60"
+                    : "bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700"
+                }`}>
+                  <Label className={`text-xs ${viewDocument.type === "BIR_2303" ? "text-blue-600 dark:text-blue-400" : ""}`}>
+                    Station TIN
+                  </Label>
+                  <p className={`text-sm font-mono font-medium ${
+                    viewDocument.type === "BIR_2303"
+                      ? "text-blue-900 dark:text-blue-200"
+                      : "text-slate-700 dark:text-slate-300"
+                  }`}>
+                    {stationTin}
+                  </p>
+                </div>
+              )}
+
               <div className="space-y-2">
                 <Label>File Name</Label>
                 <div className="flex items-center gap-2 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
@@ -1104,33 +1157,48 @@ export default function DashboardDocumentsPage() {
                 </div>
               </div>
 
-              {/* Metadata fields */}
-              {viewDocument.permitNumber && (
-                <div className="space-y-1">
-                  <Label className="text-xs">Permit / Certificate Number</Label>
-                  <p className="text-sm text-slate-700 dark:text-slate-300">
-                    {viewDocument.permitNumber}
-                  </p>
-                </div>
-              )}
+              {/* Metadata fields — type-specific labels */}
+              {(() => {
+                const cfg = getDocumentMetadataConfig(viewDocument.type);
+                if (cfg.showNumberField === false) return null;
+                if (!viewDocument.permitNumber) return null;
+                return (
+                  <div className="space-y-1">
+                    <Label className="text-xs">{cfg.numberLabel}</Label>
+                    <p className="text-sm text-slate-700 dark:text-slate-300">
+                      {viewDocument.permitNumber}
+                    </p>
+                  </div>
+                );
+              })()}
 
-              {viewDocument.issuingAuthority && (
-                <div className="space-y-1">
-                  <Label className="text-xs">Issuing Authority</Label>
-                  <p className="text-sm text-slate-700 dark:text-slate-300">
-                    {viewDocument.issuingAuthority}
-                  </p>
-                </div>
-              )}
+              {(() => {
+                const cfg = getDocumentMetadataConfig(viewDocument.type);
+                if (cfg.showAuthorityField === false) return null;
+                if (!viewDocument.issuingAuthority) return null;
+                return (
+                  <div className="space-y-1">
+                    <Label className="text-xs">{cfg.authorityLabel}</Label>
+                    <p className="text-sm text-slate-700 dark:text-slate-300">
+                      {viewDocument.issuingAuthority}
+                    </p>
+                  </div>
+                );
+              })()}
 
-              {viewDocument.issueDate && (
-                <div className="space-y-1">
-                  <Label className="text-xs">Issue Date</Label>
-                  <p className="text-sm text-slate-700 dark:text-slate-300">
-                    {formatDateOnly(viewDocument.issueDate)}
-                  </p>
-                </div>
-              )}
+              {(() => {
+                const cfg = getDocumentMetadataConfig(viewDocument.type);
+                if (cfg.showIssueDate === false) return null;
+                if (!viewDocument.issueDate) return null;
+                return (
+                  <div className="space-y-1">
+                    <Label className="text-xs">Issue Date</Label>
+                    <p className="text-sm text-slate-700 dark:text-slate-300">
+                      {formatDateOnly(viewDocument.issueDate)}
+                    </p>
+                  </div>
+                );
+              })()}
 
               {viewDocument.expiryDate && (
                 <div className="space-y-1">

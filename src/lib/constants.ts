@@ -30,6 +30,106 @@ export const DOCUMENT_TYPE_LABELS: Record<string, DocumentTypeInfo> = {
  * Normalize legacy document types (DTI_CERT, SEC_CERT) to the combined BUSINESS_REGISTRATION type.
  * This ensures backward compatibility for documents uploaded before the merge.
  */
+// ─── DOCUMENT METADATA CONFIG ──────────────────────
+
+export interface DocumentMetadataConfig {
+  numberLabel: string;
+  authorityLabel: string;
+  showNumberField: boolean;
+  showAuthorityField: boolean;
+  showIssueDate: boolean;
+}
+
+export const DOCUMENT_METADATA_CONFIG: Record<string, DocumentMetadataConfig> = {
+  BUSINESS_REGISTRATION: {
+    numberLabel: "Registration Number",
+    authorityLabel: "DTI / SEC Office",
+    showNumberField: true,
+    showAuthorityField: true,
+    showIssueDate: true,
+  },
+  BIR_2303: {
+    numberLabel: "TIN Number",
+    authorityLabel: "BIR RDO",
+    showNumberField: true,
+    showAuthorityField: true,
+    showIssueDate: true,
+  },
+  MAYORS_PERMIT: {
+    numberLabel: "Permit Number",
+    authorityLabel: "Issuing LGU",
+    showNumberField: true,
+    showAuthorityField: true,
+    showIssueDate: true,
+  },
+  BARANGAY_CLEARANCE: {
+    numberLabel: "Clearance Number",
+    authorityLabel: "Issuing Barangay",
+    showNumberField: true,
+    showAuthorityField: true,
+    showIssueDate: true,
+  },
+  SANITARY_PERMIT: {
+    numberLabel: "Permit Number",
+    authorityLabel: "Issuing Health Office",
+    showNumberField: true,
+    showAuthorityField: true,
+    showIssueDate: true,
+  },
+  WATER_TEST_BACTERIOLOGICAL: {
+    numberLabel: "Lab Report Number",
+    authorityLabel: "Testing Laboratory",
+    showNumberField: true,
+    showAuthorityField: true,
+    showIssueDate: true,
+  },
+  WATER_TEST_PHYSICAL_CHEMICAL: {
+    numberLabel: "Lab Report Number",
+    authorityLabel: "Testing Laboratory",
+    showNumberField: true,
+    showAuthorityField: true,
+    showIssueDate: true,
+  },
+  GOVT_ID: {
+    numberLabel: "ID Number",
+    authorityLabel: "Issuing Agency",
+    showNumberField: true,
+    showAuthorityField: true,
+    showIssueDate: true,
+  },
+  FIRE_SAFETY_CERT: {
+    numberLabel: "Certificate Number",
+    authorityLabel: "Bureau of Fire Protection",
+    showNumberField: true,
+    showAuthorityField: true,
+    showIssueDate: true,
+  },
+  PROOF_OF_ADDRESS: {
+    numberLabel: "Reference Number",
+    authorityLabel: "Issuer (Utility/Lease)",
+    showNumberField: true,
+    showAuthorityField: true,
+    showIssueDate: true,
+  },
+  STATION_PHOTO: {
+    numberLabel: "",
+    authorityLabel: "",
+    showNumberField: false,
+    showAuthorityField: false,
+    showIssueDate: false,
+  },
+};
+
+/** Helper to get metadata config, with backward compatibility fallback */
+export function getDocumentMetadataConfig(type: string): DocumentMetadataConfig {
+  return DOCUMENT_METADATA_CONFIG[normalizeDocumentType(type)] ?? {
+    numberLabel: "Permit / Certificate Number",
+    authorityLabel: "Issuing Authority",
+    showNumberField: true,
+    showAuthorityField: true,
+    showIssueDate: true,
+  };
+}
 export function normalizeDocumentType(type: string): string {
   if (type === "DTI_CERT" || type === "SEC_CERT") return "BUSINESS_REGISTRATION";
   return type;

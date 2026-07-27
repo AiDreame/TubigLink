@@ -54,7 +54,7 @@ export async function GET(req: NextRequest) {
       orderBy: { uploadedAt: "desc" },
     });
 
-    return NextResponse.json({ success: true, data: documents });
+    return NextResponse.json({ success: true, data: documents, stationTin: station.tin });
   } catch (error) {
     console.error("Documents fetch error:", error);
     return NextResponse.json(
