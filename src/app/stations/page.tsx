@@ -87,7 +87,7 @@ export default function StationsPage() {
                 <SlidersHorizontal className="h-5 w-5 text-muted-foreground" />
               </Button>
             </form>
-            <Link href="/" aria-label="Home" className="shrink-0">
+            <Link href="/" aria-label="Home" className="shrink-0 hidden sm:block">
               <Button variant="ghost" size="icon" className="rounded-full min-h-[44px] min-w-[44px]">
                 <Home className="h-5 w-5" />
               </Button>
