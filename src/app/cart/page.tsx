@@ -172,7 +172,7 @@ export default function CartPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-32">
+    <div className="min-h-screen bg-background pb-28">
       <header className="bg-card sticky top-0 z-30 border-b border-border px-4 py-4 flex items-center gap-2">
         <Button variant="ghost" size="icon" className="rounded-full min-h-[44px] min-w-[44px]" onClick={() => router.back()} aria-label="Go back">
           <ArrowLeft className="h-5 w-5" />
@@ -368,7 +368,7 @@ export default function CartPage() {
       </main>
 
       {/* Checkout Footer */}
-      <div className="fixed bottom-0 left-0 right-0 bg-card border-t border-border p-4 pb-8 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] dark:shadow-[0_-4px_20px_rgba(0,0,0,0.3)] z-40">
+      <div className="fixed bottom-0 left-0 right-0 bg-card border-t border-border p-4 pb-safe shadow-[0_-4px_20px_rgba(0,0,0,0.05)] dark:shadow-[0_-4px_20px_rgba(0,0,0,0.3)] z-40">
         <div className="max-w-3xl mx-auto">
           <Button 
             className="w-full h-14 rounded-2xl bg-blue-600 hover:bg-blue-700 text-lg font-bold shadow-lg shadow-blue-200 dark:shadow-blue-900/50"

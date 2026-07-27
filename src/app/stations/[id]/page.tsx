@@ -324,7 +324,7 @@ export default function StationDetailPage() {
       {itemCount > 0 && (
         <>
           {/* Mobile floating button */}
-          <div className="fixed bottom-6 left-4 right-4 z-40 md:hidden">
+          <div className="fixed bottom-20 left-4 right-4 z-40 md:hidden">
             <Link href="/cart">
               <Button className="w-full h-14 rounded-2xl bg-blue-600 hover:bg-blue-700 shadow-xl shadow-blue-200 dark:shadow-blue-900/50 flex items-center justify-between px-6" aria-label={`View cart with ${itemCount} items`}>
                 <div className="flex items-center gap-3">
