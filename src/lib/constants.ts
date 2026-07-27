@@ -24,7 +24,6 @@ export const DOCUMENT_TYPE_LABELS: Record<string, DocumentTypeInfo> = {
   FIRE_SAFETY_CERT: { label: "Fire Safety Certificate", validityMonths: 12 }, // Annual
   PROOF_OF_ADDRESS: { label: "Proof of Address", validityMonths: 3 },         // Usually 3 months for utility bills
   STATION_PHOTO: { label: "Station Photo", validityMonths: 0 },              // No expiry
-  VIDEO_WALKTHROUGH: { label: "Video Walkthrough", validityMonths: 0 },       // No expiry
 };
 
 /**

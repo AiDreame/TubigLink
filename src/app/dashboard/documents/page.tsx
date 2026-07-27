@@ -259,7 +259,7 @@ function DocumentsSkeleton() {
       <div>
         <Skeleton className="h-6 w-56 mb-4" />
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {[...Array(13)].map((_, i) => (
+          {[...Array(12)].map((_, i) => (
             <Card key={i} className="border shadow-sm">
               <CardContent className="p-4 space-y-3">
                 <div className="flex items-center gap-3">

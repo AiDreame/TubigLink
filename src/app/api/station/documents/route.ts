@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
       "BUSINESS_REGISTRATION", "DTI_CERT", "SEC_CERT", "BIR_2303", "MAYORS_PERMIT",
       "BARANGAY_CLEARANCE", "SANITARY_PERMIT", "WATER_TEST_BACTERIOLOGICAL",
       "WATER_TEST_PHYSICAL_CHEMICAL", "GOVT_ID", "FIRE_SAFETY_CERT",
-      "PROOF_OF_ADDRESS", "STATION_PHOTO", "VIDEO_WALKTHROUGH",
+      "PROOF_OF_ADDRESS", "STATION_PHOTO",
     ].includes(type)) {
       // Normalize legacy types to BUSINESS_REGISTRATION for backward compatibility
       if (type === "DTI_CERT" || type === "SEC_CERT") {

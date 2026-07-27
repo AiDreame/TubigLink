@@ -12,19 +12,19 @@ export async function GET(req: NextRequest) {
     }
 
     const { searchParams } = new URL(req.url);
-    const limit = Math.min(Number(searchParams.get("limit")) || 20, 50);
+    const limit = Math.min(Number(searchParams.get("limit")) || 50, 100);
     const page = Number(searchParams.get("page")) || 1;
-    const status = searchParams.get("status") || "PENDING"; // Filter by doc status
+    const status = searchParams.get("status") || "ALL"; // Filter by doc status, ALL = no filter
 
-    // Find all stations that have at least one document with the given verification status
-    // Group by station, include document counts and station info
-    const where: any = {
-      documents: {
+    // Find all stations (optionally filtered by document verification status)
+    const where: any = {};
+    if (status !== "ALL") {
+      where.documents = {
         some: {
           verificationStatus: status,
         },
-      },
-    };
+      };
+    }
 
     const [stations, total] = await Promise.all([
       prisma.station.findMany({
