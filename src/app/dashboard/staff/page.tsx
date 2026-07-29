@@ -7,7 +7,7 @@ import {
   Users, UserPlus, Search, Mail, MoreVertical, Loader2,
   CheckCircle2, XCircle, Clock, Copy, RefreshCw, Ban,
   Shield, ShieldCheck, ShieldAlert, Key, Trash2,
-  AlertTriangle,
+  AlertTriangle, Truck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,12 +31,13 @@ import {
   ALL_PERMISSIONS,
   STAFF_DEFAULT_PERMISSIONS,
   MANAGER_DEFAULT_PERMISSIONS,
+  DRIVER_DEFAULT_PERMISSIONS,
   getDefaultPermissions,
 } from "@/lib/permissions";
 import toast from "react-hot-toast";
 
 type StaffStatus = "ACTIVE" | "INVITED" | "SUSPENDED" | "DEACTIVATED";
-type StaffRole = "MANAGER" | "STAFF" | "ADMIN";
+type StaffRole = "MANAGER" | "STAFF" | "ADMIN" | "DRIVER";
 
 interface StaffMember {
   id: string; name: string; email: string; phone: string;
@@ -65,6 +66,7 @@ const ROLE_DEFAULTS: Record<StaffRole, string[]> = {
   ADMIN: ADMIN_DEFAULT_PERMISSIONS,
   MANAGER: [...MANAGER_DEFAULT_PERMISSIONS],
   STAFF: [...STAFF_DEFAULT_PERMISSIONS],
+  DRIVER: [...DRIVER_DEFAULT_PERMISSIONS],
 };
 
 // ── Helpers ──────────────────────────────────────────────
@@ -83,7 +85,7 @@ function mapApiStaffToMember(raw: Record<string, any>): StaffMember {
     name: raw.name || raw.user?.name || raw.email || "Unknown",
     email: raw.email || raw.user?.email || "",
     phone: raw.phone || raw.user?.phone || "",
-    role: (raw.role === "ADMIN" ? "ADMIN" : raw.role === "MANAGER" ? "MANAGER" : "STAFF") as StaffRole,
+    role: (raw.role === "ADMIN" ? "ADMIN" : raw.role === "MANAGER" ? "MANAGER" : raw.role === "DRIVER" ? "DRIVER" : "STAFF") as StaffRole,
     status: raw.status as StaffStatus,
     permissions,
     invitedAt: raw.invitedAt || raw.createdAt || new Date().toISOString(),
@@ -155,6 +157,7 @@ export default function DashboardStaffPage() {
       ADMIN: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400 border-purple-200 dark:border-purple-800",
       MANAGER: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800",
       STAFF: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 border-blue-200 dark:border-blue-800",
+      DRIVER: "bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-400 border-teal-200 dark:border-teal-800",
     };
     return <Badge variant="outline" className={`${styles[role]} font-medium`}>{role}</Badge>;
   };
@@ -174,6 +177,7 @@ export default function DashboardStaffPage() {
       case "ADMIN": return <ShieldAlert className="h-4 w-4 text-purple-500" />;
       case "MANAGER": return <ShieldCheck className="h-4 w-4 text-indigo-500" />;
       case "STAFF": return <Shield className="h-4 w-4 text-blue-500" />;
+      case "DRIVER": return <Truck className="h-4 w-4 text-teal-500" />;
     }
   };
 
@@ -568,8 +572,8 @@ export default function DashboardStaffPage() {
             {/* Role Selector */}
             <div className="space-y-2">
               <Label>Role</Label>
-              <div className="grid grid-cols-3 gap-2">
-                {(["ADMIN", "MANAGER", "STAFF"] as StaffRole[]).map((role) => (
+              <div className="grid grid-cols-2 gap-2">
+                {(["ADMIN", "MANAGER", "STAFF", "DRIVER"] as StaffRole[]).map((role) => (
                   <button key={role} type="button" onClick={() => setInviteRole(role)}
                     className={`p-3 rounded-xl border text-center transition-all min-h-[60px] ${
                       inviteRole === role
@@ -578,7 +582,7 @@ export default function DashboardStaffPage() {
                     }`}>
                     <p className="text-sm font-bold text-gray-900 dark:text-white">{role}</p>
                     <p className="text-xs text-gray-500 mt-0.5">
-                      {role === "ADMIN" ? "Full access" : role === "MANAGER" ? "Extended" : "Limited"}
+                      {role === "ADMIN" ? "Full access" : role === "MANAGER" ? "Extended" : role === "DRIVER" ? "Delivery" : "Limited"}
                     </p>
                   </button>
                 ))}

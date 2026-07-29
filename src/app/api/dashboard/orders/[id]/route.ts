@@ -3,7 +3,7 @@ import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
-// PUT /api/dashboard/orders/[id] — Station owner accepting or updating order
+// PUT /api/dashboard/orders/[id] — Station owner, staff, or driver updating order
 export async function PUT(
   req: NextRequest,
   { params }: { params: { id: string } }
@@ -29,7 +29,7 @@ export async function PUT(
       );
     }
 
-    // Check if order exists and belongs to the user's station
+    // Check if order exists
     const order = await prisma.order.findUnique({
       where: { id: params.id },
       include: { station: true },
@@ -39,8 +39,25 @@ export async function PUT(
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
-    // Only the station owner or an admin can update the order from dashboard
-    if (order.station.userId !== session.user.id && session.user.role !== "ADMIN") {
+    const userId = (session.user as any).id;
+    const userRole = (session.user as any).role;
+    const staffId = (session.user as any).staffId;
+    const staffRole = (session.user as any).staffRole;
+
+    const isOwner = order.station.userId === userId;
+    const isAdmin = userRole === "ADMIN";
+    const isAssignedDriver = order.driverId && order.driverId === staffId;
+    const isStationStaff = staffRole === "ADMIN" || staffRole === "MANAGER" || staffRole === "STAFF";
+
+    // Driver can only update to OUT_FOR_DELIVERY or DELIVERED, and only for assigned orders
+    if (isAssignedDriver && (staffRole === "DRIVER" || staffRole === "STAFF")) {
+      if (status !== "OUT_FOR_DELIVERY" && status !== "DELIVERED") {
+        return NextResponse.json(
+          { error: "Drivers can only start or complete deliveries" },
+          { status: 403 }
+        );
+      }
+    } else if (!isOwner && !isAdmin && !isStationStaff) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
