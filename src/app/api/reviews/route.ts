@@ -94,6 +94,23 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    // Notify the station owner about the new review
+    const station = await prisma.station.findUnique({
+      where: { id: stationId },
+      select: { userId: true, slug: true },
+    });
+    if (station) {
+      await prisma.notification.create({
+        data: {
+          userId: station.userId,
+          type: "NEW_REVIEW",
+          title: "New Review Received",
+          message: `${rating}★ review on your station`,
+          data: JSON.stringify({ stationId, orderId, rating, slug: station.slug, type: "review" }),
+        },
+      });
+    }
+
     return NextResponse.json({ success: true, data: review }, { status: 201 });
   } catch (error) {
     console.error("Review creation error:", error);

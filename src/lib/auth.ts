@@ -92,6 +92,21 @@ export const authOptions: NextAuthOptions = {
         }
       }
 
+      // Check if user owns a station (for provider dashboard "View Store" link)
+      if (token.id && token.role === "PROVIDER") {
+        try {
+          const station = await prisma.station.findFirst({
+            where: { userId: token.id as string },
+            select: { slug: true },
+          });
+          if (station) {
+            token.stationSlug = station.slug;
+          }
+        } catch {
+          // Silently ignore — station slug lookup is best-effort
+        }
+      }
+
       return token;
     },
     async session({ session, token }) {
@@ -102,6 +117,7 @@ export const authOptions: NextAuthOptions = {
         (session.user as any).staffId = token.staffId;
         (session.user as any).staffRole = token.staffRole;
         (session.user as any).stationId = token.stationId;
+        (session.user as any).stationSlug = token.stationSlug;
       }
       return session;
     },

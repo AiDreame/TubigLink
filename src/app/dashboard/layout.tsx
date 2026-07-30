@@ -184,7 +184,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <span className="absolute top-2 right-2 h-2 w-2 bg-red-500 rounded-full border-2 border-white dark:border-gray-900" />
             </Button>
             <Button asChild variant="outline" size="sm" className="rounded-full hidden sm:flex dark:border-gray-700 dark:text-gray-300">
-              <Link href="/stations/my-station">View Store</Link>
+              <Link href={`/stations/${(session?.user as any)?.stationSlug || "my-station"}`}>View Store</Link>
             </Button>
           </div>
         </header>

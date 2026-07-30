@@ -141,6 +141,7 @@ export default function MyDashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reorderingId, setReorderingId] = useState<string | null>(null);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
 
   const fetchDashboard = async () => {
     if (sessionStatus !== "authenticated" || !session?.user?.id) return;
@@ -163,9 +164,23 @@ export default function MyDashboardPage() {
     }
   };
 
+  const fetchUnreadCount = async () => {
+    if (sessionStatus !== "authenticated") return;
+    try {
+      const res = await fetch("/api/notifications?onlyUnread=true&limit=1");
+      if (res.ok) {
+        const json = await res.json();
+        setUnreadNotifications(json.unreadCount || 0);
+      }
+    } catch {
+      // Silently fail — notification count is non-critical
+    }
+  };
+
   useEffect(() => {
     if (sessionStatus === "authenticated" && session?.user?.id) {
       fetchDashboard();
+      fetchUnreadCount();
     } else if (sessionStatus === "unauthenticated") {
       router.push("/auth/login?callbackUrl=/my");
     }
@@ -277,13 +292,13 @@ export default function MyDashboardPage() {
             variant="ghost"
             size="icon"
             className="rounded-full min-h-[44px] min-w-[44px] relative"
-            onClick={() => router.push("/orders")}
-            aria-label={MESSAGES.myOrders}
+            onClick={() => router.push("/my/notifications")}
+            aria-label="Notifications"
           >
             <Bell className="h-5 w-5 text-muted-foreground" />
-            {stats.activeOrdersCount > 0 && (
+            {unreadNotifications > 0 && (
               <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center shadow-sm">
-                {stats.activeOrdersCount > 9 ? "9+" : stats.activeOrdersCount}
+                {unreadNotifications > 9 ? "9+" : unreadNotifications}
               </span>
             )}
           </Button>
