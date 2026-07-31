@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { 
   LayoutDashboard, 
@@ -17,6 +17,7 @@ import {
   Droplets,
   Store,
   Users,
+  Truck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -32,10 +33,63 @@ const sidebarItems = [
   { label: "Settings", icon: Settings, href: "/dashboard/settings" },
 ];
 
+const driverSidebarItems = [
+  { label: "My Deliveries", icon: Truck, href: "/dashboard/driver" },
+];
+
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
+
+  const staffRole = (session?.user as any)?.staffRole;
+  const isDriver = staffRole === "DRIVER";
+  const isStaff = !!staffRole;
+  const isDriverPage = pathname === "/dashboard/driver";
+
+  // Redirect drivers to their page
+  useEffect(() => {
+    if (status === "loading") return;
+    if (isDriver && !isDriverPage) {
+      router.replace("/dashboard/driver");
+    }
+  }, [isDriver, isDriverPage, status, router]);
+
+  // Driver sees a minimal layout
+  if (isDriver && isDriverPage) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col">
+        <header className="h-16 bg-white dark:bg-gray-900 border-b dark:border-gray-800 px-4 flex items-center justify-between sticky top-0 z-30">
+          <div className="flex items-center gap-2">
+            <div className="h-8 w-8 rounded-lg bg-blue-600 flex items-center justify-center">
+              <Droplets className="h-5 w-5 text-white" />
+            </div>
+            <span className="font-bold text-lg tracking-tight dark:text-white">
+              AquaLink <span className="text-blue-600">Driver</span>
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="h-9 w-9 rounded-full bg-teal-100 dark:bg-teal-900/50 flex items-center justify-center text-teal-600 dark:text-teal-400 font-bold text-sm">
+              {(session?.user?.name || "D")[0].toUpperCase()}
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-red-500 hover:text-red-600 rounded-xl"
+              onClick={() => signOut({ callbackUrl: "/auth/login" })}
+            >
+              <LogOut className="h-4 w-4 mr-2" />
+              <span className="hidden sm:inline">Sign Out</span>
+            </Button>
+          </div>
+        </header>
+        <main className="flex-1 overflow-auto p-4">
+          {children}
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex">
@@ -130,7 +184,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <span className="absolute top-2 right-2 h-2 w-2 bg-red-500 rounded-full border-2 border-white dark:border-gray-900" />
             </Button>
             <Button asChild variant="outline" size="sm" className="rounded-full hidden sm:flex dark:border-gray-700 dark:text-gray-300">
-              <Link href="/stations/my-station">View Store</Link>
+              <Link href={`/stations/${(session?.user as any)?.stationSlug || "my-station"}`}>View Store</Link>
             </Button>
           </div>
         </header>

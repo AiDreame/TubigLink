@@ -78,9 +78,18 @@ interface Order {
   user: { name: string; phone: string };
   address: { street: string; barangay: string; city: string; province: string; landmark: string | null };
   addressId: string;
+  driverId: string | null;
+  driver: { id: string; name: string; email: string; role: string } | null;
   createdAt: string;
   updatedAt: string;
   orderType: string;
+}
+
+interface StaffOption {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
 }
 
 type StatusTab = "ALL" | "PENDING" | "PREPARING" | "OUT_FOR_DELIVERY" | "DELIVERED" | "CANCELLED";
@@ -113,6 +122,8 @@ export default function ProviderOrdersPage() {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [detailOrder, setDetailOrder] = useState<Order | null>(null);
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
+  const [staffMembers, setStaffMembers] = useState<StaffOption[]>([]);
+  const [assigningId, setAssigningId] = useState<string | null>(null);
 
   const fetchOrders = useCallback(() => {
     setLoading(true);
@@ -127,9 +138,53 @@ export default function ProviderOrdersPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  const fetchStaff = useCallback(() => {
+    fetch("/api/station/staff")
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.success) {
+          const drivers = (json.data || [])
+            .filter((s: any) => s.status === "ACTIVE" && (s.role === "DRIVER" || s.role === "STAFF"))
+            .map((s: any) => ({
+              id: s.id,
+              name: s.name || s.user?.name || s.email,
+              email: s.email,
+              role: s.role,
+            }));
+          setStaffMembers(drivers);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
-    if (session?.user) fetchOrders();
-  }, [session, fetchOrders]);
+    if (session?.user) {
+      fetchOrders();
+      fetchStaff();
+    }
+  }, [session, fetchOrders, fetchStaff]);
+
+  const assignDriver = async (orderId: string, driverId: string | null) => {
+    setAssigningId(orderId);
+    try {
+      const res = await fetch(`/api/dashboard/orders/${orderId}/assign`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ driverId }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        toast.success(driverId ? "Driver assigned!" : "Driver unassigned");
+        fetchOrders();
+      } else {
+        toast.error(json.error || "Failed to assign driver");
+      }
+    } catch {
+      toast.error("Network error");
+    } finally {
+      setAssigningId(null);
+    }
+  };
 
   useEffect(() => {
     setCurrentPage(1);
@@ -440,6 +495,54 @@ export default function ProviderOrdersPage() {
                             ))}
                           </div>
                         )}
+
+                        {/* Mobile Driver Assignment */}
+                        <div className="pt-2 border-t dark:border-gray-700">
+                          <p className="text-xs font-bold text-muted-foreground mb-2">Driver</p>
+                          {order.driver ? (
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <Truck className="h-4 w-4 text-blue-500" />
+                                <span className="text-sm font-medium dark:text-gray-200">
+                                  {order.driver.name}
+                                </span>
+                                <Badge variant="outline" className="text-[10px]">
+                                  {order.driver.role}
+                                </Badge>
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="text-xs text-red-500 h-8"
+                                onClick={() => assignDriver(order.id, null)}
+                                disabled={assigningId === order.id}
+                              >
+                                Remove
+                              </Button>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">Not assigned</span>
+                          )}
+                          {staffMembers.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-2">
+                              {staffMembers
+                                .filter((s) => s.id !== order.driverId)
+                                .map((staff) => (
+                                  <Button
+                                    key={staff.id}
+                                    size="sm"
+                                    variant="outline"
+                                    className="rounded-xl text-xs h-8"
+                                    onClick={() => assignDriver(order.id, staff.id)}
+                                    disabled={assigningId === order.id}
+                                  >
+                                    <Truck className="h-3 w-3 mr-1" />
+                                    {staff.name}
+                                  </Button>
+                                ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -455,6 +558,7 @@ export default function ProviderOrdersPage() {
                     <TableHead className="w-[80px]">Order ID</TableHead>
                     <TableHead>Customer</TableHead>
                     <TableHead>Items</TableHead>
+                    <TableHead className="hidden lg:table-cell">Driver</TableHead>
                     <TableHead className="hidden lg:table-cell">Payment</TableHead>
                     <TableHead className="hidden lg:table-cell">Time</TableHead>
                     <TableHead>Status</TableHead>
@@ -479,6 +583,20 @@ export default function ProviderOrdersPage() {
                       </TableCell>
                       <TableCell className="text-sm max-w-[200px]">
                         <span className="truncate block dark:text-gray-300">{getItemSummary(order)}</span>
+                      </TableCell>
+                      <TableCell className="hidden lg:table-cell">
+                        {order.driver ? (
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-medium dark:text-gray-300">
+                              {order.driver.name}
+                            </span>
+                            <Badge variant="outline" className="text-[10px] px-1 py-0 dark:border-gray-600 dark:text-gray-400">
+                              {order.driver.role}
+                            </Badge>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
                       </TableCell>
                       <TableCell className="hidden lg:table-cell">
                         <div className="flex items-center gap-1.5">
@@ -541,6 +659,31 @@ export default function ProviderOrdersPage() {
                               {nextStatuses(order.status).length === 0 && (
                                 <p className="text-xs text-gray-400 px-2 py-1">No further actions</p>
                               )}
+                              <DropdownMenuSeparator />
+                              <DropdownMenuLabel>Assign Driver</DropdownMenuLabel>
+                              {staffMembers.length === 0 && (
+                                <p className="text-xs text-gray-400 px-2 py-1">No drivers available</p>
+                              )}
+                              <DropdownMenuItem
+                                className="flex items-center gap-2 cursor-pointer min-h-[44px]"
+                                onClick={() => assignDriver(order.id, null)}
+                                disabled={assigningId === order.id || !order.driverId}
+                              >
+                                <XCircle className="h-4 w-4 text-gray-400" />
+                                <span>Unassign</span>
+                              </DropdownMenuItem>
+                              {staffMembers.map((staff) => (
+                                <DropdownMenuItem
+                                  key={staff.id}
+                                  className="flex items-center gap-2 cursor-pointer min-h-[44px]"
+                                  onClick={() => assignDriver(order.id, staff.id)}
+                                  disabled={assigningId === order.id || order.driverId === staff.id}
+                                >
+                                  <Truck className={`h-4 w-4 ${order.driverId === staff.id ? "text-green-500" : "text-blue-400"}`} />
+                                  <span>{staff.name}</span>
+                                  <Badge variant="outline" className="text-[10px] ml-auto">{staff.role}</Badge>
+                                </DropdownMenuItem>
+                              ))}
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </div>

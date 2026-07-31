@@ -1,6 +1,37 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 
+// GET /api/reviews?stationId={id} — List reviews for a station
+export async function GET(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const stationId = searchParams.get("stationId");
+
+    if (!stationId) {
+      return NextResponse.json(
+        { error: "stationId query parameter is required" },
+        { status: 400 }
+      );
+    }
+
+    const reviews = await prisma.review.findMany({
+      where: { stationId },
+      include: {
+        user: { select: { name: true, avatar: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    return NextResponse.json({ success: true, data: reviews });
+  } catch (error) {
+    console.error("Review fetch error:", error);
+    return NextResponse.json(
+      { success: false, error: "Failed to fetch reviews" },
+      { status: 500 }
+    );
+  }
+}
+
 // POST /api/reviews — Create a review for an order
 export async function POST(req: NextRequest) {
   try {
@@ -62,6 +93,23 @@ export async function POST(req: NextRequest) {
         totalReviews: stats._count,
       },
     });
+
+    // Notify the station owner about the new review
+    const station = await prisma.station.findUnique({
+      where: { id: stationId },
+      select: { userId: true, slug: true },
+    });
+    if (station) {
+      await prisma.notification.create({
+        data: {
+          userId: station.userId,
+          type: "NEW_REVIEW",
+          title: "New Review Received",
+          message: `${rating}★ review on your station`,
+          data: JSON.stringify({ stationId, orderId, rating, slug: station.slug, type: "review" }),
+        },
+      });
+    }
 
     return NextResponse.json({ success: true, data: review }, { status: 201 });
   } catch (error) {

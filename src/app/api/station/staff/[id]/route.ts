@@ -34,12 +34,20 @@ export async function PUT(
     }
 
     const body = await req.json();
-    const { role, permissions, name, phone } = body;
+    const { role, permissions, name, phone, status } = body;
 
     // Validate role if provided
     if (role && !["STAFF", "MANAGER", "ADMIN"].includes(role)) {
       return NextResponse.json(
         { error: "Invalid role. Must be STAFF, MANAGER, or ADMIN" },
+        { status: 400 }
+      );
+    }
+
+    // Validate status if provided
+    if (status && !["ACTIVE", "SUSPENDED", "DEACTIVATED", "INVITED"].includes(status)) {
+      return NextResponse.json(
+        { error: "Invalid status. Must be ACTIVE, SUSPENDED, DEACTIVATED, or INVITED" },
         { status: 400 }
       );
     }
@@ -61,6 +69,7 @@ export async function PUT(
     // Build update data
     const updateData: any = {};
     if (role) updateData.role = role;
+    if (status) updateData.status = status;
     if (permissions) updateData.permissions = JSON.stringify(permissions);
     if (name !== undefined) updateData.name = name;
     if (phone !== undefined) updateData.phone = phone;

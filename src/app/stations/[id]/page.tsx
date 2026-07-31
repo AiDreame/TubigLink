@@ -23,6 +23,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { useCart } from "@/hooks/use-cart";
 import { MESSAGES } from "@/lib/constants";
+import { format } from "date-fns";
 import Link from "next/link";
 
 export default function StationDetailPage() {
@@ -43,28 +44,15 @@ export default function StationDetailPage() {
       const data = await res.json();
       if (data.success) {
         setStation(data.data);
-        setReviews([
-          {
-            id: "1",
-            userId: "u1",
-            stationId: id,
-            orderId: "o1",
-            rating: 5,
-            comment: "Mabilis ang delivery at mabait ang rider!",
-            user: { name: "Juan Dela Cruz", avatar: null },
-            createdAt: new Date(),
-          },
-          {
-            id: "2",
-            userId: "u2",
-            stationId: id,
-            orderId: "o2",
-            rating: 4,
-            comment: "Clean water and good service.",
-            user: { name: "Maria Clara", avatar: null },
-            createdAt: new Date(),
+
+        // Fetch real reviews
+        const reviewsRes = await fetch(`/api/reviews?stationId=${id}`);
+        if (reviewsRes.ok) {
+          const reviewsData = await reviewsRes.json();
+          if (reviewsData.success) {
+            setReviews(reviewsData.data);
           }
-        ]);
+        }
       } else {
         throw new Error(data.error || "Station not found");
       }
@@ -86,7 +74,7 @@ export default function StationDetailPage() {
       <div className="min-h-screen bg-background" role="status" aria-label="Loading station details">
         <div className="h-48 w-full bg-muted animate-pulse" />
         <div className="max-w-7xl mx-auto px-4 -mt-10 relative z-10">
-          <div className="bg-card rounded-3xl p-6 shadow-xl border border-border space-y-4">
+          <div className="bg-card rounded-2xl p-6 shadow-xl border border-border space-y-4">
             <Skeleton className="h-8 w-3/4" />
             <Skeleton className="h-4 w-1/2" />
             <div className="flex gap-2">
@@ -156,7 +144,7 @@ export default function StationDetailPage() {
 
       {/* Station Info Card */}
       <div className="max-w-3xl mx-auto px-4 -mt-12 relative z-10">
-        <div className="bg-card rounded-3xl p-6 shadow-xl border border-border">
+        <div className="bg-card rounded-2xl p-6 shadow-xl border border-border">
           <div className="flex justify-between items-start">
             <div>
               <div className="flex items-center gap-2 mb-1">
@@ -179,7 +167,7 @@ export default function StationDetailPage() {
             <div className="text-center">
               <div className="flex items-center justify-center gap-1 text-yellow-600 dark:text-yellow-400 font-bold">
                 <Star className="h-4 w-4 fill-current" aria-hidden="true" />
-                <span>{station.rating.toFixed(1)}</span>
+                <span>{station.rating.toFixed(2)} ★</span>
               </div>
               <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Rating</p>
             </div>
@@ -243,14 +231,14 @@ export default function StationDetailPage() {
                   ))}
                 </div>
               ) : (
-                <div className="text-center py-12 bg-card rounded-3xl border border-dashed border-border">
+                <div className="text-center py-12 bg-card rounded-2xl border border-dashed border-border">
                   <p className="text-muted-foreground">{MESSAGES.noProducts}</p>
                 </div>
               )}
             </TabsContent>
 
             <TabsContent value="info" className="mt-6 space-y-4" role="tabpanel">
-              <div className="bg-card rounded-3xl p-6 shadow-sm border border-border space-y-6">
+              <div className="bg-card rounded-2xl p-6 shadow-sm border border-border space-y-6">
                 <div>
                   <h3 className="font-bold mb-2 text-card-foreground flex items-center gap-2">
                     <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" aria-hidden="true" />
@@ -286,12 +274,12 @@ export default function StationDetailPage() {
 
             <TabsContent value="reviews" className="mt-6 space-y-4" role="tabpanel">
               <div className="flex items-center justify-between px-2">
-                <h2 className="font-bold text-lg text-card-foreground">{MESSAGES.customerReviews}</h2>
-                <div className="flex items-center gap-1 text-yellow-600 dark:text-yellow-400 font-bold">
-                  <Star className="h-4 w-4 fill-current" aria-hidden="true" />
-                  <span>{station.rating.toFixed(1)}</span>
-                  <span className="text-xs text-muted-foreground font-normal">({reviews.length})</span>
-                </div>
+              <h2 className="font-bold text-lg text-card-foreground">{MESSAGES.customerReviews}</h2>
+              <div className="flex items-center gap-1 text-yellow-600 dark:text-yellow-400 font-bold">
+                <Star className="h-4 w-4 fill-current" aria-hidden="true" />
+                <span>{station.rating.toFixed(2)}</span>
+                <span className="text-xs text-muted-foreground font-normal">({station.totalReviews} reviews)</span>
+              </div>
               </div>
 
               {reviews.length > 0 ? (
@@ -305,7 +293,7 @@ export default function StationDetailPage() {
                           </div>
                           <div>
                             <p className="text-sm font-bold text-card-foreground">{review.user?.name || "Anonymous User"}</p>
-                            <p className="text-[10px] text-muted-foreground">Verified Purchase</p>
+                            <p className="text-[10px] text-muted-foreground">{format(new Date(review.createdAt), "MMM d, yyyy")}</p>
                           </div>
                         </div>
                         <div className="flex" aria-label={`${review.rating} out of 5 stars`}>
@@ -323,7 +311,7 @@ export default function StationDetailPage() {
                   ))}
                 </div>
               ) : (
-                <div className="text-center py-12 bg-card rounded-3xl border border-dashed border-border">
+                <div className="text-center py-12 bg-card rounded-2xl border border-dashed border-border">
                   <p className="text-muted-foreground">{MESSAGES.noReviews}</p>
                 </div>
               )}
@@ -336,7 +324,7 @@ export default function StationDetailPage() {
       {itemCount > 0 && (
         <>
           {/* Mobile floating button */}
-          <div className="fixed bottom-6 left-4 right-4 z-40 md:hidden">
+          <div className="fixed bottom-20 left-4 right-4 z-40 md:hidden">
             <Link href="/cart">
               <Button className="w-full h-14 rounded-2xl bg-blue-600 hover:bg-blue-700 shadow-xl shadow-blue-200 dark:shadow-blue-900/50 flex items-center justify-between px-6" aria-label={`View cart with ${itemCount} items`}>
                 <div className="flex items-center gap-3">

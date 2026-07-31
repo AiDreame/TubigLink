@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { 
   ArrowLeft, 
   MapPin, 
@@ -16,11 +17,13 @@ import {
   Droplets,
   Smartphone,
   Wallet,
-  XCircle
+  XCircle,
+  Star
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -38,12 +41,20 @@ import { MESSAGES } from "@/lib/constants";
 export default function OrderDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const { data: session } = useSession();
   const [order, setOrder] = useState<Order | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
+
+  // Review state
+  const [reviewRating, setReviewRating] = useState(0);
+  const [reviewComment, setReviewComment] = useState("");
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [reviewSuccess, setReviewSuccess] = useState(false);
 
   const fetchOrder = useCallback(async (id: string) => {
     setIsLoading(true);
@@ -89,6 +100,37 @@ export default function OrderDetailPage() {
       setCancelError(error.message || "Hindi ma-cancel ang order. Pakisubukan muli.");
     } finally {
       setIsCancelling(false);
+    }
+  };
+
+  const handleSubmitReview = async () => {
+    if (!order || !session?.user?.id) return;
+    setReviewSubmitting(true);
+    setReviewError(null);
+    try {
+      const res = await fetch("/api/reviews", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: (session.user as any).id,
+          stationId: order.stationId,
+          orderId: order.id,
+          rating: reviewRating,
+          comment: reviewComment || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to submit review");
+      }
+      setReviewSuccess(true);
+      // Update the order with the new review
+      setOrder({ ...order, review: data.data });
+    } catch (err: any) {
+      console.error("Review submission error:", err);
+      setReviewError(err.message || "Hindi ma-submit ang review. Pakisubukan muli.");
+    } finally {
+      setReviewSubmitting(false);
     }
   };
 
@@ -155,7 +197,7 @@ export default function OrderDetailPage() {
 
       <main className="max-w-2xl mx-auto p-4 space-y-4">
         {/* Status Tracker */}
-        <div className="bg-card rounded-3xl p-6 shadow-sm border border-border overflow-hidden" role="region" aria-label="Order status tracker">
+        <div className="bg-card rounded-2xl p-6 shadow-sm border border-border overflow-hidden" role="region" aria-label="Order status tracker">
           <div className="flex justify-between items-center mb-8">
             <h2 className="font-bold text-card-foreground">{MESSAGES.trackOrder}</h2>
             <Badge className="bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/30 border-none">
@@ -204,7 +246,7 @@ export default function OrderDetailPage() {
         </div>
 
         {/* Station Contact */}
-        <div className="bg-card rounded-3xl p-4 shadow-sm border border-border flex items-center justify-between">
+        <div className="bg-card rounded-2xl p-4 shadow-sm border border-border flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="h-12 w-12 rounded-2xl bg-blue-600 flex items-center justify-center text-white text-xl font-bold">
               {order.station?.name?.[0]}
@@ -225,7 +267,7 @@ export default function OrderDetailPage() {
         </div>
 
         {/* Order Items */}
-        <div className="bg-card rounded-3xl shadow-sm border border-border overflow-hidden">
+        <div className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden">
           <div className="p-4 border-b border-border bg-muted/50">
             <h2 className="font-bold text-sm text-muted-foreground uppercase tracking-wider">{MESSAGES.orderItems}</h2>
           </div>
@@ -273,7 +315,7 @@ export default function OrderDetailPage() {
         </div>
 
         {/* Delivery Address */}
-        <div className="bg-card rounded-3xl p-6 shadow-sm border border-border space-y-4">
+        <div className="bg-card rounded-2xl p-6 shadow-sm border border-border space-y-4">
           <h2 className="font-bold text-sm text-muted-foreground uppercase tracking-wider">{MESSAGES.deliveryAddress}</h2>
           <div className="flex gap-3">
             <MapPin className="h-5 w-5 text-red-500 shrink-0" aria-hidden="true" />
@@ -286,6 +328,17 @@ export default function OrderDetailPage() {
             </div>
           </div>
         </div>
+
+        {/* Delivery Notes */}
+        {order.notes && (
+          <div className="bg-card rounded-2xl p-6 shadow-sm border border-border space-y-4">
+            <h2 className="font-bold text-sm text-muted-foreground uppercase tracking-wider">Notes for Driver</h2>
+            <div className="flex gap-3">
+              <MessageSquare className="h-5 w-5 text-blue-500 shrink-0" aria-hidden="true" />
+              <p className="text-sm text-card-foreground">{order.notes}</p>
+            </div>
+          </div>
+        )}
 
         {/* Cancel Order Button — only for PENDING orders */}
         {order.status === "PENDING" && (
@@ -332,6 +385,83 @@ export default function OrderDetailPage() {
                 </DialogFooter>
               </DialogContent>
             </Dialog>
+          </div>
+        )}
+
+        {/* Review Section — only for DELIVERED orders */}
+        {order.status === "DELIVERED" && (
+          <div className="bg-card rounded-2xl p-6 shadow-sm border border-border space-y-4">
+            {order.review || reviewSuccess ? (
+              // Existing review display
+              <div className="space-y-3">
+                <h2 className="font-bold text-sm text-muted-foreground uppercase tracking-wider">Your Review</h2>
+                <div className="flex items-center gap-2">
+                  <div className="flex">
+                    {[...Array(5)].map((_, i) => (
+                      <Star
+                        key={i}
+                        className={`h-5 w-5 ${i < (order.review?.rating || reviewRating) ? "text-yellow-500 fill-current" : "text-muted-foreground/30"}`}
+                        aria-hidden="true"
+                      />
+                    ))}
+                  </div>
+                  <span className="font-bold text-card-foreground">{order.review?.rating || reviewRating}/5</span>
+                </div>
+                {(order.review?.comment || reviewComment) && (
+                  <p className="text-sm text-muted-foreground">{order.review?.comment || reviewComment}</p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  {reviewSuccess ? "Review submitted successfully!" : `Reviewed on ${order.review?.createdAt ? format(new Date(order.review.createdAt), "MMM d, yyyy") : ""}`}
+                </p>
+              </div>
+            ) : (
+              // Review submission form
+              <div className="space-y-4">
+                <h2 className="font-bold text-sm text-muted-foreground uppercase tracking-wider">Rate your experience</h2>
+                <div className="flex items-center gap-1">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      onClick={() => { setReviewRating(star); setReviewError(null); }}
+                      className="p-1 rounded-md hover:scale-110 transition-transform focus:outline-none focus:ring-2 focus:ring-yellow-400 rounded-lg"
+                      aria-label={`Rate ${star} star${star > 1 ? "s" : ""}`}
+                    >
+                      <Star
+                        className={`h-8 w-8 ${star <= reviewRating ? "text-yellow-500 fill-current" : "text-muted-foreground/30"} transition-colors`}
+                      />
+                    </button>
+                  ))}
+                  {reviewRating > 0 && (
+                    <span className="ml-2 text-sm font-bold text-card-foreground">{reviewRating}/5</span>
+                  )}
+                </div>
+
+                <div>
+                  <Textarea
+                    placeholder="Share your experience (optional)..."
+                    value={reviewComment}
+                    onChange={(e) => setReviewComment(e.target.value)}
+                    className="rounded-xl border-border min-h-[80px] resize-none"
+                    rows={3}
+                  />
+                </div>
+
+                {reviewError && (
+                  <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm rounded-xl p-3">
+                    {reviewError}
+                  </div>
+                )}
+
+                <Button
+                  onClick={handleSubmitReview}
+                  disabled={reviewRating === 0 || reviewSubmitting}
+                  className="w-full h-12 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold min-h-[44px]"
+                >
+                  {reviewSubmitting ? "Submitting..." : "Submit Review"}
+                </Button>
+              </div>
+            )}
           </div>
         )}
 

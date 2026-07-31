@@ -33,7 +33,7 @@ export default function SettingsPage() {
         {/* Account Section */}
         <section className="space-y-3" aria-label="Account settings">
           <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-widest px-2">Account Settings</h2>
-          <div className="bg-card rounded-3xl overflow-hidden border border-border shadow-sm">
+          <div className="bg-card rounded-2xl overflow-hidden border border-border shadow-sm">
             <button className="w-full p-4 flex items-center justify-between hover:bg-muted cursor-pointer border-b border-border min-h-[56px]" aria-label="Edit profile">
               <div className="flex items-center gap-4">
                 <div className="h-10 w-10 rounded-xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center">
@@ -70,7 +70,7 @@ export default function SettingsPage() {
         {/* Notifications Section */}
         <section className="space-y-3" aria-label="Notification settings">
           <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-widest px-2">Notifications</h2>
-          <div className="bg-card rounded-3xl overflow-hidden border border-border shadow-sm p-2">
+          <div className="bg-card rounded-2xl overflow-hidden border border-border shadow-sm p-2">
             <div className="p-4 flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className="h-10 w-10 rounded-xl bg-yellow-50 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400 flex items-center justify-center">
@@ -102,7 +102,7 @@ export default function SettingsPage() {
         {/* Preferences Section */}
         <section className="space-y-3" aria-label="Preferences">
           <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-widest px-2">Preferences</h2>
-          <div className="bg-card rounded-3xl overflow-hidden border border-border shadow-sm p-2">
+          <div className="bg-card rounded-2xl overflow-hidden border border-border shadow-sm p-2">
             <div className="p-4 flex items-center justify-between border-b border-border min-h-[56px]">
               <ThemeToggle asSwitch />
             </div>

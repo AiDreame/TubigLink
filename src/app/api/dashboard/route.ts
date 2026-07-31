@@ -79,6 +79,8 @@ export async function GET(req: NextRequest) {
       include: {
         items: { include: { product: true } },
         user: { select: { name: true, phone: true } },
+        address: true,
+        driver: { select: { id: true, name: true, email: true, role: true } },
       },
       orderBy: { createdAt: "desc" },
       take: 10,

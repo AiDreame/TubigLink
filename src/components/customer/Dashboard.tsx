@@ -142,7 +142,7 @@ export function CustomerDashboard() {
   return (
     <div className="max-w-3xl mx-auto px-4 pb-24 space-y-6">
       {/* Greeting */}
-      <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-3xl p-6 text-white shadow-lg">
+      <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-2xl p-6 text-white shadow-lg">
         <h2 className="text-xl font-bold">Magandang araw! 👋</h2>
         <p className="text-blue-100 text-sm mt-1">
           {stats.activeOrdersCount > 0 
@@ -422,7 +422,7 @@ function DashboardSkeleton() {
   return (
     <div className="max-w-3xl mx-auto px-4 pb-24 space-y-6 animate-pulse" role="status" aria-label="Loading dashboard">
       {/* Greeting skeleton */}
-      <div className="bg-blue-600/80 rounded-3xl p-6">
+      <div className="bg-blue-600/80 rounded-2xl p-6">
         <Skeleton className="h-7 w-48 bg-blue-400/50" />
         <Skeleton className="h-4 w-64 bg-blue-400/30 mt-2" />
       </div>

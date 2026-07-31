@@ -703,7 +703,7 @@ export default function DashboardSettingsPage() {
               {deliveryZones.map((zone, index) => (
                 <div
                   key={index}
-                  className="flex items-center justify-between p-4 rounded-xl bg-gray-50 dark:bg-gray-800/80 border border-gray-100 dark:border-gray-700 group"
+                  className="flex items-center justify-between p-4 rounded-xl bg-gray-50 dark:bg-gray-800/80 border border-gray-100 dark:border-gray-700 group relative"
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
@@ -884,7 +884,7 @@ export default function DashboardSettingsPage() {
       </Dialog>
 
       {/* ─── Save Footer (sticky on mobile) ─── */}
-      <div className="sticky bottom-0 bg-white dark:bg-gray-950 border-t dark:border-gray-800 p-4 -mx-4 lg:-mx-8 -mb-8 lg:-mb-8 mt-8 flex justify-end gap-3 shadow-lg">
+      <div className="sticky bottom-0 bg-white dark:bg-gray-950 border-t dark:border-gray-800 p-4 mt-8 flex justify-end gap-3 shadow-lg rounded-t-2xl">
         <Button
           variant="outline"
           className="rounded-xl min-h-[44px] dark:border-gray-700 dark:text-gray-300"

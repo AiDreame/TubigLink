@@ -71,6 +71,42 @@ export const authOptions: NextAuthOptions = {
       if (!token.id && token.sub) {
         token.id = token.sub;
       }
+
+      // Check if user is a station staff member (driver, staff, manager, admin)
+      if (token.id) {
+        try {
+          const staffRecord = await prisma.stationStaff.findFirst({
+            where: {
+              userId: token.id as string,
+              status: "ACTIVE",
+            },
+            select: { id: true, role: true, stationId: true },
+          });
+          if (staffRecord) {
+            token.staffId = staffRecord.id;
+            token.staffRole = staffRecord.role;
+            token.stationId = staffRecord.stationId;
+          }
+        } catch {
+          // Silently ignore — staff lookup is best-effort
+        }
+      }
+
+      // Check if user owns a station (for provider dashboard "View Store" link)
+      if (token.id && token.role === "PROVIDER") {
+        try {
+          const station = await prisma.station.findFirst({
+            where: { userId: token.id as string },
+            select: { slug: true },
+          });
+          if (station) {
+            token.stationSlug = station.slug;
+          }
+        } catch {
+          // Silently ignore — station slug lookup is best-effort
+        }
+      }
+
       return token;
     },
     async session({ session, token }) {
@@ -78,6 +114,10 @@ export const authOptions: NextAuthOptions = {
         (session.user as any).id = token.id || token.sub;
         (session.user as any).role = token.role;
         (session.user as any).phone = token.phone;
+        (session.user as any).staffId = token.staffId;
+        (session.user as any).staffRole = token.staffRole;
+        (session.user as any).stationId = token.stationId;
+        (session.user as any).stationSlug = token.stationSlug;
       }
       return session;
     },

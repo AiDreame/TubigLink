@@ -56,7 +56,7 @@ export function StationCard({ station }: StationCardProps) {
           </div>
           <div className="flex items-center gap-1 bg-yellow-50 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 px-2 py-0.5 rounded-lg text-xs font-bold">
             <Star className="h-3 w-3 fill-yellow-500 text-yellow-500" aria-hidden="true" />
-            {station.rating?.toFixed(1) || "5.0"}
+            {station.rating?.toFixed(2) || "0.00"}
           </div>
         </div>
 

@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Validate role
-    const validRoles = ["STAFF", "MANAGER", "ADMIN"];
+    const validRoles = ["STAFF", "MANAGER", "ADMIN", "DRIVER"];
     const staffRole = role && validRoles.includes(role) ? role : "STAFF";
 
     // Get the user's station

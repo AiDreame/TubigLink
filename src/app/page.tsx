@@ -347,7 +347,7 @@ export default function HomePage() {
             <StationMap stations={allMapStations} selectedCity={selectedCity} />
 
             {/* ─── Platform Stats ──────────────────────── */}
-            <section className="mx-auto max-w-7xl px-4">
+            <section className="mx-auto max-w-7xl px-4 py-8 lg:py-12">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="bg-card rounded-2xl p-5 shadow-lg border border-border text-center">
                   <div className="h-10 w-10 rounded-xl bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center mx-auto mb-2">
@@ -469,7 +469,7 @@ export default function HomePage() {
 
         {/* ─── Nationwide Coverage Section ────────────── */}
         {userRole !== "CUSTOMER" && (
-          <section className="mx-auto max-w-7xl px-4 py-8">
+          <section className="mx-auto max-w-7xl px-4 py-8 lg:py-12">
             <h2 className="text-2xl font-bold text-foreground text-center mb-8">
               Available nationwide
             </h2>
@@ -507,7 +507,7 @@ export default function HomePage() {
         )}
 
         {/* ─── CTA for Station Owners ────────────────────── */}
-        <section className="bg-gradient-to-r from-blue-600 to-blue-800 text-white mx-4 max-w-7xl rounded-3xl mb-12 lg:mx-auto">
+        <section className="bg-gradient-to-r from-blue-600 to-blue-800 text-white mx-4 max-w-7xl rounded-3xl mt-8 lg:mt-12 mb-12 lg:mx-auto">
           <div className="px-8 py-12 text-center">
             <h2 className="text-2xl md:text-3xl font-bold mb-3">
               May water station ka ba?

@@ -21,8 +21,8 @@ export default withAuth(
       return NextResponse.redirect(loginUrl);
     }
 
-    // Only PROVIDER or ADMIN can access dashboard
-    if (isDashboardRoute && token?.role !== "PROVIDER" && token?.role !== "ADMIN") {
+    // Only PROVIDER, ADMIN, or staff members can access dashboard
+    if (isDashboardRoute && token?.role !== "PROVIDER" && token?.role !== "ADMIN" && !(token as any).staffRole) {
       return NextResponse.redirect(new URL("/", req.url));
     }
 

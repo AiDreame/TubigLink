@@ -16,8 +16,8 @@ export function BottomNav() {
   const isAdmin = role === "ADMIN";
   const isCustomer = role === "CUSTOMER";
 
-  // Hide on auth pages, dashboard, admin
-  const hiddenRoutes = ["/auth/", "/dashboard", "/admin"];
+  // Hide on auth pages, dashboard, admin, and cart (cart has its own sticky checkout bar)
+  const hiddenRoutes = ["/auth/", "/dashboard", "/admin", "/cart"];
   if (hiddenRoutes.some((route) => pathname.startsWith(route))) {
     return null;
   }
