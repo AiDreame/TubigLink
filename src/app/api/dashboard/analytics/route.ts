@@ -14,17 +14,16 @@ export async function GET(req: NextRequest) {
     const rawDays = searchParams.get("days");
     const fields = searchParams.get("fields");
 
-    // Validate days param
+    // Validate days param — exact string match to prevent parseInt leniency
     let days = 30;
     if (rawDays !== null) {
-      const parsed = parseInt(rawDays, 10);
-      if (isNaN(parsed) || ![7, 30, 90].includes(parsed)) {
+      if (!["7", "30", "90"].includes(rawDays)) {
         return NextResponse.json(
           { error: "Invalid days parameter. Must be 7, 30, or 90." },
           { status: 400 }
         );
       }
-      days = parsed;
+      days = parseInt(rawDays, 10);
     }
 
     // If no stationId provided, try to get it from the logged-in user
