@@ -129,7 +129,7 @@ export default function StationsPage() {
 
       <main className="max-w-7xl mx-auto px-4 py-6">
         <div className="flex items-center justify-between mb-4">
-          <h1 className="font-bold text-foreground">
+          <h1 className="text-lg lg:text-xl font-bold text-foreground">
             {isLoading ? "Searching..." : `${totalCount} station${totalCount !== 1 ? 's' : ''} in ${selectedCity}`}
           </h1>
           <div className="flex items-center gap-1 text-xs text-muted-foreground">

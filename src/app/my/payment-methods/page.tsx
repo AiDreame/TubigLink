@@ -240,7 +240,7 @@ export default function PaymentMethodsPage() {
             );
           })
         ) : (
-          <div className="text-center py-20 bg-card rounded-3xl border border-dashed border-border">
+          <div className="text-center py-20 bg-card rounded-2xl border border-dashed border-border">
             <div className="h-16 w-16 bg-purple-50 dark:bg-purple-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
               <CreditCard className="h-8 w-8 text-purple-200 dark:text-purple-400" aria-hidden="true" />
             </div>

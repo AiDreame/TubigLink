@@ -128,7 +128,7 @@ export default function ProfilePage() {
       <main className="max-w-xl mx-auto p-6 space-y-6">
         <div className="space-y-3">
           <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-widest px-2">Account</h2>
-          <div className="bg-card rounded-3xl overflow-hidden border border-border shadow-sm">
+          <div className="bg-card rounded-2xl overflow-hidden border border-border shadow-sm">
             {menuItems.map((item, index) => (
               <Link 
                 key={item.label} 
@@ -152,7 +152,7 @@ export default function ProfilePage() {
 
         <div className="space-y-3">
           <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-widest px-2">More</h2>
-          <div className="bg-card rounded-3xl overflow-hidden border border-border shadow-sm">
+          <div className="bg-card rounded-2xl overflow-hidden border border-border shadow-sm">
             {supportItems.map((item, index) => (
               <Link 
                 key={item.label} 

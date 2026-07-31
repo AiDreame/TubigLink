@@ -197,7 +197,7 @@ export default function OrderDetailPage() {
 
       <main className="max-w-2xl mx-auto p-4 space-y-4">
         {/* Status Tracker */}
-        <div className="bg-card rounded-3xl p-6 shadow-sm border border-border overflow-hidden" role="region" aria-label="Order status tracker">
+        <div className="bg-card rounded-2xl p-6 shadow-sm border border-border overflow-hidden" role="region" aria-label="Order status tracker">
           <div className="flex justify-between items-center mb-8">
             <h2 className="font-bold text-card-foreground">{MESSAGES.trackOrder}</h2>
             <Badge className="bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/30 border-none">
@@ -246,7 +246,7 @@ export default function OrderDetailPage() {
         </div>
 
         {/* Station Contact */}
-        <div className="bg-card rounded-3xl p-4 shadow-sm border border-border flex items-center justify-between">
+        <div className="bg-card rounded-2xl p-4 shadow-sm border border-border flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="h-12 w-12 rounded-2xl bg-blue-600 flex items-center justify-center text-white text-xl font-bold">
               {order.station?.name?.[0]}
@@ -267,7 +267,7 @@ export default function OrderDetailPage() {
         </div>
 
         {/* Order Items */}
-        <div className="bg-card rounded-3xl shadow-sm border border-border overflow-hidden">
+        <div className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden">
           <div className="p-4 border-b border-border bg-muted/50">
             <h2 className="font-bold text-sm text-muted-foreground uppercase tracking-wider">{MESSAGES.orderItems}</h2>
           </div>
@@ -315,7 +315,7 @@ export default function OrderDetailPage() {
         </div>
 
         {/* Delivery Address */}
-        <div className="bg-card rounded-3xl p-6 shadow-sm border border-border space-y-4">
+        <div className="bg-card rounded-2xl p-6 shadow-sm border border-border space-y-4">
           <h2 className="font-bold text-sm text-muted-foreground uppercase tracking-wider">{MESSAGES.deliveryAddress}</h2>
           <div className="flex gap-3">
             <MapPin className="h-5 w-5 text-red-500 shrink-0" aria-hidden="true" />
@@ -331,7 +331,7 @@ export default function OrderDetailPage() {
 
         {/* Delivery Notes */}
         {order.notes && (
-          <div className="bg-card rounded-3xl p-6 shadow-sm border border-border space-y-4">
+          <div className="bg-card rounded-2xl p-6 shadow-sm border border-border space-y-4">
             <h2 className="font-bold text-sm text-muted-foreground uppercase tracking-wider">Notes for Driver</h2>
             <div className="flex gap-3">
               <MessageSquare className="h-5 w-5 text-blue-500 shrink-0" aria-hidden="true" />
@@ -390,7 +390,7 @@ export default function OrderDetailPage() {
 
         {/* Review Section — only for DELIVERED orders */}
         {order.status === "DELIVERED" && (
-          <div className="bg-card rounded-3xl p-6 shadow-sm border border-border space-y-4">
+          <div className="bg-card rounded-2xl p-6 shadow-sm border border-border space-y-4">
             {order.review || reviewSuccess ? (
               // Existing review display
               <div className="space-y-3">

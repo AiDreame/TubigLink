@@ -74,7 +74,7 @@ export default function StationDetailPage() {
       <div className="min-h-screen bg-background" role="status" aria-label="Loading station details">
         <div className="h-48 w-full bg-muted animate-pulse" />
         <div className="max-w-7xl mx-auto px-4 -mt-10 relative z-10">
-          <div className="bg-card rounded-3xl p-6 shadow-xl border border-border space-y-4">
+          <div className="bg-card rounded-2xl p-6 shadow-xl border border-border space-y-4">
             <Skeleton className="h-8 w-3/4" />
             <Skeleton className="h-4 w-1/2" />
             <div className="flex gap-2">
@@ -144,7 +144,7 @@ export default function StationDetailPage() {
 
       {/* Station Info Card */}
       <div className="max-w-3xl mx-auto px-4 -mt-12 relative z-10">
-        <div className="bg-card rounded-3xl p-6 shadow-xl border border-border">
+        <div className="bg-card rounded-2xl p-6 shadow-xl border border-border">
           <div className="flex justify-between items-start">
             <div>
               <div className="flex items-center gap-2 mb-1">
@@ -231,14 +231,14 @@ export default function StationDetailPage() {
                   ))}
                 </div>
               ) : (
-                <div className="text-center py-12 bg-card rounded-3xl border border-dashed border-border">
+                <div className="text-center py-12 bg-card rounded-2xl border border-dashed border-border">
                   <p className="text-muted-foreground">{MESSAGES.noProducts}</p>
                 </div>
               )}
             </TabsContent>
 
             <TabsContent value="info" className="mt-6 space-y-4" role="tabpanel">
-              <div className="bg-card rounded-3xl p-6 shadow-sm border border-border space-y-6">
+              <div className="bg-card rounded-2xl p-6 shadow-sm border border-border space-y-6">
                 <div>
                   <h3 className="font-bold mb-2 text-card-foreground flex items-center gap-2">
                     <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" aria-hidden="true" />
@@ -311,7 +311,7 @@ export default function StationDetailPage() {
                   ))}
                 </div>
               ) : (
-                <div className="text-center py-12 bg-card rounded-3xl border border-dashed border-border">
+                <div className="text-center py-12 bg-card rounded-2xl border border-dashed border-border">
                   <p className="text-muted-foreground">{MESSAGES.noReviews}</p>
                 </div>
               )}

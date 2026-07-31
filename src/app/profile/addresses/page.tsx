@@ -314,7 +314,7 @@ export default function AddressesPage() {
             {addresses.map((address) => {
               const Icon = getIcon(address.label);
               return (
-                <div key={address.id} className="bg-card rounded-3xl p-6 shadow-sm border border-border space-y-4">
+                <div key={address.id} className="bg-card rounded-2xl p-6 shadow-sm border border-border space-y-4">
                   <div className="flex justify-between items-start">
                     <div className="flex items-center gap-3">
                       <div className="h-10 w-10 rounded-xl bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400">

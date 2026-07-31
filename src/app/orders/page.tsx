@@ -164,7 +164,7 @@ export default function OrdersPage() {
                 <OrderCard key={order.id} order={order} />
               ))
             ) : (
-              <div className="text-center py-20 bg-card rounded-3xl border border-dashed border-border">
+              <div className="text-center py-20 bg-card rounded-2xl border border-dashed border-border">
                 <div className="h-16 w-16 bg-blue-50 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
                   <Package className="h-8 w-8 text-blue-200 dark:text-blue-400" aria-hidden="true" />
                 </div>
@@ -194,7 +194,7 @@ export default function OrdersPage() {
                 <OrderCard key={order.id} order={order} />
               ))
             ) : (
-              <div className="text-center py-20 bg-card rounded-3xl border border-dashed border-border">
+              <div className="text-center py-20 bg-card rounded-2xl border border-dashed border-border">
                 <p className="text-muted-foreground">{MESSAGES.noPastOrders}</p>
               </div>
             )}

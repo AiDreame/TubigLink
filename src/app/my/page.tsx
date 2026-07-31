@@ -215,7 +215,7 @@ export default function MyDashboardPage() {
         <HeaderSkeleton />
         <main className="max-w-3xl mx-auto p-4 space-y-4">
           {/* Greeting skeleton */}
-          <div className="bg-card rounded-3xl p-6 shadow-sm border" role="status" aria-label={MESSAGES.loadingDashboard}>
+          <div className="bg-card rounded-2xl p-6 shadow-sm border" role="status" aria-label={MESSAGES.loadingDashboard}>
             <Skeleton className="h-6 w-48 mb-2" />
             <Skeleton className="h-4 w-32" />
           </div>
