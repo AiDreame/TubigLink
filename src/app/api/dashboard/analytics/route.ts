@@ -4,10 +4,27 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
 // GET /api/dashboard/analytics — Rich analytics for station owner
+// Optional query params:
+//   days=7|30|90       — date range for ordersByDay (default: 30)
+//   fields=ordersByDay  — lightweight response with only ordersByDay
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     let stationId = searchParams.get("stationId");
+    const rawDays = searchParams.get("days");
+    const fields = searchParams.get("fields");
+
+    // Validate days param — exact string match to prevent parseInt leniency
+    let days = 30;
+    if (rawDays !== null) {
+      if (!["7", "30", "90"].includes(rawDays)) {
+        return NextResponse.json(
+          { error: "Invalid days parameter. Must be 7, 30, or 90." },
+          { status: 400 }
+        );
+      }
+      days = parseInt(rawDays, 10);
+    }
 
     // If no stationId provided, try to get it from the logged-in user
     if (!stationId) {
@@ -36,126 +53,27 @@ export async function GET(req: NextRequest) {
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
-    const startOfLast30Days = new Date(startOfToday);
-    startOfLast30Days.setDate(startOfLast30Days.getDate() - 30);
 
-    // Run all queries in parallel
-    const [
-      totalOrders,
-      allOrders,
-      statusGroup,
-      last30DaysOrders,
-      topProducts,
-      hourlyOrders,
-      weekdayOrders,
-      customerOrderCounts,
-      monthOrders,
-      monthRevenue,
-      lastMonthOrdersCount,
-      lastMonthRevenue,
-      completedTimes,
-      avgOrderValueResult,
-    ] = await Promise.all([
-      // Total order count
-      prisma.order.count({ where: { stationId } }),
+    // Dynamic range start
+    const rangeStart = new Date(startOfToday);
+    rangeStart.setDate(rangeStart.getDate() - days + 1);
 
-      // All orders for customer analysis
-      prisma.order.findMany({
-        where: { stationId },
-        select: { userId: true, total: true, createdAt: true },
-      }),
+    // Fetch orders for dynamic range
+    const rangeOrders = await prisma.order.findMany({
+      where: { stationId, createdAt: { gte: rangeStart } },
+      select: { createdAt: true, total: true, status: true },
+      orderBy: { createdAt: "asc" },
+    });
 
-      // Status distribution
-      prisma.order.groupBy({
-        by: ["status"],
-        where: { stationId },
-        _count: { id: true },
-      }),
-
-      // Last 30 days orders (for ordersByDay)
-      prisma.order.findMany({
-        where: { stationId, createdAt: { gte: startOfLast30Days } },
-        select: { createdAt: true, total: true, status: true },
-        orderBy: { createdAt: "asc" },
-      }),
-
-      // Top 10 products by quantity ordered
-      prisma.orderItem.groupBy({
-        by: ["productId"],
-        where: { order: { stationId } },
-        _sum: { quantity: true },
-        orderBy: { _sum: { quantity: "desc" } },
-        take: 10,
-      }),
-
-      // Orders by hour of day (all orders)
-      prisma.order.findMany({
-        where: { stationId },
-        select: { createdAt: true },
-      }),
-
-      // Orders by day of week (all orders)
-      prisma.order.findMany({
-        where: { stationId },
-        select: { createdAt: true },
-      }),
-
-      // Customer order counts (for repeat customer analysis)
-      prisma.order.groupBy({
-        by: ["userId"],
-        where: { stationId },
-        _count: { id: true },
-      }),
-
-      // This month orders
-      prisma.order.aggregate({
-        where: { stationId, createdAt: { gte: startOfMonth } },
-        _count: { id: true },
-        _sum: { total: true },
-      }),
-
-      // Last month revenue
-      prisma.order.aggregate({
-        where: { stationId, createdAt: { gte: startOfLastMonth, lt: startOfMonth } },
-        _sum: { total: true },
-      }),
-
-      // Last month orders count
-      prisma.order.count({
-        where: { stationId, createdAt: { gte: startOfLastMonth, lt: startOfMonth } },
-      }),
-
-      // Last month revenue (for monthlyComparison)
-      prisma.order.aggregate({
-        where: { stationId, status: "DELIVERED", createdAt: { gte: startOfLastMonth, lt: startOfMonth } },
-        _sum: { total: true },
-      }),
-
-      // Average delivery time
-      prisma.order.findMany({
-        where: { stationId, status: "DELIVERED" },
-        select: { createdAt: true, updatedAt: true },
-        take: 20,
-        orderBy: { createdAt: "desc" },
-      }),
-
-      // Average order value
-      prisma.order.aggregate({
-        where: { stationId, status: { not: "CANCELLED" } },
-        _avg: { total: true },
-      }),
-    ]);
-
-    // ── 1. ordersByDay: Last 30 days ──────────────────
+    // Build ordersByDay with zero-fill for inclusive daily buckets
     const ordersByDayMap = new Map<string, { count: number; revenue: number }>();
-    for (let i = 0; i < 30; i++) {
-      const d = new Date(startOfToday);
-      d.setDate(d.getDate() - (29 - i));
+    for (let i = 0; i < days; i++) {
+      const d = new Date(rangeStart);
+      d.setDate(d.getDate() + i);
       const key = d.toISOString().split("T")[0];
       ordersByDayMap.set(key, { count: 0, revenue: 0 });
     }
-    for (const order of last30DaysOrders) {
+    for (const order of rangeOrders) {
       const key = new Date(order.createdAt).toISOString().split("T")[0];
       const existing = ordersByDayMap.get(key);
       if (existing) {
@@ -169,7 +87,136 @@ export async function GET(req: NextRequest) {
       revenue: data.revenue,
     }));
 
-    // ── 2. popularProducts: Top 10 ────────────────────
+    // Lightweight response for overview graph
+    if (fields === "ordersByDay") {
+      return NextResponse.json({
+        success: true,
+        data: { ordersByDay },
+      });
+    }
+
+    // ── Full response (backward-compatible) ────────────
+    // For full analytics, always use 30-day ordersByDay for chart consistency
+    const startOfLast30Days = new Date(startOfToday);
+    startOfLast30Days.setDate(startOfLast30Days.getDate() - 30);
+
+    const last30DaysOrders =
+      days === 30
+        ? rangeOrders
+        : await prisma.order.findMany({
+            where: { stationId, createdAt: { gte: startOfLast30Days } },
+            select: { createdAt: true, total: true, status: true },
+            orderBy: { createdAt: "asc" },
+          });
+
+    // Run all queries in parallel
+    const [
+      totalOrders,
+      allOrders,
+      statusGroup,
+      topProducts,
+      hourlyOrders,
+      weekdayOrders,
+      customerOrderCounts,
+      monthOrders,
+      lastMonthOrdersCount,
+      lastMonthRevenue,
+      completedTimes,
+      avgOrderValueResult,
+    ] = await Promise.all([
+      prisma.order.count({ where: { stationId } }),
+
+      prisma.order.findMany({
+        where: { stationId },
+        select: { userId: true, total: true, createdAt: true },
+      }),
+
+      prisma.order.groupBy({
+        by: ["status"],
+        where: { stationId },
+        _count: { id: true },
+      }),
+
+      prisma.orderItem.groupBy({
+        by: ["productId"],
+        where: { order: { stationId } },
+        _sum: { quantity: true },
+        orderBy: { _sum: { quantity: "desc" } },
+        take: 10,
+      }),
+
+      prisma.order.findMany({
+        where: { stationId },
+        select: { createdAt: true },
+      }),
+
+      prisma.order.findMany({
+        where: { stationId },
+        select: { createdAt: true },
+      }),
+
+      prisma.order.groupBy({
+        by: ["userId"],
+        where: { stationId },
+        _count: { id: true },
+      }),
+
+      prisma.order.aggregate({
+        where: { stationId, createdAt: { gte: startOfMonth } },
+        _count: { id: true },
+        _sum: { total: true },
+      }),
+
+      prisma.order.count({
+        where: { stationId, createdAt: { gte: startOfLastMonth, lt: startOfMonth } },
+      }),
+
+      prisma.order.aggregate({
+        where: { stationId, status: "DELIVERED", createdAt: { gte: startOfLastMonth, lt: startOfMonth } },
+        _sum: { total: true },
+      }),
+
+      prisma.order.findMany({
+        where: { stationId, status: "DELIVERED" },
+        select: { createdAt: true, updatedAt: true },
+        take: 20,
+        orderBy: { createdAt: "desc" },
+      }),
+
+      prisma.order.aggregate({
+        where: { stationId, status: { not: "CANCELLED" } },
+        _avg: { total: true },
+      }),
+    ]);
+
+    // ── Build 30-day ordersByDay ─────────────────────
+    let fullOrdersByDay: { date: string; count: number; revenue: number }[];
+    if (days === 30) {
+      fullOrdersByDay = ordersByDay;
+    } else {
+      const fullMap = new Map<string, { count: number; revenue: number }>();
+      for (let i = 0; i < 30; i++) {
+        const d = new Date(startOfToday);
+        d.setDate(d.getDate() - (29 - i));
+        const key = d.toISOString().split("T")[0];
+        fullMap.set(key, { count: 0, revenue: 0 });
+      }
+      for (const order of last30DaysOrders) {
+        const key = new Date(order.createdAt).toISOString().split("T")[0];
+        const existing = fullMap.get(key);
+        if (existing) {
+          existing.count++;
+          if (order.status === "DELIVERED") existing.revenue += order.total;
+        }
+      }
+      fullOrdersByDay = Array.from(fullMap.entries()).map(([date, data]) => ({
+        date,
+        count: data.count,
+        revenue: data.revenue,
+      }));
+    }
+
+    // ── popularProducts ──────────────────────────────
     const productIds = topProducts.map((p) => p.productId);
     const products = productIds.length > 0
       ? await prisma.product.findMany({
@@ -190,7 +237,7 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    // ── 3. statusDistribution ──────────────────────────
+    // ── statusDistribution ──────────────────────────
     const statusDefaults: Record<string, number> = {
       PENDING: 0, ACCEPTED: 0, PREPARING: 0,
       OUT_FOR_DELIVERY: 0, DELIVERED: 0, CANCELLED: 0,
@@ -200,7 +247,7 @@ export async function GET(req: NextRequest) {
     }
     const statusDistribution = statusDefaults;
 
-    // ── 4. busiestHours ────────────────────────────────
+    // ── busiestHours ────────────────────────────────
     const hourBuckets = Array.from({ length: 24 }, (_, i) => ({ hour: i, count: 0 }));
     for (const order of hourlyOrders) {
       const hour = new Date(order.createdAt).getHours();
@@ -208,7 +255,7 @@ export async function GET(req: NextRequest) {
     }
     const busiestHours = hourBuckets;
 
-    // ── 5. busiestDays ─────────────────────────────────
+    // ── busiestDays ─────────────────────────────────
     const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     const dayBuckets = dayNames.map((day) => ({ day, count: 0 }));
     for (const order of weekdayOrders) {
@@ -217,7 +264,7 @@ export async function GET(req: NextRequest) {
     }
     const busiestDays = dayBuckets;
 
-    // ── 6. repeatCustomers ─────────────────────────────
+    // ── repeatCustomers ─────────────────────────────
     const totalCustomers = customerOrderCounts.length;
     const repeatCustomersCount = customerOrderCounts.filter((c) => c._count.id > 1).length;
     const repeatCustomers = {
@@ -226,12 +273,12 @@ export async function GET(req: NextRequest) {
       percentage: totalCustomers > 0 ? Math.round((repeatCustomersCount / totalCustomers) * 100) : 0,
     };
 
-    // ── 7. avgOrderValue ───────────────────────────────
+    // ── avgOrderValue ───────────────────────────────
     const avgOrderValue = avgOrderValueResult._avg?.total
       ? Math.round(avgOrderValueResult._avg.total * 100) / 100
       : 0;
 
-    // ── 8. monthlyComparison ───────────────────────────
+    // ── monthlyComparison ───────────────────────────
     const thisMonthOrders = monthOrders._count.id || 0;
     const thisMonthRevenue = monthOrders._sum.total || 0;
     const monthlyComparison = {
@@ -239,7 +286,7 @@ export async function GET(req: NextRequest) {
       lastMonth: { orders: lastMonthOrdersCount, revenue: lastMonthRevenue._sum.total || 0 },
     };
 
-    // ── Average delivery time ──────────────────────────
+    // ── Average delivery time ────────────────────────
     const avgMinutes =
       completedTimes.length > 0
         ? Math.round(
@@ -254,7 +301,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       success: true,
       data: {
-        ordersByDay,
+        ordersByDay: fullOrdersByDay,
         popularProducts,
         statusDistribution,
         busiestHours,
