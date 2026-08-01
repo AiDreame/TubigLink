@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 
 // GET /api/reviews?stationId={id} — List reviews for a station
 export async function GET(req: NextRequest) {
@@ -35,26 +37,32 @@ export async function GET(req: NextRequest) {
 // POST /api/reviews — Create a review for an order
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { userId, stationId, orderId, rating, comment } = body;
+    const session = await getServerSession(authOptions);
+    const authenticatedUserId = (session?.user as any)?.id;
+    if (!authenticatedUserId) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
 
-    if (!userId || !stationId || !orderId || !rating) {
+    const body = await req.json();
+    const { orderId, rating, comment } = body;
+
+    if (!orderId || rating === undefined || rating === null) {
       return NextResponse.json(
         { error: "Missing required fields" },
         { status: 400 }
       );
     }
 
-    if (rating < 1 || rating > 5) {
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
       return NextResponse.json(
-        { error: "Rating must be between 1 and 5" },
+        { error: "Rating must be an integer between 1 and 5" },
         { status: 400 }
       );
     }
 
-    // Check if order exists and is delivered
+    // Derive ownership and station from the authoritative order record.
     const order = await prisma.order.findUnique({ where: { id: orderId } });
-    if (!order || order.status !== "DELIVERED") {
+    if (!order || order.status !== "DELIVERED" || order.userId !== authenticatedUserId) {
       return NextResponse.json(
         { error: "Can only review delivered orders" },
         { status: 400 }
@@ -73,13 +81,14 @@ export async function POST(req: NextRequest) {
     }
 
     const review = await prisma.review.create({
-      data: { userId, stationId, orderId, rating, comment },
+      data: { userId: authenticatedUserId, stationId: order.stationId, orderId, rating, comment },
       include: {
         user: { select: { name: true, avatar: true } },
       },
     });
 
     // Update station's average rating
+    const stationId = order.stationId;
     const stats = await prisma.review.aggregate({
       where: { stationId },
       _avg: { rating: true },
