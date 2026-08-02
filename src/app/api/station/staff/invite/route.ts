@@ -3,9 +3,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { getDefaultPermissions } from "@/lib/permissions";
+import { sendEmail } from "@/lib/email";
 import crypto from "crypto";
-
-const ACCEPT_URL = process.env.NEXT_PUBLIC_APP_URL || "https://61ff115f14e4bafeeef5aa11e5e6452d.ctonew.app";
 
 // POST /api/station/staff/invite — Send staff invite (owner only)
 export async function POST(req: NextRequest) {
@@ -50,7 +49,10 @@ export async function POST(req: NextRequest) {
 
     if (existingStaff) {
       return NextResponse.json(
-        { error: "This person has already been invited or is already a staff member" },
+        {
+          error:
+            "This person has already been invited or is already a staff member",
+        },
         { status: 409 }
       );
     }
@@ -79,26 +81,35 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Send invite email
-    const acceptUrl = `${ACCEPT_URL}/station/staff/accept?token=${inviteToken}`;
-    const emailBody = `You've been invited to join ${staff.station.name} on AquaLink PH.
-      
-Role: ${staffRole}
-
-Click here to accept your invitation:
-${acceptUrl}
-
-This invitation will expire once used.`;
-
-    try {
-      // Use the team's inbox to send the email
-      const inboxId = "aqualink-ph-48fab409@ctomail.io";
-      // We'll just log it for now since sending email requires the inbox tool
-      console.log(`[STAFF INVITE] To: ${email}, Station: ${staff.station.name}, URL: ${acceptUrl}`);
-    } catch (emailErr) {
-      console.error("Failed to send invite email:", emailErr);
-      // Don't fail the request — the invite record is already created
-    }
+    // Send invite email after recording the invite. A failed send does not remove
+    // the record, so the invitation can be retried.
+    const inviteBaseUrl =
+      process.env.INVITE_BASE_URL ||
+      process.env.NEXT_PUBLIC_APP_URL ||
+      "https://151ddcb0324ec849a5e3e6c1f3692000.ctonew.app";
+    const acceptUrl = `${inviteBaseUrl.replace(/\/+$/, "")}/station/staff/accept?token=${encodeURIComponent(inviteToken)}`;
+    const text = `You've been invited to join ${staff.station.name} on AquaLink PH.\n\nRole: ${staffRole}\n\nAccept your invitation: ${acceptUrl}\n\nThis invitation will expire once used.`;
+    const html = `<!doctype html>
+<html lang="en">
+  <body style="font-family: Arial, sans-serif; color: #172033; line-height: 1.5;">
+    <h1>You're invited to AquaLink PH</h1>
+    <p>You've been invited to join <strong>${staff.station.name}</strong> as a <strong>${staffRole}</strong>.</p>
+    <p><a href="${acceptUrl}" style="display: inline-block; padding: 12px 20px; background: #0ea5e9; color: #fff; text-decoration: none; border-radius: 6px;">Accept invitation</a></p>
+    <p>Or copy and paste this link into your browser:</p>
+    <p><a href="${acceptUrl}">${acceptUrl}</a></p>
+    <p>This invitation will expire once used.</p>
+  </body>
+</html>`;
+    const emailResult = await sendEmail({
+      to: email,
+      subject: `You're invited to join ${staff.station.name} on AquaLink PH`,
+      html,
+      text,
+    });
+    const emailStatus = emailResult.ok ? "SENT" : "FAILED";
+    const message = emailResult.ok
+      ? `Invitation sent to ${email}`
+      : `Invitation recorded for ${email}, but the email failed to send: ${emailResult.error}`;
 
     return NextResponse.json(
       {
@@ -110,8 +121,9 @@ This invitation will expire once used.`;
           status: staff.status,
           stationName: staff.station.name,
           inviteToken, // Only returned on creation
+          emailStatus,
         },
-        message: `Invitation sent to ${email}`,
+        message,
       },
       { status: 201 }
     );
