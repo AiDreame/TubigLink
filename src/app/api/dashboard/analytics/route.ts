@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { authorizeDashboardStation, isAuthorizedStation } from "@/lib/station-auth";
 
 // GET /api/dashboard/analytics — Rich analytics for station owner
 // Optional query params:
@@ -26,28 +25,9 @@ export async function GET(req: NextRequest) {
       days = parseInt(rawDays, 10);
     }
 
-    // If no stationId provided, try to get it from the logged-in user
-    if (!stationId) {
-      const session = await getServerSession(authOptions);
-      if (!session?.user) {
-        return NextResponse.json(
-          { error: "Station ID required or log in as a provider" },
-          { status: 401 }
-        );
-      }
-
-      const userStation = await prisma.station.findFirst({
-        where: { userId: (session.user as any).id },
-      });
-
-      if (!userStation) {
-        return NextResponse.json(
-          { error: "No station found for this account" },
-          { status: 404 }
-        );
-      }
-      stationId = userStation.id;
-    }
+    const access = await authorizeDashboardStation(stationId);
+    if (!isAuthorizedStation(access)) return access;
+    stationId = access.stationId;
 
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());

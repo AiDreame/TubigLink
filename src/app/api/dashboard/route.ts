@@ -1,36 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { authorizeDashboardStation, isAuthorizedStation } from "@/lib/station-auth";
 
 // GET /api/dashboard — Get provider dashboard analytics
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    let stationId = searchParams.get("stationId");
-
-    // If no stationId provided, try to get it from the logged-in user
-    if (!stationId) {
-      const session = await getServerSession(authOptions);
-      if (!session?.user) {
-        return NextResponse.json(
-          { error: "Station ID required or log in as a provider" },
-          { status: 401 }
-        );
-      }
-
-      const station = await prisma.station.findFirst({
-        where: { userId: (session.user as any).id },
-      });
-
-      if (!station) {
-        return NextResponse.json(
-          { error: "No station found for this account" },
-          { status: 404 }
-        );
-      }
-      stationId = station.id;
-    }
+    const access = await authorizeDashboardStation(searchParams.get("stationId"));
+    if (!isAuthorizedStation(access)) return access;
+    const { stationId } = access;
 
     // Date helpers
     const now = new Date();
