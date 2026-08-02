@@ -1,172 +1,53 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { isProvisional, checkProvisionalLimits } from "@/lib/provisional";
 
-// GET /api/orders — Get user's orders (authenticated)
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const userId = searchParams.get("userId");
-    const stationId = searchParams.get("stationId");
-    const status = searchParams.get("status");
-    const limit = Math.min(Number(searchParams.get("limit")) || 20, 50);
-
     const where: any = {};
-
+    const userId = searchParams.get("userId");
     if (userId) where.userId = userId;
-    if (stationId) where.stationId = stationId;
-    if (status) where.status = status;
-
-    const orders = await prisma.order.findMany({
-      where,
-      include: {
-        items: {
-          include: { product: true },
-        },
-        station: {
-          select: { id: true, name: true, slug: true, logo: true },
-        },
-        address: true,
-      },
-      orderBy: { createdAt: "desc" },
-      take: limit,
-    });
-
+    if (searchParams.get("stationId")) where.stationId = searchParams.get("stationId");
+    if (searchParams.get("status")) where.status = searchParams.get("status");
+    const orders = await prisma.order.findMany({ where, include: { items: { include: { product: true } }, station: { select: { id: true, name: true, slug: true, logo: true } }, address: true }, orderBy: { createdAt: "desc" }, take: Math.min(Number(searchParams.get("limit")) || 20, 50) });
     return NextResponse.json({ success: true, data: orders });
-  } catch (error) {
-    console.error("Orders fetch error:", error);
-    return NextResponse.json(
-      { success: false, error: "Failed to fetch orders" },
-      { status: 500 }
-    );
-  }
+  } catch (error) { console.error("Orders fetch error:", error); return NextResponse.json({ success: false, error: "Failed to fetch orders" }, { status: 500 }); }
 }
 
-// POST /api/orders — Create a new order
 export async function POST(req: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    const user = session?.user as any;
+    if (!user?.id) return NextResponse.json({ success: false, error: "Authentication required" }, { status: 401 });
     const body = await req.json();
-    const { userId, stationId, items, addressId, paymentMethod, notes, orderType, recurringDay } = body;
-
-    // Validate
-    if (!userId || !stationId || !items?.length || !addressId) {
-      return NextResponse.json(
-        { error: "Missing required fields" },
-        { status: 400 }
-      );
-    }
-
-    // Calculate totals
+    const { stationId, items, addressId, paymentMethod, notes, orderType, recurringDay } = body;
+    if (!stationId || !Array.isArray(items) || !items.length || !addressId) return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    const method = paymentMethod || "COD";
+    if (method !== "COD" && method !== "GCASH") return NextResponse.json({ error: "Unsupported payment method" }, { status: 400 });
+    const address = await prisma.address.findFirst({ where: { id: addressId, userId: user.id } });
+    if (!address) return NextResponse.json({ error: "Address not found" }, { status: 403 });
+    const station = await prisma.station.findUnique({ where: { id: stationId }, select: { deliveryFee: true, userId: true, onboardingComplete: true, provisionalUntil: true, isActive: true, approvedAt: true } });
+    if (!station) return NextResponse.json({ error: "Station not found" }, { status: 404 });
+    if (!station.isActive) return NextResponse.json({ error: "Station is not currently active" }, { status: 403 });
+    if (isProvisional(station)) { const check = await checkProvisionalLimits(stationId, user.id); if (!check.allowed) return NextResponse.json({ error: check.reason }, { status: 403 }); }
+    const productIds = items.map((item: any) => item.productId);
+    const products = await prisma.product.findMany({ where: { id: { in: productIds }, stationId, isAvailable: true } });
+    if (products.length !== productIds.length) return NextResponse.json({ error: "One or more products are unavailable at this station" }, { status: 400 });
     let subtotal = 0;
-    const orderItems = [];
-
-    for (const item of items) {
-      const product = await prisma.product.findUnique({
-        where: { id: item.productId },
-      });
-      if (!product || !product.isAvailable) {
-        return NextResponse.json(
-          { error: `Product ${item.productId} is not available` },
-          { status: 400 }
-        );
-      }
-      const itemTotal = product.price * item.quantity;
-      subtotal += itemTotal;
-      orderItems.push({
-        productId: product.id,
-        quantity: item.quantity,
-        unitPrice: product.price,
-      });
-    }
-
-    // Get station with delivery fee and provisional info
-    const station = await prisma.station.findUnique({
-      where: { id: stationId },
-      select: {
-        deliveryFee: true,
-        userId: true,
-        onboardingComplete: true,
-        provisionalUntil: true,
-        isActive: true,
-        approvedAt: true,
-      },
+    const orderItems = items.map((item: any) => {
+      const product = products.find((p) => p.id === item.productId);
+      const quantity = Number(item.quantity);
+      if (!product || !Number.isInteger(quantity) || quantity < 1) throw new Error("Invalid product quantity");
+      subtotal += product.price * quantity;
+      return { productId: product.id, quantity, unitPrice: product.price };
     });
-
-    if (!station) {
-      return NextResponse.json(
-        { error: "Station not found" },
-        { status: 404 }
-      );
-    }
-
-    if (!station.isActive) {
-      return NextResponse.json(
-        { error: "Station is not currently active" },
-        { status: 403 }
-      );
-    }
-
-    // Check if station is in provisional mode and enforce limits
-    if (isProvisional(station)) {
-      const limitCheck = await checkProvisionalLimits(stationId, userId);
-      if (!limitCheck.allowed) {
-        return NextResponse.json(
-          { error: limitCheck.reason },
-          { status: 403 }
-        );
-      }
-    }
-
     const deliveryFee = station.deliveryFee || 0;
     const total = subtotal + deliveryFee;
-
-    // Create order
-    const order = await prisma.order.create({
-      data: {
-        userId,
-        stationId,
-        addressId,
-        paymentMethod: paymentMethod || "COD",
-        paymentStatus: "PENDING",
-        orderType: orderType || "ONCE",
-        recurringDay: recurringDay || null,
-        subtotal,
-        deliveryFee,
-        total,
-        notes: notes || null,
-        status: "PENDING",
-        items: {
-          create: orderItems,
-        },
-      },
-      include: {
-        items: { include: { product: true } },
-        station: { select: { name: true } },
-        address: true,
-      },
-    });
-
-    // Create notification for the station (only for COD — paid on delivery)
-    // For non-COD methods (GCASH, CARD, PAYMAYA), notification is sent after payment confirmation
-    const isCod = (paymentMethod || "COD") === "COD";
-    if (isCod) {
-      await prisma.notification.create({
-        data: {
-          userId: station.userId, // Station owner
-          type: "ORDER_STATUS",
-          title: "New Order Received",
-          message: `New order #${order.id.substring(0, 8)} — ₱${total.toFixed(2)}`,
-          data: JSON.stringify({ orderId: order.id }),
-        },
-      });
-    }
-
-    return NextResponse.json({ success: true, data: order }, { status: 201 });
-  } catch (error) {
-    console.error("Order creation error:", error);
-    return NextResponse.json(
-      { success: false, error: "Failed to create order" },
-      { status: 500 }
-    );
-  }
+    const order = await prisma.order.create({ data: { userId: user.id, stationId, addressId, paymentMethod: method, paymentStatus: "PENDING", orderType: orderType || "ONCE", recurringDay: recurringDay || null, subtotal, deliveryFee, total, amountCentavos: Math.round(total * 100), notes: notes || null, status: "PENDING", items: { create: orderItems } }, include: { items: { include: { product: true } }, station: { select: { name: true } }, address: true } });
+    if (method === "COD") await prisma.notification.create({ data: { userId: station.userId, type: "ORDER_STATUS", title: "New Order Received", message: `New order #${order.id.substring(0, 8)} — ₱${total.toFixed(2)}`, data: JSON.stringify({ orderId: order.id }) } });
+    return NextResponse.json({ success: true, data: order, ...(method === "GCASH" ? { nextAction: "INITIALIZE_PAYMENT" } : {}) }, { status: 201 });
+  } catch (error) { console.error("Order creation error:", error); return NextResponse.json({ success: false, error: error instanceof Error ? error.message : "Failed to create order" }, { status: 500 }); }
 }
