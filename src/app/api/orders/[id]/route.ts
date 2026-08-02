@@ -59,11 +59,21 @@ export async function PUT(
       );
     }
 
+    const currentOrder = await prisma.order.findUnique({
+      where: { id: params.id },
+      select: { paymentMethod: true },
+    });
+    if (!currentOrder) {
+      return NextResponse.json({ error: "Order not found" }, { status: 404 });
+    }
     const order = await prisma.order.update({
       where: { id: params.id },
       data: {
         status,
-        ...(status === "DELIVERED" ? { paymentStatus: "PAID" } : {}),
+        // COD is collected at the door. Prepaid statuses are authoritative from PayMongo.
+        ...(status === "DELIVERED" && currentOrder.paymentMethod === "COD"
+          ? { paymentStatus: "PAID", paymentPaidAt: new Date() }
+          : {}),
       },
       include: {
         items: { include: { product: true } },
