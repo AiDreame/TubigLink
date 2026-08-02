@@ -9,16 +9,16 @@ datasource db {
 
 // ─── USER ────────────────────────────────────────────
 model User {
-  id             String   @id @default(cuid())
-  phone          String   @unique
-  email          String?  @unique
-  name           String?
-  password       String?  // For email/password auth (bcrypt)
-  role           String   @default("CUSTOMER") // CUSTOMER | PROVIDER | ADMIN
-  avatar         String?
-  isVerified     Boolean  @default(false)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id         String   @id @default(cuid())
+  phone      String   @unique
+  email      String?  @unique
+  name       String?
+  password   String? // For email/password auth (bcrypt)
+  role       String   @default("CUSTOMER") // CUSTOMER | PROVIDER | ADMIN
+  avatar     String?
+  isVerified Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   stations       Station[]
   orders         Order[]
@@ -28,45 +28,47 @@ model User {
   paymentMethods PaymentMethod[]
 
   // Compliance & verification relations
-  verifiedDocuments   StationDocument[]   @relation("DocumentVerifier")
+  verifiedDocuments   StationDocument[]     @relation("DocumentVerifier")
   verifiedSteps       StationVerification[] @relation("StepVerifier")
-  verificationActions VerificationLog[]    @relation("ActionPerformer")
+  verificationActions VerificationLog[]     @relation("ActionPerformer")
 
   // Staff relations
-  staffInvited        StationStaff[]      @relation("StaffInviter")
-  staffRecords        StationStaff[]      @relation("StaffUser")
+  staffInvited     StationStaff[] @relation("StaffInviter")
+  staffRecords     StationStaff[] @relation("StaffUser")
+  refundsRequested Refund[]
+  customerDisputes Dispute[]      @relation("CustomerDisputes")
 }
 
 // ─── STATION (Water Refilling Station) ──────────────
 model Station {
-  id             String   @id @default(cuid())
-  userId         String
-  name           String
-  slug           String   @unique
-  description    String?
-  logo           String?
-  banner         String?
-  phone          String?
-  address        String
-  barangay       String
-  city           String
-  province       String
-  latitude       Float?
-  longitude      Float?
-  rating         Float    @default(0)
-  totalReviews   Int      @default(0)
-  deliveryFee    Float    @default(0)
-  minOrder       Float    @default(0)
-  isActive       Boolean  @default(true)
-  isFeatured     Boolean  @default(false)
-  openingTime    String   @default("06:00")
-  closingTime    String   @default("21:00")
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id           String   @id @default(cuid())
+  userId       String
+  name         String
+  slug         String   @unique
+  description  String?
+  logo         String?
+  banner       String?
+  phone        String?
+  address      String
+  barangay     String
+  city         String
+  province     String
+  latitude     Float?
+  longitude    Float?
+  rating       Float    @default(0)
+  totalReviews Int      @default(0)
+  deliveryFee  Float    @default(0)
+  minOrder     Float    @default(0)
+  isActive     Boolean  @default(true)
+  isFeatured   Boolean  @default(false)
+  openingTime  String   @default("06:00")
+  closingTime  String   @default("21:00")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   // ── Compliance fields ──
-  businessType          String?   // SOLE_PROP | CORPORATION | PARTNERSHIP | COOPERATIVE
-  tin                   String?   // Tax Identification Number
+  businessType          String? // SOLE_PROP | CORPORATION | PARTNERSHIP | COOPERATIVE
+  tin                   String? // Tax Identification Number
   onboardingStep        Int       @default(0)
   onboardingComplete    Boolean   @default(false)
   onboardingSubmittedAt DateTime?
@@ -76,93 +78,117 @@ model Station {
   rejectionReason       String?
   lastComplianceCheck   DateTime?
 
-  user           User     @relation(fields: [userId], references: [id])
-  products       Product[]
-  deliveryZones  DeliveryZone[]
-  orders         Order[]
-  reviews        Review[]
+  user          User           @relation(fields: [userId], references: [id])
+  products      Product[]
+  deliveryZones DeliveryZone[]
+  orders        Order[]
+  reviews       Review[]
 
   // Compliance & verification relations
-  documents             StationDocument[]
-  verificationSteps     StationVerification[]
-  verificationLogs      VerificationLog[]
+  documents         StationDocument[]
+  verificationSteps StationVerification[]
+  verificationLogs  VerificationLog[]
 
   // Staff relations
-  staff                 StationStaff[]
+  staff    StationStaff[]
+  disputes Dispute[]
+  payouts  Payout[]
 }
 
 // ─── PRODUCT (Water Type) ───────────────────────────
 model Product {
-  id             String   @id @default(cuid())
-  stationId      String
-  name           String
-  type           String   @default("PURIFIED") // PURIFIED | MINERAL | ALKALINE
-  size           String   @default("5-gallon")
-  price          Float    @default(0)
-  stock          Int      @default(0)
-  isAvailable    Boolean  @default(true)
-  image          String?
-  description    String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id          String   @id @default(cuid())
+  stationId   String
+  name        String
+  type        String   @default("PURIFIED") // PURIFIED | MINERAL | ALKALINE
+  size        String   @default("5-gallon")
+  price       Float    @default(0)
+  stock       Int      @default(0)
+  isAvailable Boolean  @default(true)
+  image       String?
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  station        Station  @relation(fields: [stationId], references: [id])
-  orderItems     OrderItem[]
+  station    Station     @relation(fields: [stationId], references: [id])
+  orderItems OrderItem[]
 }
 
 // ─── DELIVERY ZONE ──────────────────────────────────
 model DeliveryZone {
-  id               String   @id @default(cuid())
+  id               String @id @default(cuid())
   stationId        String
   barangay         String
   city             String
-  deliveryFee      Float    @default(0)
-  estimatedMinutes Int      @default(30)
+  deliveryFee      Float  @default(0)
+  estimatedMinutes Int    @default(30)
 
-  station          Station  @relation(fields: [stationId], references: [id])
+  station Station @relation(fields: [stationId], references: [id])
 
   @@unique([stationId, barangay, city])
 }
 
 // ─── ORDER ──────────────────────────────────────────
 model Order {
-  id             String       @id @default(cuid())
-  userId         String
-  stationId      String
-  status         String       @default("PENDING") // PENDING | ACCEPTED | PREPARING | OUT_FOR_DELIVERY | DELIVERED | CANCELLED
-  orderType      String       @default("ONCE")    // ONCE | RECURRING
-  recurringDay   String?      // MON | TUE | WED | THU | FRI | SAT | SUN
-  subtotal       Float        @default(0)
-  deliveryFee    Float        @default(0)
-  total          Float        @default(0)
-  paymentMethod  String       @default("COD")     // COD | GCASH | CARD | PAYMAYA
-  paymentStatus  String       @default("PENDING") // PENDING | PAID | FAILED | REFUNDED
-  paymentId      String?      // PayMongo payment intent ID
-  notes          String?
-  addressId      String
-  driverId       String?      // Assigned driver (StationStaff)
-  deliveryOrder  Int?         // Sequence position in driver's route
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  id                    String    @id @default(cuid())
+  userId                String
+  stationId             String
+  status                String    @default("PENDING") // PENDING | ACCEPTED | PREPARING | OUT_FOR_DELIVERY | DELIVERED | CANCELLED
+  orderType             String    @default("ONCE") // ONCE | RECURRING
+  recurringDay          String? // MON | TUE | WED | THU | FRI | SAT | SUN
+  subtotal              Float     @default(0)
+  deliveryFee           Float     @default(0)
+  total                 Float     @default(0)
+  paymentMethod         String    @default("COD") // COD | GCASH | CARD | PAYMAYA
+  paymentStatus         String    @default("PENDING") // PENDING | PAID | FAILED | REFUNDED
+  paymentId             String? // PayMongo payment intent ID
+  paymentIntentId       String?   @unique
+  paymentMethodId       String?
+  paymentPaidAt         DateTime?
+  paymentFailedAt       DateTime?
+  paymentFailureCode    String?
+  paymentFailureMessage String?
+  paymentRefundedAt     DateTime?
+  paymentRefundedAmount Int?
+  paymentCurrency       String    @default("PHP")
+  amountCentavos        Int?
+  commissionCentavos    Int?
+  stationNetCentavos    Int?
+  commissionRateBps     Int?
+  deliveredAt           DateTime?
+  deliveryConfirmedAt   DateTime?
+  disputeDeadlineAt     DateTime?
+  payoutEligibleAt      DateTime?
+  notes                 String?
+  addressId             String
+  driverId              String? // Assigned driver (StationStaff)
+  deliveryOrder         Int? // Sequence position in driver's route
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
-  user           User         @relation(fields: [userId], references: [id])
-  station        Station      @relation(fields: [stationId], references: [id])
-  address        Address      @relation(fields: [addressId], references: [id])
-  driver         StationStaff? @relation(fields: [driverId], references: [id])
+  user           User             @relation(fields: [userId], references: [id])
+  station        Station          @relation(fields: [stationId], references: [id])
+  address        Address          @relation(fields: [addressId], references: [id])
+  driver         StationStaff?    @relation(fields: [driverId], references: [id])
   items          OrderItem[]
   review         Review?
+  paymentEvents  PaymentEvent[]
+  disputes       Dispute[]
+  payoutItems    PayoutItem[]
+  paymentAttempts PaymentAttempt[]
+  refunds         Refund[]
 }
 
 // ─── ORDER ITEM ─────────────────────────────────────
 model OrderItem {
-  id        String   @id @default(cuid())
+  id        String @id @default(cuid())
   orderId   String
   productId String
   quantity  Int
   unitPrice Float
 
-  order     Order    @relation(fields: [orderId], references: [id])
-  product   Product  @relation(fields: [productId], references: [id])
+  order   Order   @relation(fields: [orderId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
 }
 
 // ─── REVIEW ─────────────────────────────────────────
@@ -171,13 +197,13 @@ model Review {
   userId    String
   stationId String
   orderId   String   @unique
-  rating    Int      // 1-5
+  rating    Int // 1-5
   comment   String?
   createdAt DateTime @default(now())
 
-  user      User     @relation(fields: [userId], references: [id])
-  station   Station  @relation(fields: [stationId], references: [id])
-  order     Order    @relation(fields: [orderId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+  station Station @relation(fields: [stationId], references: [id])
+  order   Order   @relation(fields: [orderId], references: [id])
 }
 
 // ─── ADDRESS ────────────────────────────────────────
@@ -198,20 +224,20 @@ model Address {
   isDefault Boolean  @default(false)
   createdAt DateTime @default(now())
 
-  user      User     @relation(fields: [userId], references: [id])
-  orders    Order[]
+  user   User    @relation(fields: [userId], references: [id])
+  orders Order[]
 }
 
 // ─── PAYMENT METHOD ─────────────────────────────────
 model PaymentMethod {
   id        String   @id @default(cuid())
   userId    String
-  type      String   // GCASH | CARD | PAYMAYA
-  details   String   // JSON: { phone, cardLast4, etc. }
+  type      String // GCASH | CARD | PAYMAYA
+  details   String // JSON: { phone, cardLast4, etc. }
   isDefault Boolean  @default(false)
   createdAt DateTime @default(now())
 
-  user      User     @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id])
 
   @@unique([userId, type])
 }
@@ -220,14 +246,14 @@ model PaymentMethod {
 model Notification {
   id        String   @id @default(cuid())
   userId    String
-  type      String   // ORDER_STATUS | PROMO | SYSTEM
+  type      String // ORDER_STATUS | PROMO | SYSTEM
   title     String
   message   String
-  data      String?  // JSON payload
+  data      String? // JSON payload
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
 
-  user      User     @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id])
 }
 
 // ═══════════════════════════════════════════════════════
@@ -243,7 +269,7 @@ model Notification {
 model StationDocument {
   id                 String    @id @default(cuid())
   stationId          String
-  type               String    // Document type (see comment above for values)
+  type               String // Document type (see comment above for values)
   fileUrl            String
   fileName           String
   fileSize           Int       @default(0)
@@ -256,8 +282,8 @@ model StationDocument {
   uploadedAt         DateTime  @default(now())
   notes              String?
 
-  station            Station   @relation(fields: [stationId], references: [id])
-  verifiedBy         User?     @relation("DocumentVerifier", fields: [verifiedById], references: [id])
+  station    Station @relation(fields: [stationId], references: [id])
+  verifiedBy User?   @relation("DocumentVerifier", fields: [verifiedById], references: [id])
 
   @@index([stationId, type])
   @@index([stationId, verificationStatus])
@@ -271,14 +297,14 @@ model StationDocument {
 model StationVerification {
   id           String   @id @default(cuid())
   stationId    String
-  step         String   // Name of the verification step
+  step         String // Name of the verification step
   status       String   @default("PENDING") // PENDING | IN_PROGRESS | PASSED | FAILED | SKIPPED
   verifiedById String?
   notes        String?
   timestamp    DateTime @default(now())
 
-  station      Station  @relation(fields: [stationId], references: [id])
-  verifiedBy   User?    @relation("StepVerifier", fields: [verifiedById], references: [id])
+  station    Station @relation(fields: [stationId], references: [id])
+  verifiedBy User?   @relation("StepVerifier", fields: [verifiedById], references: [id])
 
   @@index([stationId, step])
   @@index([stationId, status])
@@ -290,15 +316,15 @@ model StationVerification {
 //          STEP_FAILED | STATION_APPROVED | STATION_REJECTED | COMPLIANCE_CHECK |
 //          PROVISIONAL_GRANTED | PROVISIONAL_EXPIRED | ONBOARDING_SUBMITTED
 model VerificationLog {
-  id             String   @id @default(cuid())
-  stationId      String
-  action         String   // Action type (see comment above for values)
-  performedById  String?
-  details        String?  // JSON payload with action-specific data
-  createdAt      DateTime @default(now())
+  id            String   @id @default(cuid())
+  stationId     String
+  action        String // Action type (see comment above for values)
+  performedById String?
+  details       String? // JSON payload with action-specific data
+  createdAt     DateTime @default(now())
 
-  station        Station  @relation(fields: [stationId], references: [id])
-  performedBy    User?    @relation("ActionPerformer", fields: [performedById], references: [id])
+  station     Station @relation(fields: [stationId], references: [id])
+  performedBy User?   @relation("ActionPerformer", fields: [performedById], references: [id])
 
   @@index([stationId, createdAt])
   @@index([stationId, action])
@@ -314,29 +340,147 @@ model VerificationLog {
 // Roles: STAFF | MANAGER | ADMIN
 // Statuses: INVITED | ACTIVE | DEACTIVATED
 model StationStaff {
-  id             String    @id @default(cuid())
-  stationId      String
-  email          String
-  name           String?
-  phone          String?
-  permissions    String    @default("{}") // JSON string of permission keys
-  role           String    @default("STAFF") // STAFF | MANAGER | ADMIN
-  status         String    @default("INVITED") // INVITED | ACTIVE | DEACTIVATED
-  inviteToken    String    @unique
-  userId         String?   // Linked user account after acceptance
-  invitedById    String
-  acceptedAt     DateTime?
-  invitedAt      DateTime  @default(now())
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  id          String    @id @default(cuid())
+  stationId   String
+  email       String
+  name        String?
+  phone       String?
+  permissions String    @default("{}") // JSON string of permission keys
+  role        String    @default("STAFF") // STAFF | MANAGER | ADMIN
+  status      String    @default("INVITED") // INVITED | ACTIVE | DEACTIVATED
+  inviteToken String    @unique
+  userId      String? // Linked user account after acceptance
+  invitedById String
+  acceptedAt  DateTime?
+  invitedAt   DateTime  @default(now())
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-  station        Station   @relation(fields: [stationId], references: [id])
-  invitedBy      User      @relation("StaffInviter", fields: [invitedById], references: [id])
-  user           User?     @relation("StaffUser", fields: [userId], references: [id])
+  station   Station @relation(fields: [stationId], references: [id])
+  invitedBy User    @relation("StaffInviter", fields: [invitedById], references: [id])
+  user      User?   @relation("StaffUser", fields: [userId], references: [id])
 
-  assignedOrders Order[]   // Orders assigned to this driver
+  assignedOrders Order[] // Orders assigned to this driver
 
   @@index([stationId, status])
   @@index([inviteToken])
   @@index([email])
+}
+
+// ─── PAYMENT DOMAIN ─────────────────────────────────
+model PaymentEvent {
+  id              String    @id @default(cuid())
+  provider        String    @default("PAYMONGO")
+  providerEventId String
+  eventType       String
+  orderId         String?
+  paymentIntentId String?
+  payload         String
+  processedAt     DateTime?
+  processingError String?
+  createdAt       DateTime  @default(now())
+  order           Order?    @relation(fields: [orderId], references: [id])
+
+  @@unique([provider, providerEventId])
+  @@index([paymentIntentId])
+  @@index([orderId])
+}
+
+model PaymentAttempt {
+  id              String   @id @default(cuid())
+  orderId         String
+  idempotencyKey  String   @unique
+  paymentIntentId String?
+  status          String   @default("PENDING")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  order           Order    @relation(fields: [orderId], references: [id])
+
+  @@index([orderId])
+}
+
+model Refund {
+  id               String    @id @default(cuid())
+  orderId          String
+  providerRefundId String?   @unique
+  amountCentavos   Int
+  reason           String
+  status           String    @default("PENDING")
+  requestedById    String?
+  requestedAt      DateTime  @default(now())
+  completedAt      DateTime?
+  failureMessage   String?
+  order            Order     @relation(fields: [orderId], references: [id])
+  requestedBy      User?     @relation(fields: [requestedById], references: [id])
+  dispute          Dispute?
+
+  @@index([orderId])
+  @@index([status])
+}
+
+model Dispute {
+  id                 String    @id @default(cuid())
+  orderId            String
+  customerId         String
+  stationId          String
+  type               String
+  status             String    @default("OPEN")
+  description        String
+  evidence           String?
+  amountHeldCentavos Int
+  stationResponse    String?
+  stationRespondedAt DateTime?
+  responseDeadlineAt DateTime
+  openedAt           DateTime  @default(now())
+  resolution         String?
+  resolvedAt         DateTime?
+  refundId           String?   @unique
+  order              Order     @relation(fields: [orderId], references: [id])
+  customer           User      @relation("CustomerDisputes", fields: [customerId], references: [id])
+  station            Station   @relation(fields: [stationId], references: [id])
+  refund             Refund?   @relation(fields: [refundId], references: [id])
+
+  @@index([stationId, status])
+  @@index([orderId])
+  @@index([responseDeadlineAt])
+}
+
+model Payout {
+  id                 String       @id @default(cuid())
+  stationId          String
+  periodStart        DateTime
+  periodEnd          DateTime
+  grossCentavos      Int
+  commissionCentavos Int
+  heldCentavos       Int
+  adjustmentCentavos Int          @default(0)
+  netCentavos        Int
+  method             String       @default("MANUAL_BANK_TRANSFER")
+  status             String       @default("DRAFT")
+  providerPayoutId   String?
+  transferReference  String?
+  failureMessage     String?
+  createdAt          DateTime     @default(now())
+  approvedAt         DateTime?
+  paidAt             DateTime?
+  station            Station      @relation(fields: [stationId], references: [id])
+  payoutItems        PayoutItem[]
+
+  @@unique([stationId, periodStart, periodEnd])
+  @@index([stationId, status])
+}
+
+model PayoutItem {
+  id                 String   @id @default(cuid())
+  payoutId           String
+  orderId            String   @unique
+  grossCentavos      Int
+  commissionCentavos Int
+  heldCentavos       Int
+  netCentavos        Int
+  createdAt          DateTime @default(now())
+  payout             Payout   @relation(fields: [payoutId], references: [id])
+  order              Order    @relation(fields: [orderId], references: [id])
+
+  @@index([payoutId])
 }
