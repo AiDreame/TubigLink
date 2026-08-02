@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -34,7 +34,7 @@ const MODULE_LABELS: Record<string, string> = {
   delivery_zones: "Delivery Zones", settings: "Settings", staff: "Staff",
 };
 
-export default function AcceptInvitePage() {
+function AcceptInviteContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const emailParam = searchParams.get("email");
@@ -234,5 +234,19 @@ export default function AcceptInvitePage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+export default function AcceptInvitePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-950 flex items-center justify-center">
+          <div className="text-muted-foreground">Loading invite...</div>
+        </div>
+      }
+    >
+      <AcceptInviteContent />
+    </Suspense>
   );
 }
