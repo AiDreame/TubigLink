@@ -10,12 +10,15 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    const session = await getServerSession(authOptions);
+    const user = session?.user as any;
+    if (!user?.id) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     const order = await prisma.order.findUnique({
       where: { id: params.id },
       include: {
         items: { include: { product: true } },
         station: {
-          select: { id: true, name: true, slug: true, logo: true, phone: true },
+          select: { id: true, name: true, slug: true, logo: true, phone: true, userId: true },
         },
         address: true,
         review: true,
@@ -28,6 +31,10 @@ export async function GET(
         { status: 404 }
       );
     }
+    let allowed = order.userId === user.id || user.role === "ADMIN";
+    if (!allowed) allowed = order.station.userId === user.id;
+    if (!allowed) allowed = !!(await prisma.stationStaff.findFirst({ where: { userId: user.id, stationId: order.stationId, status: "ACTIVE" } }));
+    if (!allowed) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 403 });
 
     // Lazy 24h auto-confirm backfill (safe: deterministic from deliveredAt).
     const withTimeline = await applyDeliveryAutoConfirm(order);

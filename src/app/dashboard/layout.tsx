@@ -18,6 +18,7 @@ import {
   Store,
   Users,
   Truck,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -26,6 +27,7 @@ import { useSession, signOut } from "next-auth/react";
 const sidebarItems = [
   { label: "Overview", icon: LayoutDashboard, href: "/dashboard" },
   { label: "Orders", icon: ShoppingBag, href: "/dashboard/orders" },
+  { label: "Disputes", icon: AlertTriangle, href: "/dashboard/disputes" },
   { label: "Products", icon: Package, href: "/dashboard/products" },
   { label: "Staff", icon: Users, href: "/dashboard/staff" },
   { label: "Earnings", icon: BarChart3, href: "/dashboard/earnings" },

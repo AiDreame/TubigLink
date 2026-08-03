@@ -8,9 +8,10 @@ import { applyDeliveryAutoConfirmMany } from "@/lib/delivery";
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const where: any = {};
-    const userId = searchParams.get("userId");
-    if (userId) where.userId = userId;
+    const session = await getServerSession(authOptions);
+    const user = session?.user as any;
+    if (!user?.id) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    const where: any = { userId: user.id };
     if (searchParams.get("stationId")) where.stationId = searchParams.get("stationId");
     if (searchParams.get("status")) where.status = searchParams.get("status");
     let orders = await prisma.order.findMany({ where, include: { items: { include: { product: true } }, station: { select: { id: true, name: true, slug: true, logo: true } }, address: true }, orderBy: { createdAt: "desc" }, take: Math.min(Number(searchParams.get("limit")) || 20, 50) });
