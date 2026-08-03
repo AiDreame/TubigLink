@@ -104,6 +104,8 @@ export async function POST(request: NextRequest) {
             const fullAmount = refund.amountCentavos >= (await tx.order.findUnique({ where: { id: refund.orderId }, select: { amountCentavos: true, total: true } }))?.amountCentavos!;
             const target = await tx.order.findUnique({ where: { id: refund.orderId }, select: { paymentRefundedAmount: true } });
             await tx.order.update({ where: { id: refund.orderId }, data: { ...(fullAmount ? { paymentStatus: "REFUNDED" } : {}), paymentRefundedAt: new Date(), paymentRefundedAmount: (target?.paymentRefundedAmount || 0) + refund.amountCentavos } });
+            const dispute = await tx.dispute.findFirst({ where: { refundId: refund.id } });
+            if (dispute && dispute.status !== "REFUNDED") await tx.dispute.update({ where: { id: dispute.id }, data: { status: "REFUNDED" } });
           }
           await tx.paymentEvent.update({ where: { id: event.id }, data: { orderId: refund.orderId, processedAt: new Date() } });
           return;
@@ -145,6 +147,7 @@ export async function POST(request: NextRequest) {
         } });
         const refundId = text(resource?.id);
         if (refundId) await tx.refund.upsert({ where: { providerRefundId: refundId }, create: { providerRefundId: refundId, orderId: order.id, amountCentavos: typeof resourceAttributes.amount === "number" ? resourceAttributes.amount : (order.amountCentavos || 0), reason: text(resourceAttributes.reason) || "PayMongo webhook", status: "SUCCEEDED", completedAt: new Date() }, update: { status: "SUCCEEDED", completedAt: new Date() } });
+        await tx.dispute.updateMany({ where: { orderId: order.id, status: "REFUND_PENDING" }, data: { status: "REFUNDED" } });
       }
       await tx.paymentEvent.update({ where: { id: event.id }, data: { orderId: order.id, processedAt: new Date() } });
     });
