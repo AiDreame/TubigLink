@@ -41,30 +41,28 @@ export async function GET(req: NextRequest) {
     // Fetch orders for dynamic range
     const rangeOrders = await prisma.order.findMany({
       where: { stationId, createdAt: { gte: rangeStart } },
-      select: { createdAt: true, total: true, status: true },
+      select: { createdAt: true, status: true },
       orderBy: { createdAt: "asc" },
     });
 
     // Build ordersByDay with zero-fill for inclusive daily buckets
-    const ordersByDayMap = new Map<string, { count: number; revenue: number }>();
+    const ordersByDayMap = new Map<string, { count: number }>();
     for (let i = 0; i < days; i++) {
       const d = new Date(rangeStart);
       d.setDate(d.getDate() + i);
       const key = d.toISOString().split("T")[0];
-      ordersByDayMap.set(key, { count: 0, revenue: 0 });
+      ordersByDayMap.set(key, { count: 0 });
     }
     for (const order of rangeOrders) {
       const key = new Date(order.createdAt).toISOString().split("T")[0];
       const existing = ordersByDayMap.get(key);
       if (existing) {
         existing.count++;
-        if (order.status === "DELIVERED") existing.revenue += order.total;
       }
     }
     const ordersByDay = Array.from(ordersByDayMap.entries()).map(([date, data]) => ({
       date,
       count: data.count,
-      revenue: data.revenue,
     }));
 
     // Lightweight response for overview graph
@@ -85,7 +83,7 @@ export async function GET(req: NextRequest) {
         ? rangeOrders
         : await prisma.order.findMany({
             where: { stationId, createdAt: { gte: startOfLast30Days } },
-            select: { createdAt: true, total: true, status: true },
+            select: { createdAt: true, status: true },
             orderBy: { createdAt: "asc" },
           });
 
@@ -170,30 +168,28 @@ export async function GET(req: NextRequest) {
     ]);
 
     // ── Build 30-day ordersByDay ─────────────────────
-    let fullOrdersByDay: { date: string; count: number; revenue: number }[];
+    let fullOrdersByDay: { date: string; count: number }[];
     if (days === 30) {
       fullOrdersByDay = ordersByDay;
     } else {
-      const fullMap = new Map<string, { count: number; revenue: number }>();
+      const fullMap = new Map<string, { count: number }>();
       for (let i = 0; i < 30; i++) {
         const d = new Date(startOfToday);
         d.setDate(d.getDate() - (29 - i));
         const key = d.toISOString().split("T")[0];
-        fullMap.set(key, { count: 0, revenue: 0 });
+        fullMap.set(key, { count: 0 });
       }
       for (const order of last30DaysOrders) {
         const key = new Date(order.createdAt).toISOString().split("T")[0];
         const existing = fullMap.get(key);
         if (existing) {
           existing.count++;
-          if (order.status === "DELIVERED") existing.revenue += order.total;
-        }
+          }
       }
       fullOrdersByDay = Array.from(fullMap.entries()).map(([date, data]) => ({
         date,
         count: data.count,
-        revenue: data.revenue,
-      }));
+        }));
     }
 
     // ── popularProducts ──────────────────────────────
@@ -213,7 +209,6 @@ export async function GET(req: NextRequest) {
       return {
         name: product?.name || "Unknown",
         quantityOrdered: quantity,
-        revenue: quantity * price,
       };
     });
 
@@ -260,10 +255,9 @@ export async function GET(req: NextRequest) {
 
     // ── monthlyComparison ───────────────────────────
     const thisMonthOrders = monthOrders._count.id || 0;
-    const thisMonthRevenue = monthOrders._sum.total || 0;
     const monthlyComparison = {
-      thisMonth: { orders: thisMonthOrders, revenue: thisMonthRevenue },
-      lastMonth: { orders: lastMonthOrdersCount, revenue: lastMonthRevenue._sum.total || 0 },
+      thisMonth: { orders: thisMonthOrders },
+      lastMonth: { orders: lastMonthOrdersCount },
     };
 
     // ── Average delivery time ────────────────────────
@@ -287,7 +281,6 @@ export async function GET(req: NextRequest) {
         busiestHours,
         busiestDays,
         repeatCustomers,
-        avgOrderValue,
         avgDeliveryMinutes: avgMinutes,
         totalOrders,
         monthlyComparison,

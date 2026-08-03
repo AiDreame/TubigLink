@@ -43,7 +43,6 @@ interface DashboardData {
     activeOrders: number;
     completedOrders: number;
     totalCustomers: number;
-    revenue: number;
     paidToDateCentavos: number;
     availableCentavos: number;
     avgDeliveryMinutes: number;
@@ -52,7 +51,7 @@ interface DashboardData {
   products: any[];
 }
 
-interface RevenueDay {
+interface OrderVolumeDay {
   date: string;
   count: number;
 }
@@ -89,27 +88,27 @@ export default function DashboardHome() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Revenue graph state
-  const [revenueData, setRevenueData] = useState<RevenueDay[]>([]);
-  const [revenueLoading, setRevenueLoading] = useState(false);
+  // Order volume graph state
+  const [orderVolumeData, setOrderVolumeData] = useState<OrderVolumeDay[]>([]);
+  const [volumeLoading, setVolumeLoading] = useState(false);
   const [activePreset, setActivePreset] = useState<DatePreset>(7);
 
-  const fetchRevenue = useCallback(
+  const fetchOrderVolume = useCallback(
     async (days: DatePreset) => {
       if (!session?.user) return;
-      setRevenueLoading(true);
+      setVolumeLoading(true);
       try {
         const res = await fetch(
           `/api/dashboard/analytics?days=${days}&fields=ordersByDay`
         );
         const json = await res.json();
         if (json.success) {
-          setRevenueData(json.data.ordersByDay || []);
+          setOrderVolumeData(json.data.ordersByDay || []);
         }
       } catch {
         // silently fail — graph will show empty state
       } finally {
-        setRevenueLoading(false);
+        setVolumeLoading(false);
       }
     },
     [session]
@@ -131,10 +130,10 @@ export default function DashboardHome() {
       .finally(() => setLoading(false));
   }, [session]);
 
-  // Fetch revenue data on mount and when preset changes
+  // Fetch order volume data on mount and when preset changes
   useEffect(() => {
-    fetchRevenue(activePreset);
-  }, [activePreset, fetchRevenue]);
+    fetchOrderVolume(activePreset);
+  }, [activePreset, fetchOrderVolume]);
 
   if (loading) {
     return (
@@ -159,12 +158,12 @@ export default function DashboardHome() {
   if (!data) return null;
 
   const { stats, recentOrders } = data;
-  const formattedRevenue = `₱${(stats.paidToDateCentavos / 100).toFixed(2)}`;
+  const formattedPaid = `₱${(stats.paidToDateCentavos / 100).toFixed(2)}`;
 
   const statCards = [
     { 
       label: "Paid to date", 
-      value: formattedRevenue, 
+      value: formattedPaid,
       icon: DollarSign, 
       trend: `${stats.pendingOrders} pending`, 
       isUp: true, 
@@ -208,7 +207,7 @@ export default function DashboardHome() {
     }
   };
 
-  const totalGraphRevenue = 0;
+  const totalGraphVolume = orderVolumeData.reduce((sum, d) => sum + d.count, 0);
 
   return (
     <div className="space-y-8">
@@ -246,7 +245,7 @@ export default function DashboardHome() {
             <div>
               <CardTitle className="text-lg dark:text-white">Delivered orders volume</CardTitle>
               <CardDescription>
-                {revenueLoading ? (
+                {volumeLoading ? (
                   <span className="inline-block h-4 w-20 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
                 ) : (
                   `Counts only — not earnings`
@@ -274,19 +273,19 @@ export default function DashboardHome() {
           </div>
         </CardHeader>
         <CardContent>
-          {revenueLoading ? (
+          {volumeLoading ? (
             <div className="h-[220px] sm:h-[260px] flex items-center justify-center">
               <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
             </div>
-          ) : revenueData.length === 0 ? (
+          ) : orderVolumeData.length === 0 ? (
             <div className="h-[220px] sm:h-[260px] flex flex-col items-center justify-center text-gray-400 dark:text-gray-500 text-sm">
               <DollarSign className="h-8 w-8 mb-2 opacity-50" />
-              <p>No revenue data for this period</p>
+              <p>No order volume data for this period</p>
             </div>
           ) : (
-            <div className="h-[220px] sm:h-[260px] w-full" role="img" aria-label={`Revenue trend over ${activePreset} days`}>
+            <div className="h-[220px] sm:h-[260px] w-full" role="img" aria-label={`Order volume (orders per day) over ${activePreset} days`}>
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={revenueData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+                <LineChart data={orderVolumeData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" className="dark:opacity-20" />
                   <XAxis
                     dataKey="date"
@@ -296,7 +295,7 @@ export default function DashboardHome() {
                   />
                   <YAxis
                     tick={{ fontSize: 10 }}
-                    tickFormatter={(val: number) => `₱${val}`}
+                    tickFormatter={(val: number) => `${val}`}
                     width={50}
                   />
                   <Tooltip content={<CustomTooltip />} />
@@ -307,7 +306,7 @@ export default function DashboardHome() {
                     strokeWidth={2}
                     dot={false}
                     activeDot={{ r: 5, fill: "#3B82F6" }}
-                    name="Orders"
+                    name="Order volume"
                   />
                 </LineChart>
               </ResponsiveContainer>

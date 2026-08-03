@@ -110,7 +110,6 @@ export async function GET(req: NextRequest) {
           todayOrders,
           todayRevenue: 0,
           totalCustomers: customerIds.length,
-          revenue: earnings.paidCentavos / 100,
           paidToDateCentavos: earnings.paidCentavos,
           availableCentavos: earnings.availableCentavos,
           avgDeliveryMinutes: avgMinutes,

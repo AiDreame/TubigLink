@@ -5,7 +5,7 @@ export async function getStationEarnings(stationId: string) {
   const now = new Date();
   const [availableOrders, pendingItems, holds, paid, payouts, transactions] = await Promise.all([
     prisma.order.findMany({ where: { stationId, status: "DELIVERED", paymentStatus: "PAID", payoutEligibleAt: { not: null, lte: now }, payoutItems: { none: {} }, disputes: { none: { status: { in: ACTIVE_DISPUTE_STATUSES } } } }, select: { amountCentavos: true, stationNetCentavos: true, subtotal: true, deliveryFee: true, commissionCentavos: true } }),
-    prisma.payoutItem.findMany({ where: { payout: { stationId, status: { in: ["DRAFT", "APPROVED", "PROCESSING"] } } }, include: { payout: { select: { status: true, paidAt: true } }, order: { select: { id: true, createdAt: true } } }, orderBy: { createdAt: "desc" }, take: 20 }),
+    prisma.payoutItem.findMany({ where: { payout: { stationId } }, include: { payout: { select: { status: true, paidAt: true } }, order: { select: { id: true, createdAt: true } } }, orderBy: [{ payout: { paidAt: "desc" } }, { createdAt: "desc" }], take: 20 }),
     getActiveHoldsCentavos(stationId),
     prisma.payout.aggregate({ where: { stationId, status: "PAID" }, _sum: { netCentavos: true } }),
     prisma.payout.findMany({ where: { stationId }, include: { _count: { select: { payoutItems: true } } }, orderBy: { createdAt: "desc" }, take: 20 }),
