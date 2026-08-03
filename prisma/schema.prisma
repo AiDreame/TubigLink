@@ -37,6 +37,7 @@ model User {
   staffRecords     StationStaff[] @relation("StaffUser")
   refundsRequested Refund[]
   customerDisputes Dispute[]      @relation("CustomerDisputes")
+  otpCodes OtpCode[]
 }
 
 // ─── STATION (Water Refilling Station) ──────────────
@@ -93,6 +94,10 @@ model Station {
   staff    StationStaff[]
   disputes Dispute[]
   payouts  Payout[]
+  payoutMethod       String?
+  payoutAccountName  String?
+  payoutAccountLast4 String?
+  payoutDetails      String?
 }
 
 // ─── PRODUCT (Water Type) ───────────────────────────
@@ -469,6 +474,20 @@ model Payout {
 
   @@unique([stationId, periodStart, periodEnd])
   @@index([stationId, status])
+}
+
+model OtpCode {
+  id         String   @id @default(cuid())
+  userId     String
+  purpose    String
+  codeHash   String
+  codeEncrypted String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  attempts   Int      @default(0)
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id])
+  @@index([userId, purpose])
 }
 
 model PayoutItem {
