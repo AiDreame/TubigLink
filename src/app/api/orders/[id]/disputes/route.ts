@@ -6,21 +6,21 @@ import { applyAutoEscalateMany, orderNetCentavos } from "@/lib/disputes";
 
 const types = ["NOT_DELIVERED", "QUALITY", "OTHER"];
 const include = { order: { select: { id: true, total: true, paymentStatus: true, deliveryConfirmedAt: true } }, customer: { select: { id: true, name: true, phone: true } }, station: { select: { id: true, name: true } }, refund: true } as const;
-export async function GET(req: NextRequest, { params }: { params: { orderId: string } }) {
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const user = (await getServerSession(authOptions))?.user as any;
   if (!user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const order = await prisma.order.findUnique({ where: { id: params.orderId }, select: { userId: true, stationId: true, station: { select: { userId: true } } } });
+  const order = await prisma.order.findUnique({ where: { id: params.id }, select: { userId: true, stationId: true, station: { select: { userId: true } } } });
   if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
   let allowed = order.userId === user.id || user.role === "ADMIN" || order.station.userId === user.id;
   if (!allowed) allowed = !!(await prisma.stationStaff.findFirst({ where: { userId: user.id, stationId: order.stationId, status: "ACTIVE" } }));
   if (!allowed) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-  const disputes = await prisma.dispute.findMany({ where: { orderId: params.orderId }, include, orderBy: { openedAt: "desc" } });
+  const disputes = await prisma.dispute.findMany({ where: { orderId: params.id }, include, orderBy: { openedAt: "desc" } });
   return NextResponse.json({ success: true, data: await applyAutoEscalateMany(disputes) });
 }
-export async function POST(req: NextRequest, { params }: { params: { orderId: string } }) {
+export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const user = (await getServerSession(authOptions))?.user as any;
   if (!user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const order = await prisma.order.findUnique({ where: { id: params.orderId }, include: { station: { select: { id: true, name: true } }, items: true } });
+  const order = await prisma.order.findUnique({ where: { id: params.id }, include: { station: { select: { id: true, name: true } }, items: true } });
   if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
   if (order.userId !== user.id) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   const now = new Date();
