@@ -38,6 +38,25 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { MESSAGES } from "@/lib/constants";
 
+function paymentStatusLabel(status: string): string {
+  switch (status) {
+    case "PAID": return "Paid";
+    case "FAILED": return "Payment failed";
+    case "REQUIRES_ACTION": return "Awaiting payment";
+    default: return "Payment pending";
+  }
+}
+
+function paymentStatusClasses(status: string): string {
+  const pending = "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/30 border-none";
+  switch (status) {
+    case "PAID": return "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 hover:bg-green-100 dark:hover:bg-green-900/30 border-none";
+    case "FAILED": return "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/30 border-none";
+    case "REQUIRES_ACTION": return pending;
+    default: return pending;
+  }
+}
+
 export default function OrderDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -244,6 +263,24 @@ export default function OrderDetailPage() {
             })}
           </div>
         </div>
+
+        {/* GCash Payment Status */}
+        {order.paymentMethod === "GCASH" && (
+          <div className="bg-card rounded-2xl p-4 shadow-sm border border-border flex items-center justify-between" role="region" aria-label="Payment status">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center">
+                <Smartphone className="h-5 w-5 text-blue-600 dark:text-blue-400" aria-hidden="true" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-card-foreground">GCash Payment</p>
+                <p className="text-xs text-muted-foreground font-mono">Ref #{order.id.slice(-8).toUpperCase()}</p>
+              </div>
+            </div>
+            <Badge className={paymentStatusClasses(order.paymentStatus)}>
+              {paymentStatusLabel(order.paymentStatus)}
+            </Badge>
+          </div>
+        )}
 
         {/* Station Contact */}
         <div className="bg-card rounded-2xl p-4 shadow-sm border border-border flex items-center justify-between">
