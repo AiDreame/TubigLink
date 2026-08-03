@@ -5,7 +5,7 @@ import prisma from "@/lib/prisma";
 import { applyAutoEscalateMany, orderNetCentavos } from "@/lib/disputes";
 
 const types = ["NOT_DELIVERED", "QUALITY", "OTHER"];
-const include = { order: { select: { id: true, total: true, paymentStatus: true, deliveryConfirmedAt: true } }, customer: { select: { id: true, name: true, phone: true } }, station: { select: { id: true, name: true } }, refund: true } } as const;
+const include = { order: { select: { id: true, total: true, paymentStatus: true, deliveryConfirmedAt: true } }, customer: { select: { id: true, name: true, phone: true } }, station: { select: { id: true, name: true } }, refund: true } as const;
 export async function GET(req: NextRequest, { params }: { params: { orderId: string } }) {
   const user = (await getServerSession(authOptions))?.user as any;
   if (!user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -31,6 +31,6 @@ export async function POST(req: NextRequest, { params }: { params: { orderId: st
   const type = String(body.type || ""); const description = typeof body.description === "string" ? body.description.trim() : "";
   const evidence = body.evidence == null ? null : String(body.evidence).trim();
   if (!types.includes(type) || !description || description.length > 2000 || (evidence && evidence.length > 4000)) return NextResponse.json({ error: "Invalid dispute details" }, { status: 400 });
-  const dispute = await prisma.dispute.create({ data: { orderId: order.id, customerId: user.id, stationId: order.stationId, type, description, evidence, amountHeldCentavos: orderNetCentavos(order), openedAt: now, responseDeadlineAt: new Date(now.getTime() + 24 * 3600000), status: "OPEN" }, include } });
+  const dispute = await prisma.dispute.create({ data: { orderId: order.id, customerId: user.id, stationId: order.stationId, type, description, evidence, amountHeldCentavos: orderNetCentavos(order), openedAt: now, responseDeadlineAt: new Date(now.getTime() + 24 * 3600000), status: "OPEN" }, include: include });
   return NextResponse.json({ success: true, data: dispute });
 }
