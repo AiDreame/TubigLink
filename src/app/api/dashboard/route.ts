@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { authorizeDashboardStation, isAuthorizedStation } from "@/lib/station-auth";
+import { applyDeliveryAutoConfirmMany } from "@/lib/delivery";
 
 // GET /api/dashboard — Get provider dashboard analytics
 export async function GET(req: NextRequest) {
@@ -52,17 +53,19 @@ export async function GET(req: NextRequest) {
     });
 
     // Recent orders
-    const recentOrders = await prisma.order.findMany({
-      where: { stationId },
-      include: {
-        items: { include: { product: true } },
-        user: { select: { name: true, phone: true } },
-        address: true,
-        driver: { select: { id: true, name: true, email: true, role: true } },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 10,
-    });
+    const recentOrders = await applyDeliveryAutoConfirmMany(
+      await prisma.order.findMany({
+        where: { stationId },
+        include: {
+          items: { include: { product: true } },
+          user: { select: { name: true, phone: true } },
+          address: true,
+          driver: { select: { id: true, name: true, email: true, role: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 10,
+      })
+    );
 
     // Products with low stock info
     const products = await prisma.product.findMany({

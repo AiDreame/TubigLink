@@ -78,6 +78,13 @@ export interface Order {
   paymentMethod: PaymentMethod;
   paymentStatus: PaymentStatus;
   paymentId: string | null;
+  // Delivery → confirmation → dispute → payout-eligibility timeline (Phase 2a M6).
+  // API payloads carry ISO strings; null until the corresponding event happens.
+  deliveredAt: string | null;
+  deliveryConfirmedAt: string | null;
+  disputeDeadlineAt: string | null;
+  payoutEligibleAt: string | null;
+  deliveryPhoto: string | null;
   notes: string | null;
   addressId: string;
   address?: Address;

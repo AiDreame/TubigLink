@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import { applyDeliveryAutoConfirmMany } from "@/lib/delivery";
 
 // GET /api/customer/dashboard — Aggregated customer dashboard data
 export async function GET(req: NextRequest) {
@@ -38,18 +39,20 @@ export async function GET(req: NextRequest) {
     });
 
     // Recent order history (last 10 completed/cancelled)
-    const recentOrders = await prisma.order.findMany({
-      where: {
-        userId,
-        status: { in: ["DELIVERED", "CANCELLED"] },
-      },
-      include: {
-        items: { include: { product: true } },
-        station: { select: { id: true, name: true, slug: true } },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 10,
-    });
+    const recentOrders = await applyDeliveryAutoConfirmMany(
+      await prisma.order.findMany({
+        where: {
+          userId,
+          status: { in: ["DELIVERED", "CANCELLED"] },
+        },
+        include: {
+          items: { include: { product: true } },
+          station: { select: { id: true, name: true, slug: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 10,
+      })
+    );
 
     // Upcoming scheduled deliveries
     const upcomingScheduled = await prisma.order.findMany({

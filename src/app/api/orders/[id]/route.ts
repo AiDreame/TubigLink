@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import { applyDeliveryAutoConfirm } from "@/lib/delivery";
 
 // GET /api/orders/[id] — Get single order details
 export async function GET(
@@ -28,7 +29,10 @@ export async function GET(
       );
     }
 
-    return NextResponse.json({ success: true, data: order });
+    // Lazy 24h auto-confirm backfill (safe: deterministic from deliveredAt).
+    const withTimeline = await applyDeliveryAutoConfirm(order);
+
+    return NextResponse.json({ success: true, data: withTimeline });
   } catch (error) {
     console.error("Order fetch error:", error);
     return NextResponse.json(
@@ -38,12 +42,17 @@ export async function GET(
   }
 }
 
-// PUT /api/orders/[id] — Update order status
+// PUT /api/orders/[id] — Update order status (station owner, station staff, or driver only)
 export async function PUT(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session || !session.user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await req.json();
     const { status } = body;
 
@@ -61,18 +70,51 @@ export async function PUT(
 
     const currentOrder = await prisma.order.findUnique({
       where: { id: params.id },
-      select: { paymentMethod: true },
+      include: { station: true },
     });
     if (!currentOrder) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
+
+    // Station-scope authorization: owner, admin, active staff, or assigned driver.
+    const user = session.user as any;
+    const userId = user.id;
+    const isOwner = currentOrder.station.userId === userId;
+    const isAdmin = user.role === "ADMIN";
+    const isAssignedDriver = currentOrder.driverId && currentOrder.driverId === user.staffId;
+    let isStationStaff = false;
+    if (!isOwner && !isAdmin) {
+      const staff = await prisma.stationStaff.findFirst({
+        where: { userId, stationId: currentOrder.stationId, status: "ACTIVE" },
+        select: { id: true, role: true },
+      });
+      isStationStaff = !!staff;
+    }
+
+    if (isAssignedDriver && (user.staffRole === "DRIVER" || user.staffRole === "STAFF")) {
+      if (status !== "OUT_FOR_DELIVERY" && status !== "DELIVERED") {
+        return NextResponse.json(
+          { error: "Drivers can only start or complete deliveries" },
+          { status: 403 }
+        );
+      }
+    } else if (!isOwner && !isAdmin && !isStationStaff) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    }
+
     const order = await prisma.order.update({
       where: { id: params.id },
       data: {
         status,
-        // COD is collected at the door. Prepaid statuses are authoritative from PayMongo.
-        ...(status === "DELIVERED" && currentOrder.paymentMethod === "COD"
-          ? { paymentStatus: "PAID", paymentPaidAt: new Date() }
+        ...(status === "DELIVERED"
+          ? {
+              // Evidence timestamp — set once at delivery time.
+              deliveredAt: currentOrder.deliveredAt ?? new Date(),
+              // COD is collected at the door. Prepaid statuses are authoritative from PayMongo.
+              ...(currentOrder.paymentMethod === "COD"
+                ? { paymentStatus: "PAID", paymentPaidAt: new Date() }
+                : {}),
+            }
           : {}),
       },
       include: {

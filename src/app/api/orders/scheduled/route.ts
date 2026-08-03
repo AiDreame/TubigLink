@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { applyDeliveryAutoConfirmMany } from "@/lib/delivery";
 
 // GET /api/orders/scheduled — List scheduled/recurring orders
 export async function GET(req: NextRequest) {
@@ -14,19 +15,21 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const orders = await prisma.order.findMany({
-      where: {
-        userId,
-        orderType: "RECURRING",
-        status: { not: "CANCELLED" },
-      },
-      include: {
-        items: { include: { product: true } },
-        station: { select: { id: true, name: true, slug: true, logo: true } },
-        address: true,
-      },
-      orderBy: { createdAt: "desc" },
-    });
+    const orders = await applyDeliveryAutoConfirmMany(
+      await prisma.order.findMany({
+        where: {
+          userId,
+          orderType: "RECURRING",
+          status: { not: "CANCELLED" },
+        },
+        include: {
+          items: { include: { product: true } },
+          station: { select: { id: true, name: true, slug: true, logo: true } },
+          address: true,
+        },
+        orderBy: { createdAt: "desc" },
+      })
+    );
 
     return NextResponse.json({ success: true, data: orders });
   } catch (error) {

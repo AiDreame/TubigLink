@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { isProvisional, checkProvisionalLimits } from "@/lib/provisional";
+import { applyDeliveryAutoConfirmMany } from "@/lib/delivery";
 
 export async function GET(req: NextRequest) {
   try {
@@ -12,7 +13,9 @@ export async function GET(req: NextRequest) {
     if (userId) where.userId = userId;
     if (searchParams.get("stationId")) where.stationId = searchParams.get("stationId");
     if (searchParams.get("status")) where.status = searchParams.get("status");
-    const orders = await prisma.order.findMany({ where, include: { items: { include: { product: true } }, station: { select: { id: true, name: true, slug: true, logo: true } }, address: true }, orderBy: { createdAt: "desc" }, take: Math.min(Number(searchParams.get("limit")) || 20, 50) });
+    let orders = await prisma.order.findMany({ where, include: { items: { include: { product: true } }, station: { select: { id: true, name: true, slug: true, logo: true } }, address: true }, orderBy: { createdAt: "desc" }, take: Math.min(Number(searchParams.get("limit")) || 20, 50) });
+    // Lazy 24h auto-confirm backfill on delivered-but-unconfirmed orders.
+    orders = await applyDeliveryAutoConfirmMany(orders);
     return NextResponse.json({ success: true, data: orders });
   } catch (error) { console.error("Orders fetch error:", error); return NextResponse.json({ success: false, error: "Failed to fetch orders" }, { status: 500 }); }
 }
