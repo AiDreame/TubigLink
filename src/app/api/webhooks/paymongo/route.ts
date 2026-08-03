@@ -92,6 +92,23 @@ export async function POST(request: NextRequest) {
     await prisma.$transaction(async (tx) => {
       let order = orderId ? await tx.order.findUnique({ where: { id: orderId } }) : null;
       if (!order && intentId) order = await tx.order.findUnique({ where: { paymentIntentId: intentId } });
+      const refundProviderId = text(resource?.id);
+      if (isRefund && refundProviderId) {
+        const refund = await tx.refund.findUnique({ where: { providerRefundId: refundProviderId } });
+        if (refund) {
+          const refundFailed = normalizedType.includes("failed") || resourceAttributes.status === "failed";
+          await tx.refund.update({ where: { id: refund.id }, data: refundFailed
+            ? { status: "FAILED", failureMessage: text(resourceAttributes.failure_message) || text(resourceAttributes.failure_reason) || text(attributes.message) || "PayMongo refund failed" }
+            : { status: "SUCCEEDED", completedAt: new Date(), failureMessage: null } });
+          if (!refundFailed) {
+            const fullAmount = refund.amountCentavos >= (await tx.order.findUnique({ where: { id: refund.orderId }, select: { amountCentavos: true, total: true } }))?.amountCentavos!;
+            const target = await tx.order.findUnique({ where: { id: refund.orderId }, select: { paymentRefundedAmount: true } });
+            await tx.order.update({ where: { id: refund.orderId }, data: { ...(fullAmount ? { paymentStatus: "REFUNDED" } : {}), paymentRefundedAt: new Date(), paymentRefundedAmount: (target?.paymentRefundedAmount || 0) + refund.amountCentavos } });
+          }
+          await tx.paymentEvent.update({ where: { id: event.id }, data: { orderId: refund.orderId, processedAt: new Date() } });
+          return;
+        }
+      }
       if (!order) {
         console.warn("PayMongo webhook has no matching order", { providerEventId, orderId, intentId, eventType });
         await tx.paymentEvent.update({ where: { id: event.id }, data: { processedAt: new Date() } });
