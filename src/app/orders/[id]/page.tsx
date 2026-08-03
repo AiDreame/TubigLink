@@ -78,6 +78,26 @@ export default function OrderDetailPage() {
   const [autoConfirmLabel, setAutoConfirmLabel] = useState<string | null>(null);
   const [deliveryPhoto, setDeliveryPhoto] = useState<string | null>(null);
 
+  // Customer dispute state
+  const [dispute, setDispute] = useState<any | null>(null);
+  const [disputeDialogOpen, setDisputeDialogOpen] = useState(false);
+  const [disputeType, setDisputeType] = useState("QUALITY");
+  const [disputeDescription, setDisputeDescription] = useState("");
+  const [disputeEvidence, setDisputeEvidence] = useState("");
+  const [disputeSubmitting, setDisputeSubmitting] = useState(false);
+  const [disputeError, setDisputeError] = useState<string | null>(null);
+
+  const fetchDispute = useCallback(async (id: string) => {
+    try {
+      const res = await fetch(`/api/orders/${id}/disputes`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.success) setDispute(data.data?.[0] || null);
+    } catch (err) {
+      console.error("Failed to fetch dispute", err);
+    }
+  }, []);
+
   // Review state
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewComment, setReviewComment] = useState("");
@@ -108,8 +128,33 @@ export default function OrderDetailPage() {
   }, []);
 
   useEffect(() => {
-    fetchOrder(params.id as string);
-  }, [params.id, fetchOrder]);
+    const id = params.id as string;
+    fetchOrder(id);
+    fetchDispute(id);
+  }, [params.id, fetchOrder, fetchDispute]);
+
+  const handleSubmitDispute = async () => {
+    if (!order) return;
+    setDisputeSubmitting(true);
+    setDisputeError(null);
+    try {
+      const res = await fetch(`/api/orders/${order.id}/disputes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: disputeType, description: disputeDescription, evidence: disputeEvidence || undefined }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "Unable to report issue");
+      setDisputeDialogOpen(false);
+      setDisputeDescription("");
+      setDisputeEvidence("");
+      await fetchDispute(order.id);
+    } catch (err: any) {
+      setDisputeError(err.message || "Unable to report issue");
+    } finally {
+      setDisputeSubmitting(false);
+    }
+  };
 
   // Auto-confirm countdown: shows "Auto-confirms in ~Xh Ym" while the order is
   // DELIVERED but not yet confirmed. Display only — eligibility is decided
@@ -344,12 +389,23 @@ export default function OrderDetailPage() {
                   </div>
                   <div>
                     <p className="font-bold text-sm text-card-foreground">Delivery confirmed</p>
-                    {order.disputeDeadlineAt && (
-                      <p className="text-xs text-muted-foreground">
-                        You can report an issue until{" "}
-                        {format(new Date(order.disputeDeadlineAt), "MMM d, yyyy h:mm a")}
-                      </p>
-                    )}
+                    {dispute ? (
+                      <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                        <p>Issue report: <span className="font-semibold text-card-foreground">{dispute.status.replace(/_/g, " ")}</span></p>
+                        <p>Station must respond by {format(new Date(dispute.responseDeadlineAt), "MMM d, yyyy h:mm a")}</p>
+                        {dispute.stationResponse && <p>Station response: {dispute.stationResponse}</p>}
+                        {dispute.resolution && <p>Resolution: {dispute.resolution}</p>}
+                      </div>
+                    ) : order.paymentStatus === "PAID" && order.disputeDeadlineAt && new Date(order.disputeDeadlineAt).getTime() > Date.now() ? (
+                      <>
+                        <p className="text-xs text-muted-foreground">You can report an issue until {format(new Date(order.disputeDeadlineAt), "MMM d, yyyy h:mm a")}</p>
+                        <Button variant="outline" className="mt-2 rounded-xl min-h-[44px]" onClick={() => { setDisputeError(null); setDisputeDialogOpen(true); }}>
+                          <HelpCircle className="h-4 w-4 mr-2" aria-hidden="true" /> Report an issue
+                        </Button>
+                      </>
+                    ) : order.disputeDeadlineAt ? (
+                      <p className="text-xs text-muted-foreground">The issue-reporting window has closed.</p>
+                    ) : null}
                   </div>
                 </div>
                 {order.deliveryPhoto && (
@@ -428,6 +484,33 @@ export default function OrderDetailPage() {
             )}
           </div>
         )}
+
+        <Dialog open={disputeDialogOpen} onOpenChange={setDisputeDialogOpen}>
+          <DialogContent className="rounded-2xl max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="text-card-foreground">Report an issue</DialogTitle>
+              <DialogDescription>Tell us what went wrong. The station will have 24 hours to respond.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <label className="text-sm font-medium text-card-foreground">Issue type
+                <select value={disputeType} onChange={(e) => setDisputeType(e.target.value)} className="mt-1 w-full h-11 rounded-xl border border-border bg-background px-3 text-sm">
+                  <option value="NOT_DELIVERED">Not delivered</option><option value="QUALITY">Quality concern</option><option value="OTHER">Other</option>
+                </select>
+              </label>
+              <label className="text-sm font-medium text-card-foreground">Description
+                <Textarea value={disputeDescription} onChange={(e) => setDisputeDescription(e.target.value)} placeholder="Describe the issue" className="mt-1 rounded-xl min-h-[90px] resize-none" />
+              </label>
+              <label className="text-sm font-medium text-card-foreground">Evidence (optional)
+                <input value={disputeEvidence} onChange={(e) => setDisputeEvidence(e.target.value)} placeholder="Photo URL or notes" className="mt-1 w-full h-11 rounded-xl border border-border bg-background px-3 text-sm" />
+              </label>
+              {disputeError && <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm rounded-xl p-3">{disputeError}</div>}
+            </div>
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button variant="outline" onClick={() => setDisputeDialogOpen(false)} className="rounded-xl min-h-[44px]" disabled={disputeSubmitting}>Cancel</Button>
+              <Button onClick={handleSubmitDispute} className="rounded-xl min-h-[44px]" disabled={disputeSubmitting || !disputeDescription.trim()}>{disputeSubmitting ? "Submitting..." : "Submit report"}</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* GCash Payment Status */}
         {order.paymentMethod === "GCASH" && (
