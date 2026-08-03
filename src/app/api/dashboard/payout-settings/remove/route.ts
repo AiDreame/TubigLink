@@ -1,2 +1,18 @@
-import {NextRequest,NextResponse} from "next/server";import {getServerSession} from "next-auth";import {authOptions} from "@/lib/auth";import prisma from "@/lib/prisma";import crypto from "crypto";
-export async function POST(req:NextRequest){const u:any=(await getServerSession(authOptions))?.user;if(!u?.id)return NextResponse.json({error:"Unauthorized"},{status:401});const b=await req.json();const s=await prisma.station.findFirst({where:u.role==="ADMIN"&&b.stationId?{id:b.stationId}:{userId:u.id}});if(!s||u.role!=="ADMIN"&&s.userId!==u.id)return NextResponse.json({error:"Forbidden"},{status:403});const r=await prisma.otpCode.findFirst({where:{userId:s.userId,purpose:"PAYOUT_REMOVE",consumedAt:null},orderBy:{createdAt:"desc"}});if(!b.code||!r||r.expiresAt<new Date()||r.attempts>=5||r.codeHash!==crypto.createHash("sha256").update(b.code).digest("hex"))return NextResponse.json({error:"Invalid code"},{status:400});await prisma.otpCode.update({where:{id:r.id},data:{consumedAt:new Date()}});await prisma.station.update({where:{id:s.id},data:{payoutMethod:null,payoutAccountName:null,payoutAccountLast4:null,payoutDetails:null}});return NextResponse.json({success:true});}
+import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import prisma from "@/lib/prisma";
+import { verifyOtp } from "@/lib/payout-security";
+
+export async function POST(req: NextRequest) {
+  const user: any = (await getServerSession(authOptions))?.user;
+  if (!user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const body = await req.json();
+  const station = await prisma.station.findFirst({
+    where: user.role === "ADMIN" && body.stationId ? { id: body.stationId } : { userId: user.id },
+  });
+  if (!station || (user.role !== "ADMIN" && station.userId !== user.id)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!(await verifyOtp(station.userId, "PAYOUT_REMOVE", body.code))) return NextResponse.json({ error: "Invalid code" }, { status: 400 });
+  await prisma.station.update({ where: { id: station.id }, data: { payoutMethod: null, payoutAccountName: null, payoutAccountLast4: null, payoutDetails: null } });
+  return NextResponse.json({ success: true });
+}

@@ -1,2 +1,18 @@
-import {NextRequest,NextResponse} from "next/server";import {getServerSession} from "next-auth";import {authOptions} from "@/lib/auth";import prisma from "@/lib/prisma";import {decryptPayout} from "@/lib/payout-security";
-export async function POST(req:NextRequest){const user:any=(await getServerSession(authOptions))?.user;if(!user?.id)return NextResponse.json({error:"Unauthorized"},{status:401});const b=await req.json();const s=await prisma.station.findFirst({where:user.role==="ADMIN"&&b.stationId?{id:b.stationId}:{userId:user.id}});if(!s||user.role!=="ADMIN"&&s.userId!==user.id)return NextResponse.json({error:"Forbidden"},{status:403});const r=await prisma.otpCode.findFirst({where:{userId:s.userId,purpose:"PAYOUT_REVEAL",consumedAt:null},orderBy:{createdAt:"desc"}});if(!b.code||!r||r.expiresAt<new Date()||r.attempts>=5||r.codeHash!==require("crypto").createHash("sha256").update(b.code).digest("hex"))return NextResponse.json({error:"Invalid code"},{status:400});await prisma.otpCode.update({where:{id:r.id},data:{consumedAt:new Date()}});return NextResponse.json({success:true,data:{payoutMethod:s.payoutMethod,payoutAccountName:s.payoutAccountName,accountNumber:JSON.parse(decryptPayout(s.payoutDetails!)).accountNumber}});}
+import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import prisma from "@/lib/prisma";
+import { decryptPayout, verifyOtp } from "@/lib/payout-security";
+
+export async function POST(req: NextRequest) {
+  const user: any = (await getServerSession(authOptions))?.user;
+  if (!user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const body = await req.json();
+  const station = await prisma.station.findFirst({
+    where: user.role === "ADMIN" && body.stationId ? { id: body.stationId } : { userId: user.id },
+  });
+  if (!station || (user.role !== "ADMIN" && station.userId !== user.id)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!(await verifyOtp(station.userId, "PAYOUT_REVEAL", body.code))) return NextResponse.json({ error: "Invalid code" }, { status: 400 });
+  if (!station.payoutDetails) return NextResponse.json({ error: "No payout account" }, { status: 400 });
+  return NextResponse.json({ success: true, data: { payoutMethod: station.payoutMethod, payoutAccountName: station.payoutAccountName, accountNumber: JSON.parse(decryptPayout(station.payoutDetails)).accountNumber } });
+}
