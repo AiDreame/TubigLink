@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { 
@@ -18,7 +18,9 @@ import {
   Smartphone,
   Wallet,
   XCircle,
-  Star
+  Star,
+  ShieldCheck,
+  Camera
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -68,6 +70,14 @@ export default function OrderDetailPage() {
   const [isCancelling, setIsCancelling] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
 
+  // Delivery confirmation state
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [isConfirming, setIsConfirming] = useState(false);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
+  const [confirmSuccess, setConfirmSuccess] = useState(false);
+  const [autoConfirmLabel, setAutoConfirmLabel] = useState<string | null>(null);
+  const [deliveryPhoto, setDeliveryPhoto] = useState<string | null>(null);
+
   // Review state
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewComment, setReviewComment] = useState("");
@@ -84,6 +94,8 @@ export default function OrderDetailPage() {
       const data = await res.json();
       if (data.success) {
         setOrder(data.data);
+        setDeliveryPhoto(data.data.deliveryPhoto || null);
+        setConfirmSuccess(!!data.data.deliveryConfirmedAt);
       } else {
         throw new Error(data.error || "Order not found");
       }
@@ -98,6 +110,63 @@ export default function OrderDetailPage() {
   useEffect(() => {
     fetchOrder(params.id as string);
   }, [params.id, fetchOrder]);
+
+  // Auto-confirm countdown: shows "Auto-confirms in ~Xh Ym" while the order is
+  // DELIVERED but not yet confirmed. Display only — eligibility is decided
+  // server-side from deliveredAt (lazy backfill on reads). When the countdown
+  // hits zero we refetch so the server backfills the confirmation timestamps.
+  useEffect(() => {
+    if (!order || order.status !== "DELIVERED" || order.deliveryConfirmedAt) {
+      setAutoConfirmLabel(null);
+      return;
+    }
+    if (!order.deliveredAt) {
+      setAutoConfirmLabel(null);
+      return;
+    }
+    const tick = () => {
+      const deliveredAt = new Date(order.deliveredAt!).getTime();
+      const autoAt = deliveredAt + 24 * 60 * 60 * 1000;
+      const remaining = autoAt - Date.now();
+      if (remaining <= 0) {
+        setAutoConfirmLabel("Auto-confirming…");
+        fetchOrder(order.id);
+        return;
+      }
+      const totalMinutes = Math.floor(remaining / 60000);
+      const h = Math.floor(totalMinutes / 60);
+      const m = totalMinutes % 60;
+      setAutoConfirmLabel(`Auto-confirms in ~${h}h ${m}m`);
+    };
+    tick();
+    const interval = setInterval(tick, 60 * 1000);
+    return () => clearInterval(interval);
+  }, [order, fetchOrder]);
+
+  const handleConfirmDelivery = async () => {
+    if (!order) return;
+    setIsConfirming(true);
+    setConfirmError(null);
+    try {
+      const res = await fetch(`/api/orders/${order.id}/confirm-delivery`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to confirm delivery");
+      }
+      setOrder(data.data);
+      setDeliveryPhoto(data.data.deliveryPhoto || null);
+      setConfirmDialogOpen(false);
+      setConfirmSuccess(true);
+      setAutoConfirmLabel(null);
+    } catch (error: any) {
+      console.error("Confirm delivery error:", error);
+      setConfirmError(error.message || "Hindi ma-confirm ang delivery. Pakisubukan muli.");
+    } finally {
+      setIsConfirming(false);
+    }
+  };
 
   const handleCancelOrder = async () => {
     if (!order) return;
@@ -263,6 +332,102 @@ export default function OrderDetailPage() {
             })}
           </div>
         </div>
+
+        {/* Delivery Confirmation — only for DELIVERED orders */}
+        {order.status === "DELIVERED" && (
+          <div className="bg-card rounded-2xl p-6 shadow-sm border border-border space-y-4" role="region" aria-label="Delivery confirmation">
+            {order.deliveryConfirmedAt ? (
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-green-50 dark:bg-green-900/30 flex items-center justify-center">
+                    <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" aria-hidden="true" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-sm text-card-foreground">Delivery confirmed</p>
+                    {order.disputeDeadlineAt && (
+                      <p className="text-xs text-muted-foreground">
+                        You can report an issue until{" "}
+                        {format(new Date(order.disputeDeadlineAt), "MMM d, yyyy h:mm a")}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                {order.deliveryPhoto && (
+                  <a href={order.deliveryPhoto} target="_blank" rel="noopener noreferrer" className="block">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={order.deliveryPhoto} alt="Delivery evidence photo" className="rounded-xl border border-border max-h-48 w-auto object-cover" />
+                  </a>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-start gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center shrink-0">
+                    <ShieldCheck className="h-5 w-5 text-blue-600 dark:text-blue-400" aria-hidden="true" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-sm text-card-foreground">How was your delivery?</p>
+                    <p className="text-xs text-muted-foreground">
+                      Confirm you received your order to close out this delivery.
+                    </p>
+                    {autoConfirmLabel && (
+                      <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                        <Clock className="h-3 w-3" aria-hidden="true" />
+                        {autoConfirmLabel}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                {order.deliveryPhoto && (
+                  <a href={order.deliveryPhoto} target="_blank" rel="noopener noreferrer" className="block">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={order.deliveryPhoto} alt="Delivery evidence photo" className="rounded-xl border border-border max-h-48 w-auto object-cover" />
+                  </a>
+                )}
+                <Button
+                  className="w-full h-12 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold min-h-[44px]"
+                  onClick={() => { setConfirmDialogOpen(true); setConfirmError(null); }}
+                >
+                  <CheckCircle2 className="h-5 w-5 mr-2" aria-hidden="true" />
+                  Confirm Delivery
+                </Button>
+
+                <Dialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
+                  <DialogContent className="rounded-2xl max-w-sm">
+                    <DialogHeader>
+                      <DialogTitle className="text-card-foreground">Confirm Delivery?</DialogTitle>
+                      <DialogDescription>
+                        Have you received your full order? Confirming closes the delivery and starts the 36-hour issue window.
+                      </DialogDescription>
+                    </DialogHeader>
+                    {confirmError && (
+                      <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm rounded-xl p-3">
+                        {confirmError}
+                      </div>
+                    )}
+                    <DialogFooter className="gap-2 sm:gap-0">
+                      <Button
+                        variant="outline"
+                        onClick={() => { setConfirmDialogOpen(false); setConfirmError(null); }}
+                        className="rounded-xl min-h-[44px]"
+                        disabled={isConfirming}
+                      >
+                        Not Yet
+                      </Button>
+                      <Button
+                        onClick={handleConfirmDelivery}
+                        className="rounded-xl min-h-[44px]"
+                        disabled={isConfirming}
+                      >
+                        {isConfirming ? "Confirming..." : "Yes, Confirm"}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* GCash Payment Status */}
         {order.paymentMethod === "GCASH" && (

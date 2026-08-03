@@ -159,6 +159,7 @@ model Order {
   deliveryConfirmedAt   DateTime?
   disputeDeadlineAt     DateTime?
   payoutEligibleAt      DateTime?
+  deliveryPhoto         String? // URL path to the delivery evidence photo (uploads/), set by station staff before confirmation
   notes                 String?
   addressId             String
   driverId              String? // Assigned driver (StationStaff)

@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import {
   MapPin, Phone, Package, CheckCircle2, Truck,
   Loader2, RefreshCw, Navigation, ClipboardList,
-  ChevronDown, ChevronUp, Clock,
+  ChevronDown, ChevronUp, Clock, Camera,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -39,6 +39,8 @@ interface DriverOrder {
   paymentMethod: string;
   notes: string | null;
   deliveryOrder: number | null;
+  deliveryPhoto: string | null;
+  deliveryConfirmedAt: string | null;
   items: OrderItem[];
   user: { name: string; phone: string };
   address: OrderAddress;
@@ -64,6 +66,10 @@ export default function DriverDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  // Optional delivery evidence photo (station staff/driver only, before confirmation)
+  const [photoFiles, setPhotoFiles] = useState<Record<string, File | null>>({});
+  const [photoTargetOrder, setPhotoTargetOrder] = useState<string | null>(null);
+  const photoInputRef = useRef<HTMLInputElement | null>(null);
 
   const fetchOrders = useCallback(async () => {
     setLoading(true);
@@ -126,6 +132,66 @@ export default function DriverDashboardPage() {
       setUpdatingId(null);
     }
   };
+  const uploadDeliveryPhoto = async (orderId: string, file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch(`/api/orders/${orderId}/delivery-photo`, {
+      method: "POST",
+      body: fd,
+    });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || "Upload failed");
+    return json.data;
+  };
+  const triggerPhotoPick = (orderId: string) => {
+    setPhotoTargetOrder(orderId);
+    photoInputRef.current?.click();
+  };
+  const handlePhotoSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    if (file && photoTargetOrder) {
+      if (!file.type.startsWith("image/")) {
+        toast.error("Please choose an image file (JPG, PNG, WebP).");
+      } else if (file.size > 2 * 1024 * 1024) {
+        toast.error("Photo is too large. Maximum size is 2MB.");
+      } else {
+        setPhotoFiles((prev) => ({ ...prev, [photoTargetOrder]: file }));
+        toast.success("Photo attached — will upload when you mark delivered");
+      }
+    }
+    e.target.value = "";
+  };
+  const handleMarkDelivered = async (order: DriverOrder) => {
+    setUpdatingId(order.id);
+    try {
+      const res = await fetch(`/api/dashboard/orders/${order.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "DELIVERED" }),
+      });
+      const json = await res.json();
+      if (!json.success) {
+        toast.error(json.error || "Failed to update");
+        return;
+      }
+      toast.success("Order delivered!");
+      const photo = photoFiles[order.id];
+      if (photo) {
+        try {
+          await uploadDeliveryPhoto(order.id, photo);
+          setPhotoFiles((prev) => ({ ...prev, [order.id]: null }));
+          toast.success("Delivery photo attached");
+        } catch (err: any) {
+          toast.error(err.message || "Order delivered, but photo upload failed");
+        }
+      }
+      fetchOrders();
+    } catch {
+      toast.error("Network error");
+    } finally {
+      setUpdatingId(null);
+    }
+  };
 
   const toggleGroup = (barangay: string) => {
     setExpandedGroups((prev) => {
@@ -180,6 +246,15 @@ export default function DriverDashboardPage() {
 
   return (
     <div className="space-y-4 pb-24">
+      {/* Hidden file input for optional delivery evidence photo */}
+      <input
+        ref={photoInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        className="hidden"
+        onChange={handlePhotoSelected}
+        aria-hidden="true"
+      />
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -390,21 +465,59 @@ export default function DriverDashboardPage() {
                             Start Delivery
                           </Button>
                         ) : order.status === "OUT_FOR_DELIVERY" ? (
-                          <Button
-                            size="sm"
-                            className="rounded-xl min-h-[40px] bg-green-600 hover:bg-green-700 text-xs"
-                            onClick={() =>
-                              updateStatus(order.id, "DELIVERED")
-                            }
-                            disabled={updatingId === order.id}
-                          >
-                            {updatingId === order.id ? (
-                              <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                          <>
+                            {photoFiles[order.id] ? (
+                              <span
+                                className="text-[10px] text-blue-600 dark:text-blue-400 max-w-[90px] truncate font-medium"
+                                title={photoFiles[order.id]?.name || "Photo attached"}
+                              >
+                                Photo ready
+                              </span>
                             ) : (
-                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="rounded-xl min-h-[40px] text-xs"
+                                onClick={() => triggerPhotoPick(order.id)}
+                                disabled={updatingId === order.id}
+                                aria-label="Attach delivery photo"
+                              >
+                                <Camera className="h-3.5 w-3.5" />
+                              </Button>
                             )}
-                            Delivered
-                          </Button>
+                            <Button
+                              size="sm"
+                              className="rounded-xl min-h-[40px] bg-green-600 hover:bg-green-700 text-xs"
+                              onClick={() => handleMarkDelivered(order)}
+                              disabled={updatingId === order.id}
+                            >
+                              {updatingId === order.id ? (
+                                <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                              ) : (
+                                <CheckCircle2 className="h-3 w-3 mr-1" />
+                              )}
+                              Delivered
+                            </Button>
+                          </>
+                        ) : order.status === "DELIVERED" ? (
+                          order.deliveryPhoto ? (
+                            <span className="text-[10px] text-green-600 dark:text-green-400 flex items-center gap-1 font-medium">
+                              <Camera className="h-3.5 w-3.5" />
+                              Photo attached
+                            </span>
+                          ) : !order.deliveryConfirmedAt ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="rounded-xl min-h-[40px] text-xs"
+                              onClick={() => triggerPhotoPick(order.id)}
+                              disabled={updatingId === order.id}
+                              aria-label="Add delivery photo"
+                            >
+                              <Camera className="h-3.5 w-3.5 mr-1" />
+                              Add Photo
+                            </Button>
+                          ) : null
                         ) : null}
                       </div>
                     </div>

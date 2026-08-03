@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { applyDeliveryAutoConfirmMany } from "@/lib/delivery";
 
 // GET /api/dashboard/driver/orders — Returns the logged-in driver's assigned orders
 // for today (or a date param). Grouped/sorted by barangay. Filters by status.
@@ -36,24 +37,26 @@ export async function GET(req: NextRequest) {
       ? statusParam.split(",").map((s) => s.trim())
       : ["PENDING", "ACCEPTED", "PREPARING", "OUT_FOR_DELIVERY", "DELIVERED"];
 
-    const orders = await prisma.order.findMany({
-      where: {
-        driverId: staffId,
-        createdAt: { gte: startOfDay, lt: endOfDay },
-        status: { in: statusFilter },
-      },
-      include: {
-        items: {
-          include: { product: true },
+    const orders = await applyDeliveryAutoConfirmMany(
+      await prisma.order.findMany({
+        where: {
+          driverId: staffId,
+          createdAt: { gte: startOfDay, lt: endOfDay },
+          status: { in: statusFilter },
         },
-        user: { select: { name: true, phone: true } },
-        address: true,
-      },
-      orderBy: [
-        { deliveryOrder: "asc" },
-        { createdAt: "asc" },
-      ],
-    });
+        include: {
+          items: {
+            include: { product: true },
+          },
+          user: { select: { name: true, phone: true } },
+          address: true,
+        },
+        orderBy: [
+          { deliveryOrder: "asc" },
+          { createdAt: "asc" },
+        ],
+      })
+    );
 
     // Group by barangay
     const grouped: Record<string, typeof orders> = {};

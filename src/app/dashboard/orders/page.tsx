@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { 
   Search, 
   MoreVertical, 
@@ -25,7 +25,8 @@ import {
   AlertCircle,
   Calendar,
   Filter,
-  ShoppingBag
+  ShoppingBag,
+  Camera
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -74,6 +75,8 @@ interface Order {
   paymentMethod: string;
   paymentStatus: string;
   notes: string | null;
+  deliveryPhoto: string | null;
+  deliveryConfirmedAt: string | null;
   items: { product: { name: string; price: number }; quantity: number; unitPrice: number }[];
   user: { name: string; phone: string };
   address: { street: string; barangay: string; city: string; province: string; landmark: string | null };
@@ -124,6 +127,35 @@ export default function ProviderOrdersPage() {
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
   const [staffMembers, setStaffMembers] = useState<StaffOption[]>([]);
   const [assigningId, setAssigningId] = useState<string | null>(null);
+  // Delivery evidence photo (optional, station-only, before customer confirmation)
+  const [dialogPhotoFile, setDialogPhotoFile] = useState<File | null>(null);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [photoUploadingFor, setPhotoUploadingFor] = useState<string | null>(null);
+  const photoInputRef = useRef<HTMLInputElement | null>(null);
+
+  const uploadDeliveryPhoto = async (order: Order, file: File) => {
+    setPhotoUploading(true);
+    setPhotoUploadingFor(order.id);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch(`/api/orders/${order.id}/delivery-photo`, {
+        method: "POST",
+        body: fd,
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error || "Upload failed");
+      toast.success("Delivery photo attached");
+      setDetailOrder({ ...order, deliveryPhoto: json.data.deliveryPhoto });
+      setDialogPhotoFile(null);
+      fetchOrders();
+    } catch (err: any) {
+      toast.error(err.message || "Photo upload failed");
+    } finally {
+      setPhotoUploading(false);
+      setPhotoUploadingFor(null);
+    }
+  };
 
   const fetchOrders = useCallback(() => {
     setLoading(true);
@@ -871,6 +903,70 @@ export default function ProviderOrdersPage() {
                       Notes
                     </h4>
                     <p className="text-sm dark:text-gray-200">{detailOrder.notes}</p>
+                  </div>
+                )}
+
+                {/* Delivery Evidence (optional photo — before customer confirmation) */}
+                {detailOrder.status === "DELIVERED" &&
+                  (detailOrder.deliveryPhoto || !detailOrder.deliveryConfirmedAt) && (
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4 space-y-3">
+                    <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                      <Camera className="h-3 w-3" />
+                      Delivery Evidence
+                    </h4>
+                    {detailOrder.deliveryPhoto ? (
+                      <a
+                        href={detailOrder.deliveryPhoto}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-blue-600 dark:text-blue-400 underline font-medium"
+                      >
+                        View delivery photo
+                      </a>
+                    ) : (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <input
+                          ref={photoInputRef}
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          className="text-xs max-w-[180px] dark:text-gray-300"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0] || null;
+                            if (f) {
+                              if (!f.type.startsWith("image/")) {
+                                toast.error("Please choose an image file (JPG, PNG, WebP).");
+                              } else if (f.size > 2 * 1024 * 1024) {
+                                toast.error("Photo is too large. Maximum size is 2MB.");
+                              } else {
+                                setDialogPhotoFile(f);
+                              }
+                            }
+                            e.target.value = "";
+                          }}
+                        />
+                        <Button
+                          size="sm"
+                          className="rounded-xl min-h-[40px]"
+                          onClick={() => dialogPhotoFile && uploadDeliveryPhoto(detailOrder, dialogPhotoFile)}
+                          disabled={!dialogPhotoFile || (photoUploading && photoUploadingFor === detailOrder.id)}
+                        >
+                          {photoUploading && photoUploadingFor === detailOrder.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                          ) : null}
+                          {photoUploading && photoUploadingFor === detailOrder.id ? "Uploading..." : "Upload"}
+                        </Button>
+                      </div>
+                    )}
+                    {dialogPhotoFile && !detailOrder.deliveryPhoto && (
+                      <p className="text-xs text-muted-foreground truncate">
+                        Selected: {dialogPhotoFile.name}
+                      </p>
+                    )}
+                    {detailOrder.deliveryConfirmedAt && (
+                      <p className="text-xs text-muted-foreground">
+                        Customer confirmed this delivery — photo window closed.
+                      </p>
+                    )}
                   </div>
                 )}
 

@@ -65,7 +65,17 @@ export async function PUT(
       where: { id: params.id },
       data: {
         status,
-        ...(status === "DELIVERED" ? { paymentStatus: "PAID" } : {}),
+        ...(status === "DELIVERED"
+          ? {
+              // Evidence timestamp — set once at delivery time.
+              deliveredAt: order.deliveredAt ?? new Date(),
+              // M4 rule: only COD is collected at the door. Prepaid statuses
+              // (GCash) are authoritative from PayMongo — never marked PAID here.
+              ...(order.paymentMethod === "COD"
+                ? { paymentStatus: "PAID", paymentPaidAt: new Date() }
+                : {}),
+            }
+          : {}),
       },
       include: {
         items: { include: { product: true } },
