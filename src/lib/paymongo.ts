@@ -155,6 +155,22 @@ export function createPaymentIntent({
   });
 }
 
+export function createGcashPaymentMethod(options: {
+  idempotencyKey?: string;
+} = {}): Promise<PayMongoResult<PayMongoData>> {
+  return request<PayMongoData>("/payment_methods", {
+    method: "POST",
+    idempotencyKey: options.idempotencyKey,
+    body: {
+      data: {
+        attributes: {
+          type: "gcash",
+        },
+      },
+    },
+  });
+}
+
 export function attachPaymentMethod(
   paymentIntentId: string,
   { paymentMethodId, returnUrl }: AttachPaymentMethodInput,

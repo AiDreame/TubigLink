@@ -97,7 +97,7 @@ export type OrderStatus =
   | "CANCELLED";
 
 export type PaymentMethod = "COD" | "GCASH" | "CARD" | "PAYMAYA";
-export type PaymentStatus = "PENDING" | "PAID" | "FAILED" | "REFUNDED";
+export type PaymentStatus = "PENDING" | "REQUIRES_ACTION" | "PAID" | "FAILED" | "REFUNDED" | "CANCELLED";
 
 export interface OrderItem {
   id: string;

@@ -41,6 +41,8 @@ export default function CartPage() {
   const { data: session } = useSession();
   const router = useRouter();
   const [isCheckingOut, setIsCheckingOut] = useState(false);
+  const [checkoutPhase, setCheckoutPhase] = useState<"idle" | "preparing" | "redirecting" | "error">("idle");
+  const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
@@ -66,6 +68,119 @@ export default function CartPage() {
       .finally(() => setLoadingAddresses(false));
   }, [session]);
 
+  // ── GCash checkout helpers ──────────────────────────────────────────────
+  // The idempotency key is persisted per order so retries reuse it, which
+  // prevents duplicate PaymentIntents on PayMongo. The stored order id lets
+  // a retry resume the same unpaid order instead of creating a new one.
+  const gcashOrderStorageKey = `aq_gcash_order_${stationId}`;
+
+  const getOrCreateIdempotencyKey = (orderId: string): string => {
+    const key = `aq_gcash_idem_${orderId}`;
+    const existing = sessionStorage.getItem(key);
+    if (existing) return existing;
+    const fresh = crypto.randomUUID();
+    sessionStorage.setItem(key, fresh);
+    return fresh;
+  };
+
+  const clearGcashCheckoutKeys = (orderId: string) => {
+    sessionStorage.removeItem(`aq_gcash_idem_${orderId}`);
+    sessionStorage.removeItem(gcashOrderStorageKey);
+  };
+
+  const findResumableGcashOrder = async (
+    cartSubtotal: number,
+  ): Promise<{ status: "paid"; orderId: string } | { status: "resume"; orderId: string } | { status: "none" }> => {
+    const storedId = sessionStorage.getItem(gcashOrderStorageKey);
+    if (!storedId) return { status: "none" };
+    try {
+      const res = await fetch(`/api/payments/orders/${storedId}`);
+      const json = await res.json();
+      if (!res.ok || !json.success) return { status: "none" };
+      const status = String(json.data.paymentStatus || "").toUpperCase();
+      if (status === "PAID") {
+        sessionStorage.removeItem(gcashOrderStorageKey);
+        return { status: "paid", orderId: storedId };
+      }
+      if (status === "FAILED" || status === "REFUNDED") {
+        sessionStorage.removeItem(gcashOrderStorageKey);
+        return { status: "none" };
+      }
+      // REQUIRES_ACTION / PENDING — resume only if the cart still matches
+      // the order, otherwise the customer gets a fresh order.
+      const ores = await fetch(`/api/orders/${storedId}`);
+      const ojson = await ores.json();
+      if (ores.ok && ojson.success && Number(ojson.data?.subtotal) === cartSubtotal) {
+        return { status: "resume", orderId: storedId };
+      }
+      sessionStorage.removeItem(gcashOrderStorageKey);
+      return { status: "none" };
+    } catch {
+      return { status: "none" };
+    }
+  };
+
+  const initGcashPayment = useCallback(async (orderId: string) => {
+    const idempotencyKey = getOrCreateIdempotencyKey(orderId);
+    setCheckoutPhase("preparing");
+    setCheckoutError(null);
+    try {
+      const payRes = await fetch("/api/payments/gcash/intent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // No paymentMethodId — the server creates the GCash PaymentMethod
+        // server-side via the PayMongo client.
+        body: JSON.stringify({ orderId, idempotencyKey }),
+      });
+      const payResult = await payRes.json();
+
+      if (!payRes.ok || !payResult.success) {
+        setCheckoutError(payResult.error || "GCash payment could not be initialized.");
+        setCheckoutPhase("error");
+        setIsCheckingOut(false);
+        return;
+      }
+
+      const data = payResult.data || {};
+      const status = String(data.status || "").toLowerCase();
+
+      // Payment already confirmed server-side — go straight to the order.
+      if (["succeeded", "paid"].includes(status)) {
+        clearGcashCheckoutKeys(orderId);
+        clearCart();
+        router.replace(`/orders/${orderId}`);
+        return;
+      }
+
+      // Terminal failure — allow a fresh attempt (no amount was charged).
+      if (["failed", "cancelled", "canceled"].includes(status)) {
+        clearGcashCheckoutKeys(orderId);
+        setCheckoutError("Payment failed. No amount was charged. Please try again.");
+        setCheckoutPhase("error");
+        setIsCheckingOut(false);
+        return;
+      }
+
+      const nextAction = data.nextAction;
+      if (nextAction?.type === "redirect" && nextAction.url) {
+        setCheckoutPhase("redirecting");
+        clearCart();
+        window.location.href = nextAction.url;
+        return;
+      }
+
+      // No redirect (payment still being confirmed server-side) — honest
+      // pending state; never the old "contact the station" fallback.
+      setCheckoutError("Payment is still being confirmed. Do not pay again — check your order for updates.");
+      setCheckoutPhase("error");
+      setIsCheckingOut(false);
+    } catch {
+      setCheckoutError("GCash payment could not be initialized. Please try again.");
+      setCheckoutPhase("error");
+      setIsCheckingOut(false);
+    }
+  }, [clearCart, router]);
+
   const handleCheckout = useCallback(async () => {
     if (!session?.user) {
       router.replace("/auth/login");
@@ -81,75 +196,70 @@ export default function CartPage() {
     }
 
     setIsCheckingOut(true);
+    setCheckoutPhase("preparing");
     setCheckoutError(null);
     try {
-      const body = {
-        userId: (session.user as any).id,
-        stationId,
-        items: items.map((item) => ({
-          productId: item.product.id,
-          quantity: item.quantity,
-        })),
-        addressId: selectedAddressId,
-        paymentMethod: selectedPayment,
-        orderType: "ONCE",
-      };
+      let orderId = activeOrderId;
 
-      const res = await fetch("/api/orders", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-
-      const result = await res.json();
-
-      if (!res.ok) {
-        throw new Error(result.error || "Failed to create order");
+      // GCash: resume an existing unpaid order for this station instead of
+      // creating a duplicate order or PaymentIntent on retry.
+      if (!orderId && selectedPayment === "GCASH") {
+        const resume = await findResumableGcashOrder(subtotal);
+        if (resume.status === "paid") {
+          clearCart();
+          router.replace(`/orders/${resume.orderId}`);
+          return;
+        }
+        if (resume.status === "resume") orderId = resume.orderId;
       }
 
-      const order = result.data;
+      if (!orderId) {
+        const body = {
+          userId: (session.user as any).id,
+          stationId,
+          items: items.map((item) => ({
+            productId: item.product.id,
+            quantity: item.quantity,
+          })),
+          addressId: selectedAddressId,
+          paymentMethod: selectedPayment,
+          orderType: "ONCE",
+        };
 
-      // If GCash, create PayMongo source and redirect to GCash checkout
-      if (selectedPayment === "GCASH") {
-        const payRes = await fetch("/api/payments/create-source", {
+        const res = await fetch("/api/orders", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            amount: order.total,
-            orderId: order.id,
-            description: `AquaLink PH Order #${order.id.slice(-8)}`,
-          }),
+          body: JSON.stringify(body),
         });
 
-        const payResult = await payRes.json();
+        const result = await res.json();
 
-        if (!payRes.ok || !payResult.success) {
-          // Order created but payment init failed — fall back gracefully
-          toast.error("Order placed! GCash payment could not be initiated. Please contact the station.");
-          clearCart();
-          router.replace(`/orders/${order.id}`);
-          return;
+        if (!res.ok) {
+          throw new Error(result.error || "Failed to create order");
         }
 
-        // Redirect to official GCash checkout page via PayMongo
-        const checkoutUrl = payResult.data.checkout_url;
-        if (checkoutUrl) {
-          clearCart();
-          window.location.href = checkoutUrl;
-          return;
-        }
+        orderId = result.data.id;
+        setActiveOrderId(orderId);
+        sessionStorage.setItem(gcashOrderStorageKey, result.data.id);
       }
 
-      // COD or GCash without redirect fallback
+      if (selectedPayment === "GCASH") {
+        if (!orderId) return;
+        await initGcashPayment(orderId);
+        return;
+      }
+
+      // COD — unchanged behavior.
       toast.success("Order placed successfully! I-monitor ang iyong order.");
       clearCart();
       router.replace("/orders");
     } catch (err) {
       const message = err instanceof Error ? err.message : "May error sa pag-process ng order. Pakisubukan muli.";
       setCheckoutError(message);
+      setCheckoutPhase("error");
       setIsCheckingOut(false);
     }
-  }, [session, stationId, items, selectedAddressId, selectedPayment, clearCart, router]);
+  }, [session, stationId, items, selectedAddressId, selectedPayment, subtotal, clearCart, router, activeOrderId, initGcashPayment]);
 
   if (items.length === 0) {
     return (
@@ -335,8 +445,8 @@ export default function CartPage() {
           {selectedPayment === "GCASH" && (
             <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900/30 rounded-xl p-3 mt-2">
               <p className="text-xs text-blue-700 dark:text-blue-300">
-                You'll be redirected to GCash to complete payment after placing your order. 
-                Your order will be processed once payment is confirmed.
+                You'll be redirected to GCash to authorize the payment after placing your order.
+                Your order will only be processed once payment is confirmed.
               </p>
             </div>
           )}
@@ -363,6 +473,23 @@ export default function CartPage() {
         {checkoutError && (
           <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/30 rounded-2xl p-4 text-center" role="alert">
             <p className="text-sm text-red-600 dark:text-red-400">{checkoutError}</p>
+            {checkoutPhase === "error" && activeOrderId && selectedPayment === "GCASH" && (
+              <div className="flex gap-2 justify-center mt-4">
+                <Button
+                  className="rounded-xl min-h-[44px] bg-blue-600 hover:bg-blue-700 text-white font-bold"
+                  onClick={() => initGcashPayment(activeOrderId)}
+                >
+                  Try Again
+                </Button>
+                <Button
+                  variant="outline"
+                  className="rounded-xl min-h-[44px]"
+                  onClick={() => router.replace(`/orders/${activeOrderId}`)}
+                >
+                  View Order
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </main>
@@ -382,7 +509,7 @@ export default function CartPage() {
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
-                {MESSAGES.processing}
+                {checkoutPhase === "redirecting" ? "Redirecting to GCash..." : MESSAGES.processing}
               </span>
             ) : (
               <span className="flex items-center justify-between w-full px-4">
