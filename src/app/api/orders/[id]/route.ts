@@ -22,6 +22,7 @@ export async function GET(
         },
         address: true,
         review: true,
+        refunds: { orderBy: { requestedAt: "desc" }, take: 1 },
       },
     });
 

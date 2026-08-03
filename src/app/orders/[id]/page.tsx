@@ -527,6 +527,12 @@ export default function OrderDetailPage() {
             <Badge className={paymentStatusClasses(order.paymentStatus)}>
               {paymentStatusLabel(order.paymentStatus)}
             </Badge>
+            {(order as any).refunds?.[0] && (
+              <p className="mt-2 text-sm text-muted-foreground">
+                {(order as any).refunds[0].status === "PENDING" ? "Refund in progress — GCash refunds can take a few days" :
+                 (order as any).refunds[0].status === "SUCCEEDED" ? "Refunded" : "Refund failed — we will contact you"}
+              </p>
+            )}
           </div>
         )}
 

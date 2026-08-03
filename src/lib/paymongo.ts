@@ -43,6 +43,7 @@ export type CreateRefundInput = {
   paymentId: string;
   reason: string;
   idempotencyKey?: string;
+  metadata?: PayMongoMetadata;
 };
 
 /** Server-side PayMongo configuration. The secret key is intentionally not returned. */
@@ -204,6 +205,7 @@ export function createRefund({
   paymentId,
   reason,
   idempotencyKey,
+  metadata,
 }: CreateRefundInput): Promise<PayMongoResult<PayMongoData>> {
   return request<PayMongoData>("/refunds", {
     method: "POST",
@@ -213,7 +215,12 @@ export function createRefund({
         attributes: {
           amount: amountCentavos,
           payment_id: paymentId,
-          reason,
+          // PayMongo refund reasons: duplicate, fraudulent, requested_by_customer, others.
+          reason: ["duplicate", "fraudulent", "requested_by_customer", "others"].includes(reason)
+            ? reason
+            : "requested_by_customer",
+          currency: "PHP",
+          ...(metadata ? { metadata } : {}),
         },
       },
     },
