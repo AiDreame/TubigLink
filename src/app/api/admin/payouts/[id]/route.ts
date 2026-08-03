@@ -1,0 +1,2 @@
+import { NextResponse } from "next/server"; import prisma from "@/lib/prisma"; import { requireAdmin,payoutInclude } from "../_lib";
+export async function GET(_:Request,{params}:{params:{id:string}}){if(!await requireAdmin())return NextResponse.json({error:"Forbidden"},{status:403});const data=await prisma.payout.findUnique({where:{id:params.id},include:payoutInclude});if(!data)return NextResponse.json({error:"Not found"},{status:404});return NextResponse.json({success:true,data});}
