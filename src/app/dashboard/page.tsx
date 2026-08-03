@@ -44,6 +44,8 @@ interface DashboardData {
     completedOrders: number;
     totalCustomers: number;
     revenue: number;
+    paidToDateCentavos: number;
+    availableCentavos: number;
     avgDeliveryMinutes: number;
   };
   recentOrders: any[];
@@ -53,7 +55,6 @@ interface DashboardData {
 interface RevenueDay {
   date: string;
   count: number;
-  revenue: number;
 }
 
 type DatePreset = 7 | 30 | 90;
@@ -75,7 +76,7 @@ function CustomTooltip({ active, payload, label }: any) {
       <p className="font-bold mb-1 dark:text-white">{label}</p>
       {payload.map((entry: any, idx: number) => (
         <p key={idx} style={{ color: entry.color }} className="font-medium">
-          {entry.name}: {formatCurrency(entry.value)}
+          {entry.name}: {entry.value} orders
         </p>
       ))}
     </div>
@@ -158,11 +159,11 @@ export default function DashboardHome() {
   if (!data) return null;
 
   const { stats, recentOrders } = data;
-  const formattedRevenue = `₱${stats.revenue.toLocaleString()}`;
+  const formattedRevenue = `₱${(stats.paidToDateCentavos / 100).toFixed(2)}`;
 
   const statCards = [
     { 
-      label: MESSAGES.totalRevenue, 
+      label: "Paid to date", 
       value: formattedRevenue, 
       icon: DollarSign, 
       trend: `${stats.pendingOrders} pending`, 
@@ -207,7 +208,7 @@ export default function DashboardHome() {
     }
   };
 
-  const totalGraphRevenue = revenueData.reduce((sum, d) => sum + d.revenue, 0);
+  const totalGraphRevenue = 0;
 
   return (
     <div className="space-y-8">
@@ -238,17 +239,17 @@ export default function DashboardHome() {
         ))}
       </div>
 
-      {/* Revenue Overview Graph */}
+      {/* Delivered orders volume Graph */}
       <Card className="border-none shadow-sm bg-white dark:bg-gray-800/50">
         <CardHeader className="pb-2">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
-              <CardTitle className="text-lg dark:text-white">Revenue Overview</CardTitle>
+              <CardTitle className="text-lg dark:text-white">Delivered orders volume</CardTitle>
               <CardDescription>
                 {revenueLoading ? (
                   <span className="inline-block h-4 w-20 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
                 ) : (
-                  `Total: ${formatCurrency(totalGraphRevenue)}`
+                  `Counts only — not earnings`
                 )}
               </CardDescription>
             </div>
@@ -301,12 +302,12 @@ export default function DashboardHome() {
                   <Tooltip content={<CustomTooltip />} />
                   <Line
                     type="monotone"
-                    dataKey="revenue"
+                    dataKey="count"
                     stroke="#3B82F6"
                     strokeWidth={2}
                     dot={false}
                     activeDot={{ r: 5, fill: "#3B82F6" }}
-                    name="Revenue"
+                    name="Orders"
                   />
                 </LineChart>
               </ResponsiveContainer>

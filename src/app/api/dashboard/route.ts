@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { authorizeDashboardStation, isAuthorizedStation } from "@/lib/station-auth";
 import { applyDeliveryAutoConfirmMany } from "@/lib/delivery";
+import { getStationEarnings } from "@/lib/earnings";
 
 // GET /api/dashboard — Get provider dashboard analytics
 export async function GET(req: NextRequest) {
@@ -40,17 +41,7 @@ export async function GET(req: NextRequest) {
       where: { stationId, createdAt: { gte: startOfToday } },
     });
 
-    // Revenue
-    const revenue = await prisma.order.aggregate({
-      where: { stationId, status: "DELIVERED" },
-      _sum: { total: true },
-    });
-
-    // Today's revenue
-    const todayRevenue = await prisma.order.aggregate({
-      where: { stationId, status: "DELIVERED", createdAt: { gte: startOfToday } },
-      _sum: { total: true },
-    });
+    const earnings = await getStationEarnings(stationId);
 
     // Recent orders
     const recentOrders = await applyDeliveryAutoConfirmMany(
@@ -117,9 +108,11 @@ export async function GET(req: NextRequest) {
           activeOrders,
           completedOrders,
           todayOrders,
-          todayRevenue: todayRevenue._sum.total || 0,
+          todayRevenue: 0,
           totalCustomers: customerIds.length,
-          revenue: revenue._sum.total || 0,
+          revenue: earnings.paidCentavos / 100,
+          paidToDateCentavos: earnings.paidCentavos,
+          availableCentavos: earnings.availableCentavos,
           avgDeliveryMinutes: avgMinutes,
         },
         recentOrders,
