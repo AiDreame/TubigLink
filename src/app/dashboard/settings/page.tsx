@@ -87,6 +87,13 @@ interface StationData {
 
 const ALL_CITIES = [...METRO_MANILA_CITIES, ...CEBU_CITIES, ...MINDANAO_CITIES];
 
+function PayoutSettings() {
+  const [data,setData]=useState<any>(null); const [open,setOpen]=useState(false); const [code,setCode]=useState(""); const [number,setNumber]=useState(""); const [name,setName]=useState(""); const [method,setMethod]=useState("GCASH"); const [loading,setLoading]=useState(false);
+  const load=useCallback(()=>fetch("/api/dashboard/payout-settings").then(r=>r.json()).then(x=>setData(x.data)),[]); useEffect(()=>{load()},[load]);
+  async function save(){setLoading(true);let o=await fetch("/api/dashboard/payout-settings/otp",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:data?.hasPayoutAccount?"EDIT":"ADD"})});if(!o.ok){toast.error("Could not send code");setLoading(false);return}toast.success("We emailed you a security code");const c=prompt("Enter the 6-digit security code");if(!c){setLoading(false);return}const r=await fetch("/api/dashboard/payout-settings",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:data?.hasPayoutAccount?"EDIT":"ADD",code:c,payoutMethod:method,accountName:name,accountNumber:number})});if(r.ok){toast.success("Payout account saved");setOpen(false);load()}else toast.error("Invalid code or details");setLoading(false)}
+  return <Card className="mt-6"><CardHeader><CardTitle>Payout settings</CardTitle><CardDescription>Your payout destination is protected by email 2FA.</CardDescription></CardHeader><CardContent>{data?.hasPayoutAccount?<div className="flex items-center justify-between"><p className="text-sm">{data.payoutMethod} · {data.payoutAccountName}<br/><strong>{data.maskedAccountNumber}</strong></p><Button onClick={()=>setOpen(true)}>Edit</Button></div>:<Button onClick={()=>setOpen(true)}>Add payout account</Button>} {open&&<div className="mt-4 space-y-3"><Select value={method} onValueChange={setMethod}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="BANK">Bank transfer</SelectItem><SelectItem value="GCASH">GCash</SelectItem></SelectContent></Select><Input placeholder="Account name" value={name} onChange={e=>setName(e.target.value)}/><Input placeholder="Account number" value={number} onChange={e=>setNumber(e.target.value)}/><Button onClick={save} disabled={loading}>{loading?"Saving…":"Send code & save"}</Button></div>}</CardContent></Card>;
+}
+
 export default function DashboardSettingsPage() {
   const { data: session } = useSession();
   const [loading, setLoading] = useState(true);
@@ -883,6 +890,7 @@ export default function DashboardSettingsPage() {
         </DialogContent>
       </Dialog>
 
+      <PayoutSettings />
       {/* ─── Save Footer (sticky on mobile) ─── */}
       <div className="sticky bottom-0 bg-white dark:bg-gray-950 border-t dark:border-gray-800 p-4 mt-8 flex justify-end gap-3 shadow-lg rounded-t-2xl">
         <Button
