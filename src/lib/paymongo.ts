@@ -114,7 +114,12 @@ async function request<T>(
     }
 
     if (response.ok) {
-      return { ok: true, data: payload as T };
+      // PayMongo wraps success responses in { data: <resource> }. Unwrap so
+      // callers can use result.data.id / result.data.attributes directly
+      // (matches PayMongoData). Fall back to the payload as-is if no envelope.
+      const envelope = payload as { data?: T } | null;
+      const unwrapped = envelope?.data;
+      return { ok: true, data: (unwrapped === undefined ? payload : unwrapped) as T };
     }
 
     const body = payload as {
