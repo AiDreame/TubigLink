@@ -13,6 +13,8 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
   const updated = await prisma.$transaction(async tx => {
     const r = await tx.refund.update({ where: { id: refund.id }, data: { status: "SUCCEEDED", completedAt: now } });
     await tx.order.update({ where: { id: refund.orderId }, data: { paymentStatus: "REFUNDED", paymentRefundedAt: now, paymentRefundedAmount: refund.amountCentavos } });
+    const dispute = await tx.dispute.findFirst({ where: { refundId: refund.id } });
+    if (dispute) await tx.dispute.update({ where: { id: dispute.id }, data: { status: "REFUNDED" } });
     return r;
   });
   return NextResponse.json({ success: true, data: updated });
