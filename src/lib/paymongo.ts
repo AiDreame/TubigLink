@@ -90,14 +90,25 @@ async function request<T>(
     const response = await fetch(`${PAYMONGO_BASE_URL}${path}`, {
       method: options.method,
       headers,
+      cache: "no-store",
       ...(options.body === undefined
         ? {}
         : { body: JSON.stringify(options.body) }),
     });
 
+    const rawText = await response.text();
+    if (path === "/payment_methods") {
+      console.error(
+        `[PayMongo] ${path} ->`,
+        response.status,
+        response.headers.get("content-type"),
+        rawText.slice(0, 800),
+        `secretKeySet=${Boolean(process.env.PAYMONGO_SECRET_KEY)}`,
+      );
+    }
     let payload: unknown;
     try {
-      payload = await response.json();
+      payload = rawText ? JSON.parse(rawText) : undefined;
     } catch {
       payload = undefined;
     }
