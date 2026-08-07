@@ -76,8 +76,9 @@ const STATUS_LABELS: Record<string, string> = {
   CANCELLED: "Cancelled",
 };
 
-function formatCurrency(amount: number): string {
-  return `₱${amount.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+function formatCurrency(amount: number | null | undefined): string {
+  const safeAmount = typeof amount === "number" && Number.isFinite(amount) ? amount : 0;
+  return `₱${safeAmount.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function AnalyticsSkeleton() {
@@ -160,15 +161,21 @@ export default function AnalyticsPage() {
 
   if (!data) return null;
 
-  const { ordersByDay, popularProducts, statusDistribution, busiestHours, busiestDays, repeatCustomers, avgOrderValue, avgDeliveryMinutes, totalOrders, monthlyComparison } = data;
+  const { ordersByDay, popularProducts, statusDistribution, busiestHours, busiestDays, repeatCustomers, avgDeliveryMinutes, totalOrders } = data;
+  const avgOrderValue = data.avgOrderValue ?? 0;
+  const monthlyComparison = data.monthlyComparison ?? {};
+  const thisMonthOrders = monthlyComparison.thisMonth?.orders ?? 0;
+  const lastMonthOrders = monthlyComparison.lastMonth?.orders ?? 0;
+  const thisMonthRevenue = monthlyComparison.thisMonth?.revenue ?? 0;
+  const lastMonthRevenue = monthlyComparison.lastMonth?.revenue ?? 0;
 
   // Compute summary stats
   const totalRevenue = ordersByDay.reduce((sum, d) => sum + d.revenue, 0);
-  const revenueChange = monthlyComparison.lastMonth.revenue > 0
-    ? Math.round(((monthlyComparison.thisMonth.revenue - monthlyComparison.lastMonth.revenue) / monthlyComparison.lastMonth.revenue) * 100)
+  const revenueChange = lastMonthRevenue > 0
+    ? Math.round(((thisMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100)
     : 0;
-  const ordersChange = monthlyComparison.lastMonth.orders > 0
-    ? Math.round(((monthlyComparison.thisMonth.orders - monthlyComparison.lastMonth.orders) / monthlyComparison.lastMonth.orders) * 100)
+  const ordersChange = lastMonthOrders > 0
+    ? Math.round(((thisMonthOrders - lastMonthOrders) / lastMonthOrders) * 100)
     : 0;
 
   // Status distribution for pie chart
@@ -220,7 +227,7 @@ export default function AnalyticsPage() {
       label: "Avg. Delivery Time",
       value: `${avgDeliveryMinutes}m`,
       icon: Clock,
-      trend: `${monthlyComparison.thisMonth.orders} orders this month`,
+      trend: `${thisMonthOrders} orders this month`,
       isUp: avgDeliveryMinutes <= 30,
       color: "text-orange-600 bg-orange-50 dark:bg-orange-900/30 dark:text-orange-400",
     },
@@ -326,19 +333,19 @@ export default function AnalyticsPage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-xs text-gray-500">This Month</p>
-                      <p className="text-lg font-bold text-blue-600">{formatCurrency(monthlyComparison.thisMonth.revenue)}</p>
+                      <p className="text-lg font-bold text-blue-600">{formatCurrency(thisMonthRevenue)}</p>
                     </div>
                     <div className="text-right">
                       <p className="text-xs text-gray-500">Last Month</p>
-                      <p className="text-lg font-bold">{formatCurrency(monthlyComparison.lastMonth.revenue)}</p>
+                      <p className="text-lg font-bold">{formatCurrency(lastMonthRevenue)}</p>
                     </div>
                   </div>
                   <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                     <div
                       className="h-full bg-blue-600 rounded-full transition-all"
                       style={{
-                        width: `${monthlyComparison.lastMonth.revenue > 0
-                          ? Math.min((monthlyComparison.thisMonth.revenue / monthlyComparison.lastMonth.revenue) * 100, 100)
+                        width: `${lastMonthRevenue > 0
+                          ? Math.min((thisMonthRevenue / lastMonthRevenue) * 100, 100)
                           : 0}%`,
                       }}
                     />
@@ -352,19 +359,19 @@ export default function AnalyticsPage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-xs text-gray-500">This Month</p>
-                      <p className="text-lg font-bold text-blue-600">{monthlyComparison.thisMonth.orders}</p>
+                      <p className="text-lg font-bold text-blue-600">{thisMonthOrders}</p>
                     </div>
                     <div className="text-right">
                       <p className="text-xs text-gray-500">Last Month</p>
-                      <p className="text-lg font-bold">{monthlyComparison.lastMonth.orders}</p>
+                      <p className="text-lg font-bold">{lastMonthOrders}</p>
                     </div>
                   </div>
                   <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                     <div
                       className="h-full bg-green-500 rounded-full transition-all"
                       style={{
-                        width: `${monthlyComparison.lastMonth.orders > 0
-                          ? Math.min((monthlyComparison.thisMonth.orders / monthlyComparison.lastMonth.orders) * 100, 100)
+                        width: `${lastMonthOrders > 0
+                          ? Math.min((thisMonthOrders / lastMonthOrders) * 100, 100)
                           : 0}%`,
                       }}
                     />
@@ -555,7 +562,7 @@ export default function AnalyticsPage() {
                     </div>
                     <div className="flex items-center gap-4 text-right shrink-0">
                       <span className="text-xs text-muted-foreground">{product.quantityOrdered}x ordered</span>
-                      <span className="text-sm font-bold w-20">{formatCurrency(product.revenue)}</span>
+                      <span className="text-sm font-bold w-20">{formatCurrency(product.revenue ?? 0)}</span>
                     </div>
                   </div>
                 ))}
