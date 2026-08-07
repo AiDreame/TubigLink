@@ -186,6 +186,38 @@ export async function POST(req: NextRequest) {
       await prisma.paymentAttempt.delete({ where: { id: existing.id } });
     }
 
+    // A GCash PaymentMethod is single-use. If a prior checkout already has a
+    // live PaymentIntent, resume it instead of trying to attach its consumed PM
+    // to a new intent (the client may have lost its idempotency key).
+    if (order.paymentIntentId) {
+      const remote = await getPaymentIntent(order.paymentIntentId);
+      if (remote.ok) {
+        const attrs: any = remote.data.attributes || {};
+        const rawStatus = String(attrs.status || "").toLowerCase();
+        if (["succeeded", "paid"].includes(rawStatus)) {
+          const attempt = await prisma.paymentAttempt.create({
+            data: { orderId, idempotencyKey, paymentIntentId: order.paymentIntentId, status: "succeeded" },
+          });
+          await prisma.order.update({ where: { id: order.id }, data: { paymentStatus: "PAID", paymentPaidAt: new Date() } });
+          return NextResponse.json({ success: true, data: { orderId, paymentIntentId: order.paymentIntentId, status: rawStatus, nextAction: null } });
+        }
+        const resumeUrl = extractRedirectUrl(attrs);
+        if (!["failed", "cancelled", "canceled"].includes(rawStatus) && resumeUrl) {
+          await prisma.paymentAttempt.create({
+            data: { orderId, idempotencyKey, paymentIntentId: order.paymentIntentId, status: rawStatus || "REQUIRES_ACTION" },
+          });
+          return NextResponse.json({
+            success: true,
+            data: { orderId, paymentIntentId: order.paymentIntentId, status: rawStatus, nextAction: { type: "redirect", url: resumeUrl } },
+          });
+        }
+      }
+      // Failed/cancelled, missing, or otherwise unusable intents must not leave
+      // their single-use payment method available for a future attachment.
+      paymentMethodId = null;
+      await prisma.order.update({ where: { id: order.id }, data: { paymentMethodId: null, paymentIntentId: null } });
+    }
+
     // Create the GCash PaymentMethod server-side when the client did not
     // supply one (no PayMongo client-side JS required).
     const pmResolved = await getOrCreateGcashPaymentMethod(idempotencyKey, paymentMethodId);
@@ -224,13 +256,23 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const attached = await attachPaymentMethod(intentId, { paymentMethodId, returnUrl });
+    let attached = await attachPaymentMethod(intentId, { paymentMethodId, returnUrl });
     if (!attached.ok) {
-      await prisma.paymentAttempt.update({ where: { id: attempt.id }, data: { paymentIntentId: intentId, status: "FAILED" } });
-      return NextResponse.json(
-        { success: false, error: attached.error.message, code: attached.error.code, paymentIntentId: intentId },
-        { status: 422 },
-      );
+      // A persisted PM may have been consumed by an abandoned intent. Retry
+      // once with a fresh single-use PM, preserving the new PaymentIntent.
+      const retryPm = await createGcashPaymentMethod({ idempotencyKey: `gcash-pm:${idempotencyKey}:retry` });
+      if (retryPm.ok && typeof (retryPm.data as any)?.id === "string") {
+        const retryPaymentMethodId = (retryPm.data as any).id as string;
+        paymentMethodId = retryPaymentMethodId;
+        attached = await attachPaymentMethod(intentId, { paymentMethodId: retryPaymentMethodId, returnUrl });
+      }
+      if (!attached.ok) {
+        await prisma.paymentAttempt.update({ where: { id: attempt.id }, data: { paymentIntentId: intentId, status: "FAILED" } });
+        return NextResponse.json(
+          { success: false, error: attached.error.message, code: attached.error.code, paymentIntentId: intentId },
+          { status: 422 },
+        );
+      }
     }
     const attrs: any = attached.data.attributes || {};
     const status = String(attrs.status || "REQUIRES_ACTION").toLowerCase();

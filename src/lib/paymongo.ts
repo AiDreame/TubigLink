@@ -97,15 +97,6 @@ async function request<T>(
     });
 
     const rawText = await response.text();
-    if (path === "/payment_methods") {
-      console.error(
-        `[PayMongo] ${path} ->`,
-        response.status,
-        response.headers.get("content-type"),
-        rawText.slice(0, 800),
-        `secretKeySet=${Boolean(process.env.PAYMONGO_SECRET_KEY)}`,
-      );
-    }
     let payload: unknown;
     try {
       payload = rawText ? JSON.parse(rawText) : undefined;
