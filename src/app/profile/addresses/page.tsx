@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { ArrowLeft, Plus, MapPin, Trash2, Home as HomeIcon, Briefcase, Loader2, Check, X } from "lucide-react";
+import { ArrowLeft, Plus, MapPin, Trash2, Home as HomeIcon, Briefcase, Loader2, Check, X, LocateFixed } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +35,8 @@ interface Address {
   barangay: string;
   city: string;
   province: string;
+  latitude: number | null;
+  longitude: number | null;
   isDefault: boolean;
 }
 
@@ -46,6 +48,8 @@ interface AddressForm {
   barangay: string;
   city: string;
   province: string;
+  latitude: number | null;
+  longitude: number | null;
 }
 
 const emptyForm: AddressForm = {
@@ -56,6 +60,8 @@ const emptyForm: AddressForm = {
   barangay: "",
   city: "",
   province: "Metro Manila",
+  latitude: null,
+  longitude: null,
 };
 
 export default function AddressesPage() {
@@ -73,6 +79,11 @@ export default function AddressesPage() {
   const [form, setForm] = useState<AddressForm>(emptyForm);
   const [formError, setFormError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  // "Use my location" state (mirrors station settings pattern)
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
+  const [locationCaptured, setLocationCaptured] = useState(false);
 
   // Delete confirmation
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -161,6 +172,8 @@ export default function AddressesPage() {
     setDialogMode("add");
     setEditingId(null);
     setFormError(null);
+    setLocationError(null);
+    setLocationCaptured(false);
     setDialogOpen(true);
   };
 
@@ -174,11 +187,48 @@ export default function AddressesPage() {
       barangay: address.barangay,
       city: address.city,
       province: address.province,
+      latitude: address.latitude,
+      longitude: address.longitude,
     });
     setDialogMode("edit");
     setEditingId(address.id);
     setFormError(null);
+    setLocationError(null);
+    setLocationCaptured(false);
     setDialogOpen(true);
+  };
+
+  // ─── USE MY LOCATION ──────────────────────────────────
+  const useMyLocation = () => {
+    setLocationError(null);
+    setLocationCaptured(false);
+    if (!navigator.geolocation) {
+      setLocationError("Location is not supported by this browser.");
+      return;
+    }
+    setLocationLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setForm((prev) => ({
+          ...prev,
+          latitude: Number(position.coords.latitude.toFixed(6)),
+          longitude: Number(position.coords.longitude.toFixed(6)),
+        }));
+        setLocationLoading(false);
+        setLocationCaptured(true);
+      },
+      (error) => {
+        const message =
+          error.code === error.PERMISSION_DENIED
+            ? "Unable to get your location — check browser permissions."
+            : error.code === error.POSITION_UNAVAILABLE
+              ? "Your location is currently unavailable. Please try again."
+              : "Location request timed out. Please try again.";
+        setLocationError(message);
+        setLocationLoading(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
+    );
   };
 
   // ─── SAVE (ADD or EDIT) ───────────────────────────────
@@ -526,6 +576,32 @@ export default function AddressesPage() {
                 value={form.street}
                 onChange={(e) => setForm((f) => ({ ...f, street: e.target.value }))}
               />
+            </div>
+
+            {/* Use my location */}
+            <div className="space-y-1.5">
+              <button
+                type="button"
+                onClick={useMyLocation}
+                disabled={locationLoading || isSaving}
+                className="inline-flex items-center gap-1.5 text-sm font-semibold text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-60 disabled:cursor-not-allowed min-h-[44px] px-1"
+              >
+                {locationLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <LocateFixed className="h-4 w-4" aria-hidden="true" />
+                )}
+                {locationLoading ? "Getting location…" : "Use my location"}
+              </button>
+              {locationCaptured && (
+                <p className="text-xs font-medium text-green-600 dark:text-green-400 flex items-center gap-1" role="status">
+                  <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                  Location captured
+                </p>
+              )}
+              {locationError && (
+                <p className="text-xs text-red-500" role="alert">{locationError}</p>
+              )}
             </div>
 
             {/* Province */}
