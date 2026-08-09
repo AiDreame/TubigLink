@@ -38,6 +38,7 @@ import { Order, OrderStatus } from "@/types";
 import { format } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/shared/ErrorState";
+import DisputeEvidence, { isImageEvidence } from "@/components/shared/DisputeEvidence";
 import { MESSAGES } from "@/lib/constants";
 
 function paymentStatusLabel(status: string): string {
@@ -86,6 +87,11 @@ export default function OrderDetailPage() {
   const [disputeEvidence, setDisputeEvidence] = useState("");
   const [disputeSubmitting, setDisputeSubmitting] = useState(false);
   const [disputeError, setDisputeError] = useState<string | null>(null);
+
+  // Dispute photo upload state ("idle" | "uploading" | "done" | "error")
+  const [disputePhotoUploading, setDisputePhotoUploading] = useState(false);
+  const [disputePhotoStatus, setDisputePhotoStatus] = useState<"idle" | "uploading" | "done" | "error">("idle");
+  const [disputePhotoError, setDisputePhotoError] = useState<string | null>(null);
 
   const fetchDispute = useCallback(async (id: string) => {
     try {
@@ -148,12 +154,43 @@ export default function OrderDetailPage() {
       setDisputeDialogOpen(false);
       setDisputeDescription("");
       setDisputeEvidence("");
+      setDisputePhotoStatus("idle");
+      setDisputePhotoError(null);
       await fetchDispute(order.id);
     } catch (err: any) {
       setDisputeError(err.message || "Unable to report issue");
     } finally {
       setDisputeSubmitting(false);
     }
+  };
+
+  const handleDisputePhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file
+    if (!file) return;
+    setDisputePhotoUploading(true);
+    setDisputePhotoStatus("uploading");
+    setDisputePhotoError(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/uploads", { method: "POST", body: formData });
+      const data = await res.json();
+      if (!res.ok || !data.success || !data.url) throw new Error(data.error || "Upload failed");
+      setDisputeEvidence(data.url);
+      setDisputePhotoStatus("done");
+    } catch (err: any) {
+      setDisputePhotoStatus("error");
+      setDisputePhotoError(err.message || "Upload failed. Please try again.");
+    } finally {
+      setDisputePhotoUploading(false);
+    }
+  };
+
+  const clearDisputePhoto = () => {
+    setDisputeEvidence("");
+    setDisputePhotoStatus("idle");
+    setDisputePhotoError(null);
   };
 
   // Auto-confirm countdown: shows "Auto-confirms in ~Xh Ym" while the order is
@@ -395,6 +432,7 @@ export default function OrderDetailPage() {
                         <p>Station must respond by {format(new Date(dispute.responseDeadlineAt), "MMM d, yyyy h:mm a")}</p>
                         {dispute.stationResponse && <p>Station response: {dispute.stationResponse}</p>}
                         {dispute.resolution && <p>Resolution: {dispute.resolution}</p>}
+                        {dispute.evidence && <DisputeEvidence evidence={dispute.evidence} alt="Issue evidence photo" />}
                       </div>
                     ) : order.paymentStatus === "PAID" && order.disputeDeadlineAt && new Date(order.disputeDeadlineAt).getTime() > Date.now() ? (
                       <>
@@ -500,14 +538,65 @@ export default function OrderDetailPage() {
               <label className="text-sm font-medium text-card-foreground">Description
                 <Textarea value={disputeDescription} onChange={(e) => setDisputeDescription(e.target.value)} placeholder="Describe the issue" className="mt-1 rounded-xl min-h-[90px] resize-none" />
               </label>
-              <label className="text-sm font-medium text-card-foreground">Evidence (optional)
-                <input value={disputeEvidence} onChange={(e) => setDisputeEvidence(e.target.value)} placeholder="Photo URL or notes" className="mt-1 w-full h-11 rounded-xl border border-border bg-background px-3 text-sm" />
+              <div>
+                <span className="text-sm font-medium text-card-foreground flex items-center gap-1.5"><Camera className="h-4 w-4 text-muted-foreground" aria-hidden="true" /> Evidence photo (optional)</span>
+                <div className="mt-1 rounded-xl border border-border bg-background p-3 space-y-2">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={handleDisputePhoto}
+                    disabled={disputePhotoUploading}
+                    className="w-full text-sm text-muted-foreground file:mr-3 file:rounded-lg file:border-0 file:bg-blue-50 dark:file:bg-blue-900/30 file:px-3 file:py-2 file:text-sm file:font-medium file:text-blue-600 dark:file:text-blue-400"
+                  />
+                  <p className="text-[11px] text-muted-foreground">Take a picture with your camera or choose an image (max 5 MB).</p>
+                  {isImageEvidence(disputeEvidence) && disputePhotoStatus === "done" && (
+                    <div className="relative">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={disputeEvidence} alt="Evidence preview" className="rounded-lg border border-border max-h-36 w-auto object-cover" />
+                      <button
+                        type="button"
+                        onClick={clearDisputePhoto}
+                        className="absolute top-2 right-2 rounded-full bg-black/60 text-white text-xs px-2 py-1 hover:bg-black/80"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  )}
+                  {disputePhotoStatus === "uploading" && (
+                    <p className="text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1.5">
+                      <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-blue-600/30 border-t-blue-600" aria-hidden="true" />
+                      Uploading…
+                    </p>
+                  )}
+                  {disputePhotoStatus === "done" && (
+                    <p className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+                      <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" /> Uploaded
+                    </p>
+                  )}
+                  {disputePhotoStatus === "error" && (
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs text-red-600 dark:text-red-400 break-all">{disputePhotoError}</p>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        onChange={handleDisputePhoto}
+                        disabled={disputePhotoUploading}
+                        className="text-xs text-blue-600 dark:text-blue-400"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+              <label className="block text-sm font-medium text-card-foreground">…or paste an image link (optional)
+                <input value={disputeEvidence} onChange={(e) => { setDisputeEvidence(e.target.value); if (!e.target.value) setDisputePhotoStatus("idle"); }} placeholder="https://…" className="mt-1 w-full h-11 rounded-xl border border-border bg-background px-3 text-sm" />
               </label>
               {disputeError && <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm rounded-xl p-3">{disputeError}</div>}
             </div>
             <DialogFooter className="gap-2 sm:gap-0">
               <Button variant="outline" onClick={() => setDisputeDialogOpen(false)} className="rounded-xl min-h-[44px]" disabled={disputeSubmitting}>Cancel</Button>
-              <Button onClick={handleSubmitDispute} className="rounded-xl min-h-[44px]" disabled={disputeSubmitting || !disputeDescription.trim()}>{disputeSubmitting ? "Submitting..." : "Submit report"}</Button>
+              <Button onClick={handleSubmitDispute} className="rounded-xl min-h-[44px]" disabled={disputeSubmitting || disputePhotoUploading || !disputeDescription.trim()}>{disputeSubmitting ? "Submitting..." : "Submit report"}</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

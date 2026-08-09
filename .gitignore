@@ -45,6 +45,9 @@ uploads/*.jpg
 uploads/*.png
 !uploads/.gitkeep
 
+# Dispute photo uploads (served from public/ at runtime)
+public/uploads/
+
 # Misc
 *.tsbuildinfo
 next-env.d.ts
