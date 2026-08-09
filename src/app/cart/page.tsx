@@ -484,7 +484,7 @@ export default function CartPage() {
                 Your order will only be processed once payment is confirmed.
               </p>
               <p className="text-xs text-blue-700 dark:text-blue-300">
-                Includes PayMongo processing fee (2.23%) + AquaLink service fee (1.5%), paid by the station.
+                Includes processing fee (2.23%) + service fee (1.5%), paid by the station.
               </p>
             </div>
           )}

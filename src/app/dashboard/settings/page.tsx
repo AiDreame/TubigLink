@@ -96,8 +96,9 @@ function PayoutSettings() {
 }
 
 // Payment methods customers can use to pay. Each option shows the station's
-// total cost (PayMongo processing fee + AquaLink's 1.5% commission). Not
-// payout-account data, so no 2FA. Only GCash is live in checkout today.
+// total fee (processing fee + platform commission) — owner (Aug 9): Total Fee
+// only, no brand breakdown. Not payout-account data, so no 2FA. Only GCash is
+// live in checkout today.
 function PaymentMethodsSettings() {
   const [selected, setSelected] = useState<string[]>(["gcash"]);
   const [saving, setSaving] = useState(false);
@@ -117,20 +118,19 @@ function PaymentMethodsSettings() {
       else toast.error(json.error || "Failed to save");
     } catch { toast.error("Network error"); } finally { setSaving(false); }
   }
-  return <Card className="mt-6"><CardHeader><CardTitle>Payment methods customers can use</CardTitle><CardDescription>Choose which online payment methods your customers can pay with. Each option shows the total fee your station pays (PayMongo processing fee + AquaLink's 1.5% commission).</CardDescription></CardHeader><CardContent>
+  return <Card className="mt-6"><CardHeader><CardTitle>Payment methods customers can use</CardTitle><CardDescription>Choose which online payment methods your customers can pay with. Each option shows the total fee your station pays.</CardDescription></CardHeader><CardContent>
     <div className="space-y-2">
       {STATION_PAYMENT_METHODS.map((m) => (
         <label key={m.id} className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${selected.includes(m.id) ? "bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700" : "bg-gray-50 dark:bg-gray-800/80 border-gray-100 dark:border-gray-700"}`}>
           <Checkbox checked={selected.includes(m.id)} onCheckedChange={() => toggle(m.id)} className="mt-0.5" aria-label={`Accept ${m.label}`} />
           <div className="min-w-0">
-            <p className="text-sm font-bold dark:text-white">{m.label} <span className="text-blue-600 dark:text-blue-400">— total fee {m.totalFee}</span></p>
-            <p className="text-xs text-muted-foreground">PayMongo {m.paymongoFee} + AquaLink 1.5%</p>
+            <p className="text-sm font-bold dark:text-white">{m.label} <span className="text-blue-600 dark:text-blue-400">— Total Fee: {m.totalFee}</span></p>
             {m.note && <p className="text-xs text-muted-foreground mt-0.5">{m.note}</p>}
           </div>
         </label>
       ))}
     </div>
-    <p className="text-xs text-muted-foreground mt-3">Only GCash is available to customers today; the others activate as AquaLink rolls them out.</p>
+    <p className="text-xs text-muted-foreground mt-3">Only GCash is available to customers today; the others activate as we roll them out.</p>
     <Button className="mt-4 bg-blue-600 hover:bg-blue-700 rounded-xl min-h-[44px]" onClick={save} disabled={saving || !loaded}>{saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}Save Payment Methods</Button>
   </CardContent></Card>;
 }

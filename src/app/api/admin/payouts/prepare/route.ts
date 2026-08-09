@@ -3,13 +3,18 @@ import prisma from "@/lib/prisma";
 import { requireAdmin, parsePeriod, money, payoutInclude } from "../_lib";
 import { getActiveHoldsCentavos } from "@/lib/disputes";
 import { getPaymentIntent } from "@/lib/paymongo";
+import { PAYOUT_DISBURSEMENT_FEE_PESOS } from "@/lib/paymongo-disbursement";
 
 export async function POST(req: NextRequest) {
   if (!await requireAdmin()) return NextResponse.json({error:"Forbidden"},{status:403});
   const period=parsePeriod(await req.json());
   if(!period)return NextResponse.json({error:"Invalid period (start must precede end; maximum 62 days)"},{status:400});
   const stations=await prisma.station.findMany({select:{id:true}}); const created:any[]=[];
-  let ordersIncluded=0, gross=0, commission=0, fees=0, held=0, adjustments=0;
+  let ordersIncluded=0, gross=0, commission=0, fees=0, held=0, adjustments=0, disbursementFees=0, netTotal=0;
+  // ₱10 PayMongo transfer fee — station-borne (owner Aug 9): always recorded and
+  // deducted at payout creation; net is floored at 0 (station gets nothing, no
+  // zero transfer is sent — the pay route rejects netCentavos <= 0).
+  const disbursementFeeCentavos = PAYOUT_DISBURSEMENT_FEE_PESOS * 100;
   for(const station of stations){
     const orders=await prisma.order.findMany({where:{stationId:station.id,status:"DELIVERED",paymentStatus:"PAID",payoutEligibleAt:{not:null,lte:period.end},payoutItems:{none:{}}},select:{id:true,total:true,amountCentavos:true,commissionCentavos:true,processingFeeCentavos:true,paymentId:true,paymentIntentId:true,stationNetCentavos:true}});
     for (const order of orders) {
@@ -31,8 +36,10 @@ export async function POST(req: NextRequest) {
     const recovered=await prisma.payoutItem.aggregate({where:{payout:{stationId:station.id,status:"PAID"},order:{paymentStatus:"REFUNDED"}},_sum:{netCentavos:true}});
     // Recover the station net actually paid; any PayMongo fee retained on refund stays with the station.
     const adjustment=-(recovered._sum.netCentavos||0); if(!orders.length && !adjustment)continue;
-    const p=await prisma.$transaction(async tx=>{const payout=await tx.payout.create({data:{stationId:station.id,periodStart:period.start,periodEnd:period.end,grossCentavos:g,commissionCentavos:c,processingFeeCentavos:f,heldCentavos:h,adjustmentCentavos:adjustment,netCentavos:g-c-f-h+adjustment}}); if(orders.length) await tx.payoutItem.createMany({data:orders.map((o,i)=>({payoutId:payout.id,orderId:o.id,grossCentavos:vals[i].gross,commissionCentavos:vals[i].commission,processingFeeCentavos:vals[i].fee,heldCentavos:0,netCentavos:vals[i].net}))}); return tx.payout.findUnique({where:{id:payout.id},include:payoutInclude});});
-    created.push(p); ordersIncluded+=orders.length; gross+=g; commission+=c; fees+=f; held+=h; adjustments+=adjustment;
+    // netCentavos = gross − commission − processingFee − held − adjustments − disbursementFee, floored at 0.
+    const netCentavos=Math.max(0, g-c-f-h+adjustment-disbursementFeeCentavos);
+    const p=await prisma.$transaction(async tx=>{const payout=await tx.payout.create({data:{stationId:station.id,periodStart:period.start,periodEnd:period.end,grossCentavos:g,commissionCentavos:c,processingFeeCentavos:f,disbursementFeeCentavos,heldCentavos:h,adjustmentCentavos:adjustment,netCentavos}}); if(orders.length) await tx.payoutItem.createMany({data:orders.map((o,i)=>({payoutId:payout.id,orderId:o.id,grossCentavos:vals[i].gross,commissionCentavos:vals[i].commission,processingFeeCentavos:vals[i].fee,heldCentavos:0,netCentavos:vals[i].net}))}); return tx.payout.findUnique({where:{id:payout.id},include:payoutInclude});});
+    created.push(p); ordersIncluded+=orders.length; gross+=g; commission+=c; fees+=f; held+=h; adjustments+=adjustment; disbursementFees+=disbursementFeeCentavos; netTotal+=netCentavos;
   }
-  return NextResponse.json({success:true,data:created,summary:{stationsProcessed:stations.length,payoutsCreated:created.length,ordersIncluded,grossCentavos:gross,commissionCentavos:commission,processingFeeCentavos:fees,heldCentavos:held,adjustmentCentavos:adjustments,netCentavos:gross-commission-fees-held+adjustments}});
+  return NextResponse.json({success:true,data:created,summary:{stationsProcessed:stations.length,payoutsCreated:created.length,ordersIncluded,grossCentavos:gross,commissionCentavos:commission,processingFeeCentavos:fees,heldCentavos:held,adjustmentCentavos:adjustments,disbursementFeeCentavos:disbursementFees,netCentavos:netTotal}});
 }

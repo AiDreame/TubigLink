@@ -462,6 +462,7 @@ model Payout {
   grossCentavos      Int
   commissionCentavos Int
   processingFeeCentavos Int @default(0)
+  disbursementFeeCentavos Int?
   heldCentavos       Int
   adjustmentCentavos Int          @default(0)
   netCentavos        Int

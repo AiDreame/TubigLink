@@ -28,7 +28,7 @@
  */
 const PAYMONGO_BASE_URL = "https://api.paymongo.com/v1";
 
-/** Disbursement cost per transfer (₱10; one free per week). AquaLink absorbs by default. */
+/** Disbursement cost per transfer (₱10; one free per week). Station-borne, deducted from payout (owner Aug 9). */
 export const PAYOUT_DISBURSEMENT_FEE_PESOS = 10;
 
 /**
