@@ -7,7 +7,7 @@ export async function requireAdmin() {
   return user?.id && user.role === "ADMIN" ? user : null;
 }
 export const payoutInclude = {
-  station: { select: { id: true, name: true, userId: true } },
+  station: { select: { id: true, name: true, userId: true, payoutMethod: true, payoutBankName: true, payoutAccountName: true, payoutAccountLast4: true } },
   payoutItems: { include: { order: { select: { id: true, total: true, amountCentavos: true, processingFeeCentavos: true } } }, orderBy: { createdAt: "asc" as const } },
 } as const;
 export function parsePeriod(body: any) {
