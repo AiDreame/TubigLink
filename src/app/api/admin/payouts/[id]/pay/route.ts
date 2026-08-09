@@ -31,7 +31,15 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     );
   }
   if (p.netCentavos <= 0) {
-    return NextResponse.json({ error: "Payout net amount must be positive" }, { status: 400 });
+    const belowFee = (p.disbursementFeeCentavos ?? 0) > 0;
+    return NextResponse.json(
+      {
+        error: belowFee
+          ? `Payout net amount must be positive — net is ₱0.00 because it was below the ₱${PAYOUT_DISBURSEMENT_FEE_PESOS} transfer fee (deducted from the payout). The station receives nothing; no transfer is sent.`
+          : "Payout net amount must be positive",
+      },
+      { status: 400 },
+    );
   }
   const station = p.station;
   if (!station.payoutMethod || !station.payoutDetails) {
@@ -121,7 +129,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     disbursement: { status: tx.status, id: tx.id, referenceNumber: tx.referenceNumber },
     note:
       tx.status === "pending"
-        ? `Disbursement is ${tx.status}; the transfer.outward webhook will finalize it. (Disbursement fee ₱${PAYOUT_DISBURSEMENT_FEE_PESOS} is absorbed by AquaLink.)`
-        : `Disbursement fee ₱${PAYOUT_DISBURSEMENT_FEE_PESOS} is absorbed by AquaLink.`,
+        ? `Disbursement is ${tx.status}; the transfer.outward webhook will finalize it. (Transfer fee ₱${PAYOUT_DISBURSEMENT_FEE_PESOS} was deducted from this payout.)`
+        : `Transfer fee ₱${PAYOUT_DISBURSEMENT_FEE_PESOS} was deducted from this payout.`,
   });
 }

@@ -1021,20 +1021,23 @@ export const PAYMENT_METHODS = [
   { id: "PAYMAYA", label: "PayMaya", icon: "🟣", description: "Pay via PayMaya" },
 ];
 
-// Station-accepted payment methods (PayMongo method ids) with their total
-// cost to the station: PayMongo processing fee (paymongo.com/pricing, Aug 9)
-// + AquaLink's locked 1.5% commission. `brankas` has no published rate and is
-// intentionally excluded. Only GCash is implemented in checkout today; the
-// rest are future options stations can configure in advance.
+// Station-accepted payment methods (PayMongo method ids) with their TOTAL cost
+// to the station: PayMongo processing fee (paymongo.com/pricing, Aug 9) plus
+// the platform's locked 1.5% commission. Owner (Aug 9): the UI shows the Total
+// Fee only — no brand breakdown lines. The 1.5% commission applies to
+// international cards too: card international total = 4.02% + 1.5% = 5.52% +
+// ₱13.39. `brankas` has no published rate and is intentionally excluded. Only
+// GCash is implemented in checkout today; the rest are future options stations
+// can configure in advance.
 export const STATION_PAYMENT_METHODS = [
-  { id: "gcash", label: "GCash", paymongoFee: "2.23%", totalFee: "3.73%", note: null },
-  { id: "paymaya", label: "Maya", paymongoFee: "1.79%", totalFee: "3.29%", note: null },
-  { id: "grab_pay", label: "GrabPay", paymongoFee: "1.96%", totalFee: "3.46%", note: null },
-  { id: "shopee_pay", label: "ShopeePay (incl. SPayLater + MariBank)", paymongoFee: "1.70%", totalFee: "3.20%", note: null },
-  { id: "card", label: "Card", paymongoFee: "3.125% + ₱13.39", totalFee: "4.625% + ₱13.39", note: "International cards: PayMongo 4.02% + ₱13.39" },
-  { id: "dob", label: "Direct Online Banking (BPI/UnionBank/BDO/Metrobank/Landbank)", paymongoFee: "0.71% or ₱13.39", totalFee: "2.21% or ₱13.39", note: null },
-  { id: "billease", label: "BillEase (BNPL)", paymongoFee: "1.34%", totalFee: "2.84%", note: null },
-  { id: "qrph", label: "QR Ph", paymongoFee: "1.34%", totalFee: "2.84%", note: null },
+  { id: "gcash", label: "GCash", totalFee: "3.73%", note: null },
+  { id: "paymaya", label: "Maya", totalFee: "3.29%", note: null },
+  { id: "grab_pay", label: "GrabPay", totalFee: "3.46%", note: null },
+  { id: "shopee_pay", label: "ShopeePay (incl. SPayLater + MariBank)", totalFee: "3.20%", note: null },
+  { id: "card", label: "Card", totalFee: "4.625% + ₱13.39", note: "International cards: 5.52% + ₱13.39" },
+  { id: "dob", label: "Direct Online Banking (BPI/UnionBank/BDO/Metrobank/Landbank)", totalFee: "2.21% or ₱13.39", note: null },
+  { id: "billease", label: "BillEase (BNPL)", totalFee: "2.84%", note: null },
+  { id: "qrph", label: "QR Ph", totalFee: "2.84%", note: null },
 ] as const;
 
 export const STATION_PAYMENT_METHOD_IDS = STATION_PAYMENT_METHODS.map((m) => m.id);
