@@ -44,6 +44,12 @@ function text(value: unknown) {
   return typeof value === "string" && value.trim() ? value : undefined;
 }
 
+function processingFee(attributes: JsonRecord) {
+  const fees = Array.isArray(attributes?.fees) ? attributes.fees : [];
+  if (!fees.length) { console.warn("PayMongo payment has no fees; recording processing fee as zero"); return 0; }
+  return fees.reduce((sum: number, fee: JsonRecord) => sum + (typeof fee?.amount === "number" ? fee.amount : 0), 0);
+}
+
 export async function POST(request: NextRequest) {
   const secret = getPayMongoConfig().webhookSecret;
   if (!secret) return NextResponse.json({ error: "Webhook not configured" }, { status: 503 });
@@ -121,9 +127,10 @@ export async function POST(request: NextRequest) {
         if (order.amountCentavos != null && typeof resourceAttributes.amount === "number" && order.amountCentavos !== resourceAttributes.amount) {
           console.warn("PayMongo payment amount mismatch", { orderId: order.id, expected: order.amountCentavos, received: resourceAttributes.amount });
         }
-        if (order.paymentStatus !== "PAID") {
+        const fee = processingFee(resourceAttributes);
+        if (order.paymentStatus !== "PAID" || order.processingFeeCentavos == null) {
           await tx.order.update({ where: { id: order.id }, data: {
-            paymentStatus: "PAID", paymentPaidAt: order.paymentPaidAt || new Date(),
+            paymentStatus: "PAID", paymentPaidAt: order.paymentPaidAt || new Date(), processingFeeCentavos: fee,
             ...(intentId && !order.paymentIntentId ? { paymentIntentId: intentId } : {}),
           } });
         }

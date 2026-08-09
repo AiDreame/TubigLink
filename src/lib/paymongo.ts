@@ -199,6 +199,12 @@ export function attachPaymentMethod(
   );
 }
 
+export function getPayment(
+  id: string,
+): Promise<PayMongoResult<PayMongoData>> {
+  return request<PayMongoData>(`/payments/${encodeURIComponent(id)}`, { method: "GET" });
+}
+
 export function getPaymentIntent(
   id: string,
 ): Promise<PayMongoResult<PayMongoData>> {
