@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import { DEFAULT_STATION_PAYMENT_METHODS } from "@/lib/constants";
 import {
   attachPaymentMethod,
   createGcashPaymentMethod,
@@ -78,6 +79,7 @@ export async function POST(req: NextRequest) {
       where: { id: orderId, userId: user.id },
       select: {
         id: true,
+        stationId: true,
         total: true,
         paymentStatus: true,
         paymentIntentId: true,
@@ -90,6 +92,26 @@ export async function POST(req: NextRequest) {
     }
     if (order.status === "CANCELLED" || order.paymentStatus === "PAID" || order.paymentStatus === "REFUNDED") {
       return NextResponse.json({ success: false, error: "Order is not payable" }, { status: 409 });
+    }
+
+    // Gate: GCash checkout requires the station to have enabled online
+    // payment for GCash (station.acceptedPaymentMethods JSON array).
+    const station = await prisma.station.findUnique({
+      where: { id: order.stationId },
+      select: { acceptedPaymentMethods: true },
+    });
+    let accepted: string[] = DEFAULT_STATION_PAYMENT_METHODS;
+    if (station?.acceptedPaymentMethods) {
+      try {
+        const parsed = JSON.parse(station.acceptedPaymentMethods);
+        if (Array.isArray(parsed)) accepted = parsed.map((m: any) => String(m));
+      } catch { /* fall back to default */ }
+    }
+    if (!accepted.includes("gcash")) {
+      return NextResponse.json(
+        { success: false, error: "This station doesn't accept online payment yet — please contact the station or choose a station that accepts GCash." },
+        { status: 403 },
+      );
     }
 
     // Prefer an explicitly supplied PaymentMethod; otherwise reuse the one
