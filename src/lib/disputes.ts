@@ -20,6 +20,7 @@ export function orderNetCentavos(order: any): number {
   if (order.stationNetCentavos != null) return order.stationNetCentavos;
   const gross = order.amountCentavos ?? Math.round(((order.subtotal || 0) + (order.deliveryFee || 0)) * 100);
   const commission = order.commissionCentavos ?? Math.round(gross * 150 / 10000);
-  return Math.max(0, gross - commission);
+  const fee = order.processingFeeCentavos ?? 0;
+  return Math.max(0, gross - commission - fee);
 }
 export { escalationMessage };

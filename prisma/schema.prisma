@@ -158,6 +158,7 @@ model Order {
   paymentCurrency       String    @default("PHP")
   amountCentavos        Int?
   commissionCentavos    Int?
+  processingFeeCentavos Int?
   stationNetCentavos    Int?
   commissionRateBps     Int?
   deliveredAt           DateTime?
@@ -458,6 +459,7 @@ model Payout {
   periodEnd          DateTime
   grossCentavos      Int
   commissionCentavos Int
+  processingFeeCentavos Int @default(0)
   heldCentavos       Int
   adjustmentCentavos Int          @default(0)
   netCentavos        Int
@@ -496,6 +498,7 @@ model PayoutItem {
   orderId            String   @unique
   grossCentavos      Int
   commissionCentavos Int
+  processingFeeCentavos Int @default(0)
   heldCentavos       Int
   netCentavos        Int
   createdAt          DateTime @default(now())

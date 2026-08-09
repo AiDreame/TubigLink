@@ -8,7 +8,7 @@ export async function requireAdmin() {
 }
 export const payoutInclude = {
   station: { select: { id: true, name: true, userId: true } },
-  payoutItems: { include: { order: { select: { id: true, total: true, amountCentavos: true } } }, orderBy: { createdAt: "asc" as const } },
+  payoutItems: { include: { order: { select: { id: true, total: true, amountCentavos: true, processingFeeCentavos: true } } }, orderBy: { createdAt: "asc" as const } },
 } as const;
 export function parsePeriod(body: any) {
   const start = new Date(body?.periodStart), end = new Date(body?.periodEnd);
@@ -18,5 +18,6 @@ export function parsePeriod(body: any) {
 export function money(order: any) {
   const gross = order.amountCentavos ?? Math.round(order.total * 100);
   const commission = order.commissionCentavos ?? Math.round(gross * 150 / 10000);
-  return { gross, commission, net: gross - commission };
+  const fee = order.processingFeeCentavos ?? 0;
+  return { gross, commission, fee, net: gross - commission - fee };
 }

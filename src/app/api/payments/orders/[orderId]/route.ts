@@ -4,6 +4,13 @@ import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { getPaymentIntent } from "@/lib/paymongo";
 
+function paymentFee(attributes: any) {
+  const payments = Array.isArray(attributes?.payments) ? attributes.payments : [attributes];
+  const fees = payments.flatMap((p: any) => Array.isArray(p?.attributes?.fees) ? p.attributes.fees : []);
+  if (!fees.length) { console.warn("PayMongo live check has no fees; recording processing fee as zero"); return 0; }
+  return fees.reduce((sum: number, fee: any) => sum + (typeof fee?.amount === "number" ? fee.amount : 0), 0);
+}
+
 export async function GET(_req: NextRequest, { params }: { params: { orderId: string } }) {
   try {
     const session = await getServerSession(authOptions);
@@ -18,7 +25,7 @@ export async function GET(_req: NextRequest, { params }: { params: { orderId: st
       const remote = await getPaymentIntent(order.paymentIntentId);
       if (remote.ok) {
         const status = String((remote.data.attributes as any)?.status || "").toLowerCase();
-        if (["succeeded", "paid"].includes(status)) result = await prisma.order.update({ where: { id: order.id }, data: { paymentStatus: "PAID", paymentPaidAt: new Date() }, include: { refunds: true, station: { select: { userId: true, id: true } } } });
+        if (["succeeded", "paid"].includes(status)) result = await prisma.order.update({ where: { id: order.id }, data: { paymentStatus: "PAID", paymentPaidAt: new Date(), processingFeeCentavos: paymentFee(remote.data.attributes) }, include: { refunds: true, station: { select: { userId: true, id: true } } } });
       }
     }
     return NextResponse.json({ success: true, data: { orderId: result.id, paymentStatus: result.paymentStatus, paymentIntentId: result.paymentIntentId, paidAt: result.paymentPaidAt, refund: result.refunds } });
