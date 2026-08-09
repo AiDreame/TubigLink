@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { ArrowLeft, Plus, MapPin, Trash2, Home as HomeIcon, Briefcase, Loader2, Check, X, LocateFixed } from "lucide-react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { ArrowLeft, Plus, MapPin, Trash2, Home as HomeIcon, Briefcase, Loader2, Check, X } from "lucide-react";
+import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +26,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+
+// Leaflet must never render server-side — same pattern as station settings (ssr: false)
+const LocationPicker = dynamic(() => import("@/components/shared/LocationPicker"), {
+  ssr: false,
+});
 
 interface Address {
   id: string;
@@ -80,10 +86,101 @@ export default function AddressesPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  // "Use my location" state (mirrors station settings pattern)
-  const [locationLoading, setLocationLoading] = useState(false);
-  const [locationError, setLocationError] = useState<string | null>(null);
-  const [locationCaptured, setLocationCaptured] = useState(false);
+  // Reverse-geocode prefill state ("Filling address from map…" while waiting)
+  const [geocoding, setGeocoding] = useState(false);
+
+  // Latest form value — debounced geocode callbacks read this so they never
+  // match a barangay against a stale city selection.
+  const formRef = useRef(form);
+  formRef.current = form;
+
+  // Pending reverse-geocode work (cleared on unmount or on the next pin move)
+  const geocodeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const geocodeAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (geocodeTimerRef.current) clearTimeout(geocodeTimerRef.current);
+      geocodeAbortRef.current?.abort();
+    };
+  }, []);
+
+  // Case- and accent-insensitive match, so "Paranaque" ↔ "Parañaque" and
+  // "Las Pinas" ↔ "Las Piñas" compare equal.
+  const normalize = (s: string) =>
+    s
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+  // Best-effort Nominatim reverse geocode (free, no key). Only prefills when
+  // the returned place maps cleanly onto the dialog's City/Barangay options;
+  // anything else (outside NCR, errors, timeouts, HTTP 429) leaves the
+  // dropdowns untouched and never blocks the user.
+  const reverseGeocode = async (lat: number, lng: number) => {
+    const controller = new AbortController();
+    geocodeAbortRef.current = controller;
+    const timeout = setTimeout(() => controller.abort(), 4500);
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&accept-language=en`,
+        { signal: controller.signal, headers: { Accept: "application/json" } }
+      );
+      if (res.status === 429 || !res.ok) return;
+      const data = await res.json();
+      const a = data?.address;
+      if (!a) return;
+
+      const cityCandidates = [a.city, a.town, a.municipality, a.state];
+      const cityMatch = METRO_MANILA_CITIES.find((city) =>
+        cityCandidates.some(
+          (v) => typeof v === "string" && normalize(v) === normalize(city)
+        )
+      );
+      if (!cityMatch) return; // no clean match → keep the dropdowns as-is
+
+      const suburbCandidates = [
+        a.suburb,
+        a.quarter,
+        a.village,
+        a.neighbourhood,
+        a.neighborhood,
+      ];
+      const barangays = SAMPLE_BARANGAYS[cityMatch] || [];
+      const barangayMatch = barangays.find((b) =>
+        suburbCandidates.some(
+          (v) => typeof v === "string" && normalize(v) === normalize(b)
+        )
+      );
+
+      setForm((f) => {
+        if (normalize(f.city) !== normalize(cityMatch)) {
+          // City moved by the geocode → mirror the dropdown's reset behavior
+          return { ...f, city: cityMatch, barangay: barangayMatch ?? "" };
+        }
+        return barangayMatch ? { ...f, barangay: barangayMatch } : f;
+      });
+    } catch {
+      // aborted (timeout / superseded by a new pin move), offline, or network
+      // error → silently leave the dropdowns untouched
+    } finally {
+      clearTimeout(timeout);
+      if (geocodeAbortRef.current === controller) setGeocoding(false);
+    }
+  };
+
+  // Pin dropped/moved (or "Center on my location") → store coords, then
+  // best-effort prefill the dropdowns (debounced ~800ms per pin move).
+  const onLocationChange = (lat: number, lng: number) => {
+    setForm((f) => ({ ...f, latitude: lat, longitude: lng }));
+    setGeocoding(true);
+    if (geocodeTimerRef.current) clearTimeout(geocodeTimerRef.current);
+    geocodeAbortRef.current?.abort();
+    geocodeAbortRef.current = null;
+    geocodeTimerRef.current = setTimeout(() => reverseGeocode(lat, lng), 800);
+  };
 
   // Delete confirmation
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -172,8 +269,6 @@ export default function AddressesPage() {
     setDialogMode("add");
     setEditingId(null);
     setFormError(null);
-    setLocationError(null);
-    setLocationCaptured(false);
     setDialogOpen(true);
   };
 
@@ -193,42 +288,7 @@ export default function AddressesPage() {
     setDialogMode("edit");
     setEditingId(address.id);
     setFormError(null);
-    setLocationError(null);
-    setLocationCaptured(false);
     setDialogOpen(true);
-  };
-
-  // ─── USE MY LOCATION ──────────────────────────────────
-  const useMyLocation = () => {
-    setLocationError(null);
-    setLocationCaptured(false);
-    if (!navigator.geolocation) {
-      setLocationError("Location is not supported by this browser.");
-      return;
-    }
-    setLocationLoading(true);
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setForm((prev) => ({
-          ...prev,
-          latitude: Number(position.coords.latitude.toFixed(6)),
-          longitude: Number(position.coords.longitude.toFixed(6)),
-        }));
-        setLocationLoading(false);
-        setLocationCaptured(true);
-      },
-      (error) => {
-        const message =
-          error.code === error.PERMISSION_DENIED
-            ? "Unable to get your location — check browser permissions."
-            : error.code === error.POSITION_UNAVAILABLE
-              ? "Your location is currently unavailable. Please try again."
-              : "Location request timed out. Please try again.";
-        setLocationError(message);
-        setLocationLoading(false);
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
-    );
   };
 
   // ─── SAVE (ADD or EDIT) ───────────────────────────────
@@ -578,30 +638,29 @@ export default function AddressesPage() {
               />
             </div>
 
-            {/* Use my location */}
-            <div className="space-y-1.5">
-              <button
-                type="button"
-                onClick={useMyLocation}
-                disabled={locationLoading || isSaving}
-                className="inline-flex items-center gap-1.5 text-sm font-semibold text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-60 disabled:cursor-not-allowed min-h-[44px] px-1"
-              >
-                {locationLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                ) : (
-                  <LocateFixed className="h-4 w-4" aria-hidden="true" />
+            {/* Pin-drop map — replaces the standalone "Use my location" link;
+                the picker's own "Center on my location" control does that now */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-bold">Delivery Location</p>
+                {geocoding && (
+                  <p className="text-xs text-muted-foreground flex items-center gap-1" role="status">
+                    <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+                    Filling address from map…
+                  </p>
                 )}
-                {locationLoading ? "Getting location…" : "Use my location"}
-              </button>
-              {locationCaptured && (
-                <p className="text-xs font-medium text-green-600 dark:text-green-400 flex items-center gap-1" role="status">
-                  <Check className="h-3.5 w-3.5" aria-hidden="true" />
-                  Location captured
-                </p>
-              )}
-              {locationError && (
-                <p className="text-xs text-red-500" role="alert">{locationError}</p>
-              )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Drop the pin to set your delivery location — city and barangay
+                fill in automatically when we can match them.
+              </p>
+              <LocationPicker
+                latitude={form.latitude ?? null}
+                longitude={form.longitude ?? null}
+                onChange={onLocationChange}
+                heightClass="h-48"
+                hint="Click the map to set your delivery location, or drag the pin to fine-tune."
+              />
             </div>
 
             {/* Province */}
