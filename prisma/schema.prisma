@@ -95,6 +95,7 @@ model Station {
   disputes Dispute[]
   payouts  Payout[]
   payoutMethod       String?
+  payoutBankName     String?
   payoutAccountName  String?
   payoutAccountLast4 String?
   payoutDetails      String?
