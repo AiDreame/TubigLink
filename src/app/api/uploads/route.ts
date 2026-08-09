@@ -6,10 +6,12 @@ import { mkdir, writeFile } from "fs/promises";
 import crypto from "crypto";
 
 // POST /api/uploads — Upload an image for a customer issue report (dispute).
-// Any logged-in user may upload; files land in public/uploads/disputes/ and are
-// served by Next.js from /uploads/disputes/<random>.<ext>. The returned URL is
-// stored as the dispute `evidence` string, so the disputes API contract is
-// unchanged (evidence stays a string — now it can be an uploaded path or a URL).
+// Any logged-in user may upload; files land in uploads/disputes/ and are served
+// at /uploads/disputes/<random>.<ext> via the existing /uploads/:path* rewrite
+// + /api/uploads/[...path] route (the same pattern used by delivery photos and
+// station documents). The returned URL is stored as the dispute `evidence`
+// string, so the disputes API contract is unchanged (evidence stays a string —
+// now it can be an uploaded path or a URL).
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024; // 5 MB
 
 // Detect the image type from magic bytes — never trust the client filename or
@@ -49,7 +51,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const formData = await req.formData();
+    let formData: FormData;
+    try {
+      formData = await req.formData();
+    } catch {
+      return NextResponse.json({ error: "No file provided" }, { status: 400 });
+    }
     const file = formData.get("file");
     if (!file || typeof file === "string") {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
@@ -86,7 +93,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const dir = path.join(process.cwd(), "public", "uploads", "disputes");
+    const dir = path.join(process.cwd(), "uploads", "disputes");
     await mkdir(dir, { recursive: true });
     const fileName = `${crypto.randomUUID()}.${EXT_BY_TYPE[detected]}`;
     await writeFile(path.join(dir, fileName), buffer);

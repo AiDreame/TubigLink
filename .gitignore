@@ -45,7 +45,8 @@ uploads/*.jpg
 uploads/*.png
 !uploads/.gitkeep
 
-# Dispute photo uploads (served from public/ at runtime)
+# Dispute photo uploads (served via /uploads/ rewrite at runtime)
+uploads/disputes/
 public/uploads/
 
 # Misc
