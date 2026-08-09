@@ -1,6 +1,40 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 
+// Parse optional latitude/longitude pair from a request body.
+// Returns { ok: true, values } when absent or valid (both-or-neither,
+// finite numbers within lat [-90,90] / lng [-180,180], or explicit nulls
+// to clear). Returns { ok: false, error } on invalid input.
+function parseCoordinates(
+  body: Record<string, unknown>,
+): { ok: true; values: { latitude?: number | null; longitude?: number | null } } | { ok: false; error: string } {
+  const hasLat = body.latitude !== undefined;
+  const hasLng = body.longitude !== undefined;
+  if (!hasLat && !hasLng) return { ok: true, values: {} };
+  if (hasLat !== hasLng) {
+    return { ok: false, error: "latitude and longitude must be provided together" };
+  }
+  const lat = body.latitude as number | null;
+  const lng = body.longitude as number | null;
+  if (lat === null && lng === null) return { ok: true, values: { latitude: null, longitude: null } };
+  if (
+    typeof lat !== "number" ||
+    typeof lng !== "number" ||
+    !Number.isFinite(lat) ||
+    !Number.isFinite(lng) ||
+    lat < -90 ||
+    lat > 90 ||
+    lng < -180 ||
+    lng > 180
+  ) {
+    return {
+      ok: false,
+      error: "latitude must be between -90 and 90, and longitude between -180 and 180",
+    };
+  }
+  return { ok: true, values: { latitude: lat, longitude: lng } };
+}
+
 // GET /api/addresses — Get user's saved addresses
 export async function GET(req: NextRequest) {
   try {
@@ -42,6 +76,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const coords = parseCoordinates(body);
+    if (!coords.ok) {
+      return NextResponse.json({ success: false, error: coords.error }, { status: 400 });
+    }
+
     // If this is the default, unset other defaults
     if (isDefault) {
       await prisma.address.updateMany({
@@ -62,6 +101,8 @@ export async function POST(req: NextRequest) {
         province: province || "Metro Manila",
         zipCode: zipCode || null,
         landmark: landmark || null,
+        latitude: coords.values.latitude ?? null,
+        longitude: coords.values.longitude ?? null,
         isDefault: isDefault || false,
       },
     });
@@ -99,6 +140,11 @@ export async function PUT(req: NextRequest) {
     const body = await req.json();
     const { label, name, phone, street, barangay, city, province, zipCode, landmark, isDefault, userId } = body;
 
+    const coords = parseCoordinates(body);
+    if (!coords.ok) {
+      return NextResponse.json({ success: false, error: coords.error }, { status: 400 });
+    }
+
     // If setting as default, unset other defaults for this user
     if (isDefault && userId) {
       await prisma.address.updateMany({
@@ -118,6 +164,8 @@ export async function PUT(req: NextRequest) {
     if (zipCode !== undefined) updateData.zipCode = zipCode;
     if (landmark !== undefined) updateData.landmark = landmark;
     if (isDefault !== undefined) updateData.isDefault = isDefault;
+    if (coords.values.latitude !== undefined) updateData.latitude = coords.values.latitude;
+    if (coords.values.longitude !== undefined) updateData.longitude = coords.values.longitude;
 
     const address = await prisma.address.update({
       where: { id },
@@ -149,6 +197,11 @@ export async function PATCH(req: NextRequest) {
 
     const body = await req.json();
 
+    const coords = parseCoordinates(body);
+    if (!coords.ok) {
+      return NextResponse.json({ success: false, error: coords.error }, { status: 400 });
+    }
+
     // If setting as default, unset other defaults for this user
     if (body.isDefault && body.userId) {
       await prisma.address.updateMany({
@@ -168,6 +221,8 @@ export async function PATCH(req: NextRequest) {
     if (body.zipCode !== undefined) updateData.zipCode = body.zipCode;
     if (body.landmark !== undefined) updateData.landmark = body.landmark;
     if (body.isDefault !== undefined) updateData.isDefault = body.isDefault;
+    if (coords.values.latitude !== undefined) updateData.latitude = coords.values.latitude;
+    if (coords.values.longitude !== undefined) updateData.longitude = coords.values.longitude;
 
     const address = await prisma.address.update({
       where: { id },
