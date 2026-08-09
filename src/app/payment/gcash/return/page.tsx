@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { CheckCircle2, XCircle, Clock, AlertTriangle, Loader2, Smartphone } from "lucide-react";
+import { CheckCircle2, XCircle, Clock, AlertTriangle, Loader2, LogIn, Smartphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 /**
@@ -13,6 +13,13 @@ import { Button } from "@/components/ui/button";
  * (GET /api/payments/orders/:orderId, backed by the PayMongo PaymentIntent
  * + M4 webhook state machine) is authoritative. This page polls it briefly
  * and renders the honest state.
+ *
+ * Failure handling (client-side only):
+ * - 401 → stop polling, prompt login (the poll can never succeed without a session).
+ * - 403 → stop polling, show access-denied (logged-in user is not the order owner).
+ * - 404 → stop early, show the unavailable state.
+ * - 5xx / network errors → after MAX_CONSECUTIVE_ERRORS failed tries, offer a
+ *   manual "Check again" instead of burning all MAX_POLL_TRIES on a dead end.
  */
 
 type ReturnState =
@@ -20,16 +27,22 @@ type ReturnState =
   | { phase: "paid"; orderId: string }
   | { phase: "pending"; orderId: string }
   | { phase: "failed"; orderId: string }
-  | { phase: "unavailable"; message: string };
+  | { phase: "unavailable"; message: string }
+  | { phase: "auth-required"; orderId: string }
+  | { phase: "access-denied"; orderId: string }
+  | { phase: "verify-error"; orderId: string };
 
 const POLL_INTERVAL_MS = 2000;
 const MAX_POLL_TRIES = 10;
+const MAX_CONSECUTIVE_ERRORS = 3;
 
 function GcashReturnContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const orderId = searchParams.get("order_id") || "";
   const [state, setState] = useState<ReturnState>({ phase: "verifying" });
+  // Incremented by "Check again" to re-run the poll effect from scratch.
+  const [pollAttempt, setPollAttempt] = useState(0);
 
   useEffect(() => {
     if (!orderId) {
@@ -39,27 +52,66 @@ function GcashReturnContent() {
 
     let cancelled = false;
     let tries = 0;
+    let consecutiveErrors = 0;
 
     const poll = async () => {
       if (cancelled) return;
       tries += 1;
+      let errored = false;
       try {
         const res = await fetch(`/api/payments/orders/${encodeURIComponent(orderId)}`);
-        const json = await res.json();
-        if (res.ok && json.success) {
-          const status = String(json.data.paymentStatus || "").toUpperCase();
-          if (status === "PAID") {
-            setState({ phase: "paid", orderId });
-            return;
+        if (res.status === 401) {
+          // No session — polling can never succeed. Stop and offer login so the
+          // customer lands back here (with order_id & payment_intent_id intact)
+          // and the next poll confirms instantly.
+          setState({ phase: "auth-required", orderId });
+          return;
+        }
+        if (res.status === 403) {
+          // Logged in, but this account is not the order owner.
+          setState({ phase: "access-denied", orderId });
+          return;
+        }
+        if (res.status === 404) {
+          setState({
+            phase: "unavailable",
+            message: "We could not find this order. It may have been removed or the link may be incomplete.",
+          });
+          return;
+        }
+        if (!res.ok) {
+          // 5xx or unexpected server error.
+          errored = true;
+        } else {
+          const json = await res.json();
+          if (json.success) {
+            const status = String(json.data.paymentStatus || "").toUpperCase();
+            if (status === "PAID") {
+              setState({ phase: "paid", orderId });
+              return;
+            }
+            if (status === "FAILED" || status === "REFUNDED") {
+              setState({ phase: "failed", orderId });
+              return;
+            }
+            // REQUIRES_ACTION / PENDING / PROCESSING — keep polling.
+          } else {
+            errored = true;
           }
-          if (status === "FAILED" || status === "REFUNDED") {
-            setState({ phase: "failed", orderId });
-            return;
-          }
-          // REQUIRES_ACTION / PENDING / PROCESSING — keep polling.
         }
       } catch {
-        // Transient network error — keep polling until we run out of tries.
+        // Transient network error or unparseable body.
+        errored = true;
+      }
+
+      if (errored) {
+        consecutiveErrors += 1;
+        if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+          // Don't burn all tries on a deterministic 500 / dead network — hand
+          // the customer a manual retry instead.
+          setState({ phase: "verify-error", orderId });
+          return;
+        }
       }
 
       if (tries >= MAX_POLL_TRIES) {
@@ -73,7 +125,12 @@ function GcashReturnContent() {
     return () => {
       cancelled = true;
     };
-  }, [orderId]);
+  }, [orderId, pollAttempt]);
+
+  const checkAgain = () => {
+    setState({ phase: "verifying" });
+    setPollAttempt((attempt) => attempt + 1);
+  };
 
   if (state.phase === "verifying") {
     return (
@@ -88,6 +145,98 @@ function GcashReturnContent() {
             Order #{orderId.slice(-8).toUpperCase()}
           </p>
         )}
+      </div>
+    );
+  }
+
+  if (state.phase === "auth-required") {
+    const callbackUrl =
+      typeof window !== "undefined"
+        ? `${window.location.pathname}${window.location.search}`
+        : `/payment/gcash/return`;
+    const loginHref = `/auth/login?callbackUrl=${encodeURIComponent(callbackUrl)}`;
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 text-center">
+        <div className="h-20 w-20 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center mb-6">
+          <LogIn className="h-10 w-10 text-blue-600 dark:text-blue-400" aria-hidden="true" />
+        </div>
+        <h1 className="text-2xl font-bold text-foreground">Please log in to confirm your payment</h1>
+        <p className="text-muted-foreground mt-2 max-w-sm">
+          Your payment may have already gone through. Log in to verify your order — we will bring you back
+          here and confirm it right away.
+        </p>
+        {orderId && (
+          <p className="text-xs text-muted-foreground mt-3 font-mono">
+            Payment reference: #{orderId.slice(-8).toUpperCase()}
+          </p>
+        )}
+        <div className="flex gap-3 mt-8">
+          <Button className="rounded-xl h-12 px-8" asChild>
+            <Link href={loginHref}>Log In</Link>
+          </Button>
+          <Button variant="outline" className="rounded-xl h-12 px-8" onClick={() => router.replace("/orders")}>
+            My Orders
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (state.phase === "access-denied") {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 text-center">
+        <div className="h-20 w-20 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center mb-6">
+          <AlertTriangle className="h-10 w-10 text-amber-600 dark:text-amber-400" aria-hidden="true" />
+        </div>
+        <h1 className="text-2xl font-bold text-foreground">You do not have access to this order</h1>
+        <p className="text-muted-foreground mt-2 max-w-sm">
+          This order belongs to another account. Please log in with the account that placed it to see its
+          payment status.
+        </p>
+        {orderId && (
+          <p className="text-xs text-muted-foreground mt-3 font-mono">
+            Order #{orderId.slice(-8).toUpperCase()}
+          </p>
+        )}
+        <div className="flex gap-3 mt-8">
+          <Button className="rounded-xl h-12 px-8" onClick={() => router.replace("/orders")}>
+            My Orders
+          </Button>
+          <Button variant="outline" className="rounded-xl h-12 px-8" onClick={() => router.replace("/")}>
+            Back to Home
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (state.phase === "verify-error") {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 text-center">
+        <div className="h-20 w-20 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center mb-6">
+          <AlertTriangle className="h-10 w-10 text-amber-600 dark:text-amber-400" aria-hidden="true" />
+        </div>
+        <h1 className="text-2xl font-bold text-foreground">We couldn&apos;t verify your payment automatically</h1>
+        <p className="text-muted-foreground mt-2 max-w-sm">
+          Do not pay again. Check again in a moment — if your payment went through, your order will show as
+          paid.
+        </p>
+        {orderId && (
+          <p className="text-xs text-muted-foreground mt-3 font-mono">
+            Payment reference: #{orderId.slice(-8).toUpperCase()}
+          </p>
+        )}
+        <div className="flex gap-3 mt-8">
+          <Button className="rounded-xl h-12 px-8" onClick={checkAgain}>
+            Check again
+          </Button>
+          <Button variant="outline" className="rounded-xl h-12 px-8" onClick={() => router.replace("/orders")}>
+            My Orders
+          </Button>
+          <Button variant="outline" className="rounded-xl h-12 px-8" asChild>
+            <Link href="/cart">Back to Cart</Link>
+          </Button>
+        </div>
       </div>
     );
   }
