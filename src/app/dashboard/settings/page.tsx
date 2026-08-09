@@ -152,6 +152,8 @@ export default function DashboardSettingsPage() {
     estimatedMinutes: 30,
   });
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
 
   const fetchStation = useCallback(() => {
     setLoading(true);
@@ -232,6 +234,37 @@ export default function DashboardSettingsPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const useMyLocation = () => {
+    setLocationError(null);
+    if (!navigator.geolocation) {
+      setLocationError("Location is not supported by this browser.");
+      return;
+    }
+
+    setLocationLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setForm((prev) => ({
+          ...prev,
+          latitude: Number(position.coords.latitude.toFixed(6)),
+          longitude: Number(position.coords.longitude.toFixed(6)),
+        }));
+        setLocationLoading(false);
+      },
+      (error) => {
+        const message =
+          error.code === error.PERMISSION_DENIED
+            ? "Unable to get your location — check browser permissions."
+            : error.code === error.POSITION_UNAVAILABLE
+              ? "Your location is currently unavailable. Please try again."
+              : "Location request timed out. Please try again.";
+        setLocationError(message);
+        setLocationLoading(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
+    );
   };
 
   // ─── Delivery Zone CRUD ───
@@ -591,7 +624,20 @@ export default function DashboardSettingsPage() {
             </div>
 
             {/* Coordinates */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-bold">Coordinates</p>
+                <Button
+                  type="button"
+                  variant="link"
+                  className="h-auto min-h-0 p-0 text-blue-600 dark:text-blue-400"
+                  onClick={useMyLocation}
+                  disabled={locationLoading}
+                >
+                  {locationLoading ? "Getting location…" : "Use my location"}
+                </Button>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label htmlFor="latitude" className="text-sm font-bold">Latitude</Label>
                 <Input
@@ -616,6 +662,10 @@ export default function DashboardSettingsPage() {
                   placeholder="120.9842"
                 />
               </div>
+              </div>
+              {locationError && (
+                <p className="text-xs text-red-500" role="alert">{locationError}</p>
+              )}
             </div>
           </CardContent>
         </Card>
