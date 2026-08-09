@@ -52,7 +52,18 @@ import {
 } from "@/components/ui/dialog";
 import { useSession } from "next-auth/react";
 import toast from "react-hot-toast";
+import dynamic from "next/dynamic";
 import { METRO_MANILA_CITIES, CEBU_CITIES, MINDANAO_CITIES, SAMPLE_BARANGAYS, STATION_PAYMENT_METHODS } from "@/lib/constants";
+
+// Leaflet must never render server-side — same pattern as StationMap (ssr: false)
+const LocationPicker = dynamic(() => import("@/components/shared/LocationPicker"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-64 w-full rounded-xl border bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-sm text-muted-foreground">
+      Loading map…
+    </div>
+  ),
+});
 
 interface DeliveryZone {
   id?: string;
@@ -152,8 +163,6 @@ export default function DashboardSettingsPage() {
     estimatedMinutes: 30,
   });
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  const [locationLoading, setLocationLoading] = useState(false);
-  const [locationError, setLocationError] = useState<string | null>(null);
 
   const fetchStation = useCallback(() => {
     setLoading(true);
@@ -234,37 +243,6 @@ export default function DashboardSettingsPage() {
     } finally {
       setSaving(false);
     }
-  };
-
-  const useMyLocation = () => {
-    setLocationError(null);
-    if (!navigator.geolocation) {
-      setLocationError("Location is not supported by this browser.");
-      return;
-    }
-
-    setLocationLoading(true);
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setForm((prev) => ({
-          ...prev,
-          latitude: Number(position.coords.latitude.toFixed(6)),
-          longitude: Number(position.coords.longitude.toFixed(6)),
-        }));
-        setLocationLoading(false);
-      },
-      (error) => {
-        const message =
-          error.code === error.PERMISSION_DENIED
-            ? "Unable to get your location — check browser permissions."
-            : error.code === error.POSITION_UNAVAILABLE
-              ? "Your location is currently unavailable. Please try again."
-              : "Location request timed out. Please try again.";
-        setLocationError(message);
-        setLocationLoading(false);
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
-    );
   };
 
   // ─── Delivery Zone CRUD ───
@@ -627,45 +605,49 @@ export default function DashboardSettingsPage() {
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-3">
                 <p className="text-sm font-bold">Coordinates</p>
-                <Button
-                  type="button"
-                  variant="link"
-                  className="h-auto min-h-0 p-0 text-blue-600 dark:text-blue-400"
-                  onClick={useMyLocation}
-                  disabled={locationLoading}
-                >
-                  {locationLoading ? "Getting location…" : "Use my location"}
-                </Button>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label htmlFor="latitude" className="text-sm font-bold">Latitude</Label>
-                <Input
-                  id="latitude"
-                  type="number"
-                  step="0.0001"
-                  value={form.latitude ?? ""}
-                  onChange={(e) => setForm((prev) => ({ ...prev, latitude: e.target.value ? parseFloat(e.target.value) : null }))}
-                  className="rounded-xl bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 min-h-[44px]"
-                  placeholder="14.5995"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="longitude" className="text-sm font-bold">Longitude</Label>
-                <Input
-                  id="longitude"
-                  type="number"
-                  step="0.0001"
-                  value={form.longitude ?? ""}
-                  onChange={(e) => setForm((prev) => ({ ...prev, longitude: e.target.value ? parseFloat(e.target.value) : null }))}
-                  className="rounded-xl bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 min-h-[44px]"
-                  placeholder="120.9842"
-                />
-              </div>
-              </div>
-              {locationError && (
-                <p className="text-xs text-red-500" role="alert">{locationError}</p>
-              )}
+              <p className="text-xs text-muted-foreground">
+                Drop the pin on the map to set your station's location — or tap “Center on my location” to use your current position.
+              </p>
+              <LocationPicker
+                latitude={form.latitude ?? null}
+                longitude={form.longitude ?? null}
+                onChange={(lat, lng) =>
+                  setForm((prev) => ({ ...prev, latitude: lat, longitude: lng }))
+                }
+              />
+              {/* Advanced fallback: manual numeric entry (optional) */}
+              <details className="group text-xs">
+                <summary className="cursor-pointer list-none text-blue-600 dark:text-blue-400 font-medium hover:underline select-none">
+                  Enter coordinates manually (advanced)
+                </summary>
+                <div className="mt-3 grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="latitude" className="text-sm font-bold">Latitude</Label>
+                    <Input
+                      id="latitude"
+                      type="number"
+                      step="0.0001"
+                      value={form.latitude ?? ""}
+                      onChange={(e) => setForm((prev) => ({ ...prev, latitude: e.target.value ? parseFloat(e.target.value) : null }))}
+                      className="rounded-xl bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 min-h-[44px]"
+                      placeholder="14.5995"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="longitude" className="text-sm font-bold">Longitude</Label>
+                    <Input
+                      id="longitude"
+                      type="number"
+                      step="0.0001"
+                      value={form.longitude ?? ""}
+                      onChange={(e) => setForm((prev) => ({ ...prev, longitude: e.target.value ? parseFloat(e.target.value) : null }))}
+                      className="rounded-xl bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 min-h-[44px]"
+                      placeholder="120.9842"
+                    />
+                  </div>
+                </div>
+              </details>
             </div>
           </CardContent>
         </Card>
