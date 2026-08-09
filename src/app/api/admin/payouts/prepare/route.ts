@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireAdmin, parsePeriod, money, payoutInclude } from "../_lib";
 import { getActiveHoldsCentavos } from "@/lib/disputes";
-import { getPayment } from "@/lib/paymongo";
+import { getPaymentIntent } from "@/lib/paymongo";
 
 export async function POST(req: NextRequest) {
   if (!await requireAdmin()) return NextResponse.json({error:"Forbidden"},{status:403});
@@ -13,11 +13,15 @@ export async function POST(req: NextRequest) {
   for(const station of stations){
     const orders=await prisma.order.findMany({where:{stationId:station.id,status:"DELIVERED",paymentStatus:"PAID",payoutEligibleAt:{not:null,lte:period.end},payoutItems:{none:{}}},select:{id:true,total:true,amountCentavos:true,commissionCentavos:true,processingFeeCentavos:true,paymentId:true,paymentIntentId:true,stationNetCentavos:true}});
     for (const order of orders) {
-      if (order.processingFeeCentavos == null && order.paymentId) {
-        const remote = await getPayment(order.paymentId);
+      if (order.processingFeeCentavos == null && (order.paymentId || order.paymentIntentId)) {
+        // order.paymentId stores the PAYMENT INTENT id (see gcash/intent route); fees live on the
+        // intent's payments array, so fetch the intent and sum fees across its payments.
+        const remote = await getPaymentIntent(order.paymentId || order.paymentIntentId!);
         if (remote.ok) {
-          const remoteFees = Array.isArray((remote.data.attributes as any)?.fees) ? (remote.data.attributes as any).fees : [];
-          const fee = remoteFees.reduce((s:number, f:any) => s + (typeof f.amount === "number" ? f.amount : 0), 0);
+          const attrs = (remote.data.attributes as any) || {};
+          const payments = Array.isArray(attrs.payments) ? attrs.payments : [];
+          const remoteFees = payments.flatMap((p: any) => Array.isArray(p?.attributes?.fees) ? p.attributes.fees : []);
+          const fee = remoteFees.reduce((s:number, f:any) => s + (typeof f?.amount === "number" ? f.amount : 0), 0);
           await prisma.order.update({where:{id:order.id},data:{processingFeeCentavos:fee}}); (order as any).processingFeeCentavos=fee;
         } else console.warn("Unable to backfill PayMongo processing fee", {orderId:order.id, error:remote.error.message});
       }
