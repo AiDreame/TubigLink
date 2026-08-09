@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -51,7 +52,7 @@ import {
 } from "@/components/ui/dialog";
 import { useSession } from "next-auth/react";
 import toast from "react-hot-toast";
-import { METRO_MANILA_CITIES, CEBU_CITIES, MINDANAO_CITIES, SAMPLE_BARANGAYS } from "@/lib/constants";
+import { METRO_MANILA_CITIES, CEBU_CITIES, MINDANAO_CITIES, SAMPLE_BARANGAYS, STATION_PAYMENT_METHODS } from "@/lib/constants";
 
 interface DeliveryZone {
   id?: string;
@@ -92,6 +93,46 @@ function PayoutSettings() {
   const load=useCallback(()=>fetch("/api/dashboard/payout-settings").then(r=>r.json()).then(x=>setData(x.data)),[]); useEffect(()=>{load()},[load]);
   async function save(){setLoading(true);let o=await fetch("/api/dashboard/payout-settings/otp",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:data?.hasPayoutAccount?"EDIT":"ADD"})});if(!o.ok){toast.error("Could not send code");setLoading(false);return}toast.success("We emailed you a security code");const c=prompt("Enter the 6-digit security code");if(!c){setLoading(false);return}const r=await fetch("/api/dashboard/payout-settings",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:data?.hasPayoutAccount?"EDIT":"ADD",code:c,payoutMethod:method,accountName:name,accountNumber:number})});if(r.ok){toast.success("Payout account saved");setOpen(false);load()}else toast.error("Invalid code or details");setLoading(false)}
   return <Card className="mt-6"><CardHeader><CardTitle>Payout settings</CardTitle><CardDescription>Your payout destination is protected by email 2FA.</CardDescription></CardHeader><CardContent>{data?.hasPayoutAccount?<div className="flex items-center justify-between"><p className="text-sm">{data.payoutMethod} · {data.payoutAccountName}<br/><strong>{data.maskedAccountNumber}</strong></p><Button onClick={()=>setOpen(true)}>Edit</Button></div>:<Button onClick={()=>setOpen(true)}>Add payout account</Button>} {open&&<div className="mt-4 space-y-3"><Select value={method} onValueChange={setMethod}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="BANK">Bank transfer</SelectItem><SelectItem value="GCASH">GCash</SelectItem></SelectContent></Select><Input placeholder="Account name" value={name} onChange={e=>setName(e.target.value)}/><Input placeholder="Account number" value={number} onChange={e=>setNumber(e.target.value)}/><Button onClick={save} disabled={loading}>{loading?"Saving…":"Send code & save"}</Button></div>}</CardContent></Card>;
+}
+
+// Payment methods customers can use to pay. Each option shows the station's
+// total cost (PayMongo processing fee + AquaLink's 1.5% commission). Not
+// payout-account data, so no 2FA. Only GCash is live in checkout today.
+function PaymentMethodsSettings() {
+  const [selected, setSelected] = useState<string[]>(["gcash"]);
+  const [saving, setSaving] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  useEffect(() => {
+    fetch("/api/dashboard/payment-methods").then((r) => r.json()).then((x) => {
+      if (x.success && Array.isArray(x.data?.acceptedPaymentMethods)) setSelected(x.data.acceptedPaymentMethods);
+    }).catch(() => {/* keep default */}).finally(() => setLoaded(true));
+  }, []);
+  const toggle = (id: string) => setSelected((prev) => (prev.includes(id) ? prev.filter((m) => m !== id) : [...prev, id]));
+  async function save() {
+    setSaving(true);
+    try {
+      const res = await fetch("/api/dashboard/payment-methods", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ acceptedPaymentMethods: selected }) });
+      const json = await res.json();
+      if (json.success) { toast.success("Payment methods saved"); if (Array.isArray(json.data?.acceptedPaymentMethods)) setSelected(json.data.acceptedPaymentMethods); }
+      else toast.error(json.error || "Failed to save");
+    } catch { toast.error("Network error"); } finally { setSaving(false); }
+  }
+  return <Card className="mt-6"><CardHeader><CardTitle>Payment methods customers can use</CardTitle><CardDescription>Choose which online payment methods your customers can pay with. Each option shows the total fee your station pays (PayMongo processing fee + AquaLink's 1.5% commission).</CardDescription></CardHeader><CardContent>
+    <div className="space-y-2">
+      {STATION_PAYMENT_METHODS.map((m) => (
+        <label key={m.id} className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${selected.includes(m.id) ? "bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700" : "bg-gray-50 dark:bg-gray-800/80 border-gray-100 dark:border-gray-700"}`}>
+          <Checkbox checked={selected.includes(m.id)} onCheckedChange={() => toggle(m.id)} className="mt-0.5" aria-label={`Accept ${m.label}`} />
+          <div className="min-w-0">
+            <p className="text-sm font-bold dark:text-white">{m.label} <span className="text-blue-600 dark:text-blue-400">— total fee {m.totalFee}</span></p>
+            <p className="text-xs text-muted-foreground">PayMongo {m.paymongoFee} + AquaLink 1.5%</p>
+            {m.note && <p className="text-xs text-muted-foreground mt-0.5">{m.note}</p>}
+          </div>
+        </label>
+      ))}
+    </div>
+    <p className="text-xs text-muted-foreground mt-3">Only GCash is available to customers today; the others activate as AquaLink rolls them out.</p>
+    <Button className="mt-4 bg-blue-600 hover:bg-blue-700 rounded-xl min-h-[44px]" onClick={save} disabled={saving || !loaded}>{saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}Save Payment Methods</Button>
+  </CardContent></Card>;
 }
 
 export default function DashboardSettingsPage() {
@@ -890,6 +931,7 @@ export default function DashboardSettingsPage() {
         </DialogContent>
       </Dialog>
 
+      <PaymentMethodsSettings />
       <PayoutSettings />
       {/* ─── Save Footer (sticky on mobile) ─── */}
       <div className="sticky bottom-0 bg-white dark:bg-gray-950 border-t dark:border-gray-800 p-4 mt-8 flex justify-end gap-3 shadow-lg rounded-t-2xl">

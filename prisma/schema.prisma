@@ -98,6 +98,7 @@ model Station {
   payoutAccountName  String?
   payoutAccountLast4 String?
   payoutDetails      String?
+  acceptedPaymentMethods String @default("[\"gcash\"]") // JSON array of PayMongo payment method ids the station accepts (gcash | paymaya | grab_pay | shopee_pay | card | dob | billease | qrph)
 }
 
 // ─── PRODUCT (Water Type) ───────────────────────────

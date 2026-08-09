@@ -48,9 +48,32 @@ export default function CartPage() {
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
   const [loadingAddresses, setLoadingAddresses] = useState(true);
   const [selectedPayment, setSelectedPayment] = useState("COD");
+  const [acceptedPaymentMethods, setAcceptedPaymentMethods] = useState<string[]>([]);
 
   const deliveryFee = 0;
   const total = subtotal + deliveryFee;
+
+  // Fetch which payment methods this station accepts (JSON string array on the
+  // station). Only GCash is implemented in checkout; the rest are future.
+  useEffect(() => {
+    if (!stationId) return;
+    fetch(`/api/stations/${stationId}`)
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.success && json.data) {
+          try {
+            const raw = json.data.acceptedPaymentMethods;
+            const arr = typeof raw === "string" ? JSON.parse(raw) : raw;
+            setAcceptedPaymentMethods(Array.isArray(arr) ? arr.map(String) : []);
+          } catch {
+            setAcceptedPaymentMethods([]);
+          }
+        }
+      })
+      .catch(() => {/* defaults to empty — server-side gate still applies */});
+  }, [stationId]);
+
+  const stationAcceptsGcash = acceptedPaymentMethods.length === 0 || acceptedPaymentMethods.includes("gcash");
 
   // Fetch user addresses on mount
   useEffect(() => {
@@ -199,6 +222,14 @@ export default function CartPage() {
     setCheckoutPhase("preparing");
     setCheckoutError(null);
     try {
+      // Gate: this station must have enabled GCash for online payment.
+      if (selectedPayment === "GCASH" && !stationAcceptsGcash) {
+        setCheckoutError("This station doesn't accept online payment yet — please contact the station or choose a station that accepts GCash.");
+        setCheckoutPhase("error");
+        setIsCheckingOut(false);
+        return;
+      }
+
       let orderId = activeOrderId;
 
       // GCash: resume an existing unpaid order for this station instead of
@@ -259,7 +290,7 @@ export default function CartPage() {
       setCheckoutPhase("error");
       setIsCheckingOut(false);
     }
-  }, [session, stationId, items, selectedAddressId, selectedPayment, subtotal, clearCart, router, activeOrderId, initGcashPayment]);
+  }, [session, stationId, items, selectedAddressId, selectedPayment, subtotal, clearCart, router, activeOrderId, initGcashPayment, stationAcceptsGcash]);
 
   if (items.length === 0) {
     return (
@@ -415,12 +446,16 @@ export default function CartPage() {
             <button
               key={method.id}
               onClick={() => setSelectedPayment(method.id)}
+              disabled={method.id === "GCASH" && !stationAcceptsGcash}
               className={`w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-colors min-h-[48px] ${
-                selectedPayment === method.id
-                  ? "bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700"
-                  : "bg-card border-border hover:bg-muted"
+                method.id === "GCASH" && !stationAcceptsGcash
+                  ? "bg-gray-50 dark:bg-gray-800/40 border-gray-200 dark:border-gray-700 opacity-60 cursor-not-allowed"
+                  : selectedPayment === method.id
+                    ? "bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700"
+                    : "bg-card border-border hover:bg-muted"
               }`}
               aria-label={method.label}
+              aria-disabled={method.id === "GCASH" && !stationAcceptsGcash}
             >
               <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${
                 method.id === "GCASH" ? "bg-blue-50 dark:bg-blue-900/30" : "bg-green-50 dark:bg-green-900/30"
@@ -443,10 +478,20 @@ export default function CartPage() {
             </button>
           ))}
           {selectedPayment === "GCASH" && (
-            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900/30 rounded-xl p-3 mt-2">
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900/30 rounded-xl p-3 mt-2 space-y-1">
               <p className="text-xs text-blue-700 dark:text-blue-300">
                 You'll be redirected to GCash to authorize the payment after placing your order.
                 Your order will only be processed once payment is confirmed.
+              </p>
+              <p className="text-xs text-blue-700 dark:text-blue-300">
+                Includes PayMongo processing fee (2.23%) + AquaLink service fee (1.5%), paid by the station.
+              </p>
+            </div>
+          )}
+          {!stationAcceptsGcash && (
+            <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-100 dark:border-yellow-900/30 rounded-xl p-3 mt-2">
+              <p className="text-xs text-yellow-700 dark:text-yellow-300">
+                This station doesn't accept online payment yet — please contact the station or choose a station that accepts GCash.
               </p>
             </div>
           )}
