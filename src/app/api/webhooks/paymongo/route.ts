@@ -93,6 +93,77 @@ export async function POST(request: NextRequest) {
   const isPaid = normalizedType === "payment.paid";
   const isFailed = normalizedType === "payment.failed";
   const isRefund = normalizedType.includes("refund") || normalizedType === "payment.refunded";
+  // Disbursement lifecycle events (Create a Wallet Transaction). `pending` is not
+  // an error — InstaPay can take up to 20 minutes — so only the terminal
+  // successful/failed events finalize a payout. PayMongo also retries delivery,
+  // so updates must be idempotent.
+  const isTransferEvent = normalizedType.startsWith("transfer.outward");
+
+  if (isTransferEvent) {
+    try {
+      await prisma.$transaction(async (tx) => {
+        const walletTransactionId = text(resource?.id);
+        const referenceNumber = text(resourceAttributes?.reference_number);
+        let payout = walletTransactionId
+          ? await tx.payout.findFirst({ where: { paymongoTransactionId: walletTransactionId } })
+          : null;
+        if (!payout && referenceNumber) {
+          payout = await tx.payout.findFirst({ where: { paymongoReferenceNumber: referenceNumber } });
+        }
+        if (!payout) {
+          console.warn("PayMongo transfer webhook has no matching payout", {
+            providerEventId, walletTransactionId, referenceNumber, eventType,
+          });
+          await tx.paymentEvent.update({ where: { id: event.id }, data: { processedAt: new Date() } });
+          return;
+        }
+        const succeeded = normalizedType === "transfer.outward.successful" || resourceAttributes.status === "succeeded";
+        const providerMessage = text(resourceAttributes.failure_message)
+          || text(resourceAttributes.provider_error)
+          || text(attributes.message)
+          || "PayMongo transfer failed";
+        await tx.payout.update({
+          where: { id: payout.id },
+          data: succeeded
+            ? {
+                status: "PAID",
+                paidAt: payout.paidAt || new Date(),
+                paymongoStatus: "succeeded",
+                paymongoError: null,
+                failureMessage: null,
+                transferReference: payout.transferReference || referenceNumber || payout.paymongoReferenceNumber,
+              }
+            : {
+                status: "FAILED",
+                failureMessage: providerMessage,
+                paymongoStatus: "failed",
+                paymongoError: providerMessage,
+              },
+        });
+        if (succeeded) {
+          const notificationData = JSON.stringify({ payoutId: payout.id });
+          const station = await tx.station.findUnique({ where: { id: payout.stationId }, select: { userId: true } });
+          if (station && !(await tx.notification.findFirst({ where: { userId: station.userId, type: "PAYOUT_PAID", data: notificationData } }))) {
+            await tx.notification.create({
+              data: {
+                userId: station.userId,
+                type: "PAYOUT_PAID",
+                title: "Payout sent",
+                message: `Your payout of ₱${(payout.netCentavos / 100).toFixed(2)} has been paid.`,
+                data: notificationData,
+              },
+            });
+          }
+        }
+        await tx.paymentEvent.update({ where: { id: event.id }, data: { processedAt: new Date() } });
+      });
+    } catch (error) {
+      console.error("PayMongo transfer webhook processing error", { providerEventId, error });
+      await prisma.paymentEvent.update({ where: { id: event.id }, data: { processingError: error instanceof Error ? error.message : "Processing failed" } }).catch(() => undefined);
+      return NextResponse.json({ error: "Webhook processing failed" }, { status: 500 });
+    }
+    return NextResponse.json({ received: true });
+  }
 
   try {
     await prisma.$transaction(async (tx) => {

@@ -470,6 +470,10 @@ model Payout {
   providerPayoutId   String?
   transferReference  String?
   failureMessage     String?
+  paymongoTransactionId   String? // PayMongo wallet_transaction id (wallet_tr_...)
+  paymongoReferenceNumber String? // PayMongo reference_number, used for reconciliation
+  paymongoStatus          String? // pending | succeeded | failed
+  paymongoError           String? // provider_error / failure message from PayMongo
   createdAt          DateTime     @default(now())
   approvedAt         DateTime?
   paidAt             DateTime?
