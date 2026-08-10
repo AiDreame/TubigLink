@@ -53,7 +53,9 @@ import {
 import { useSession } from "next-auth/react";
 import toast from "react-hot-toast";
 import dynamic from "next/dynamic";
-import { METRO_MANILA_CITIES, CEBU_CITIES, MINDANAO_CITIES, SAMPLE_BARANGAYS, STATION_PAYMENT_METHODS } from "@/lib/constants";
+import { SAMPLE_BARANGAYS, STATION_PAYMENT_METHODS } from "@/lib/constants";
+import { PH_PROVINCES } from "@/lib/ph-locations";
+import { CityCombobox } from "@/components/shared/CityCombobox";
 
 // Leaflet must never render server-side — same pattern as StationMap (ssr: false)
 const LocationPicker = dynamic(() => import("@/components/shared/LocationPicker"), {
@@ -97,7 +99,14 @@ interface StationData {
   products?: { id: string; name: string; type: string }[];
 }
 
-const ALL_CITIES = [...METRO_MANILA_CITIES, ...CEBU_CITIES, ...MINDANAO_CITIES];
+// All 82 province-level units (81 provinces + Metro Manila/NCR), Metro
+// Manila first, then alphabetical — from the full PSGC dataset.
+const PROVINCE_OPTIONS = [
+  ...PH_PROVINCES.filter((p) => p.name === "Metro Manila"),
+  ...PH_PROVINCES.filter((p) => p.name !== "Metro Manila").sort((a, b) =>
+    a.name.localeCompare(b.name)
+  ),
+];
 
 function PayoutSettings() {
   const [data,setData]=useState<any>(null); const [open,setOpen]=useState(false); const [code,setCode]=useState(""); const [number,setNumber]=useState(""); const [name,setName]=useState(""); const [method,setMethod]=useState("GCASH"); const [bank,setBank]=useState(""); const banks=["BPI","BDO","UnionBank","Metrobank","Landbank","RCBC","PNB","Security Bank","EastWest","Chinabank"]; const [loading,setLoading]=useState(false);
@@ -507,16 +516,12 @@ export default function DashboardSettingsPage() {
                 }`}>
                   <SelectValue placeholder="Select province" />
                 </SelectTrigger>
-                <SelectContent className="rounded-xl dark:bg-gray-800 dark:border-gray-700">
-                  <SelectItem value="Metro Manila" className="dark:text-gray-300 dark:focus:bg-gray-700">Metro Manila</SelectItem>
-                  <SelectItem value="Cebu" className="dark:text-gray-300 dark:focus:bg-gray-700">Cebu</SelectItem>
-                  <SelectItem value="Davao del Sur" className="dark:text-gray-300 dark:focus:bg-gray-700">Davao del Sur</SelectItem>
-                  <SelectItem value="Misamis Oriental" className="dark:text-gray-300 dark:focus:bg-gray-700">Misamis Oriental</SelectItem>
-                  <SelectItem value="South Cotabato" className="dark:text-gray-300 dark:focus:bg-gray-700">South Cotabato</SelectItem>
-                  <SelectItem value="Rizal" className="dark:text-gray-300 dark:focus:bg-gray-700">Rizal</SelectItem>
-                  <SelectItem value="Laguna" className="dark:text-gray-300 dark:focus:bg-gray-700">Laguna</SelectItem>
-                  <SelectItem value="Cavite" className="dark:text-gray-300 dark:focus:bg-gray-700">Cavite</SelectItem>
-                  <SelectItem value="Bulacan" className="dark:text-gray-300 dark:focus:bg-gray-700">Bulacan</SelectItem>
+                <SelectContent className="rounded-xl dark:bg-gray-800 dark:border-gray-700 max-h-[280px]">
+                  {PROVINCE_OPTIONS.map((p) => (
+                    <SelectItem key={p.id} value={p.name} className="dark:text-gray-300 dark:focus:bg-gray-700">
+                      {p.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               {errors.province && <p className="text-xs text-red-500">{errors.province}</p>}
@@ -525,25 +530,22 @@ export default function DashboardSettingsPage() {
             {/* City */}
             <div className="space-y-2">
               <Label htmlFor="city" className="text-sm font-bold">
-                City <span className="text-red-500">*</span>
+                City / Municipality <span className="text-red-500">*</span>
               </Label>
-              <Select
+              <CityCombobox
                 value={form.city || ""}
-                onValueChange={(v) => setForm((prev) => ({ ...prev, city: v }))}
-              >
-                <SelectTrigger className={`rounded-xl bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 min-h-[44px] ${
-                  errors.city ? "border-red-500" : ""
-                }`}>
-                  <SelectValue placeholder="Select city" />
-                </SelectTrigger>
-                <SelectContent className="rounded-xl dark:bg-gray-800 dark:border-gray-700 max-h-[280px]">
-                  {ALL_CITIES.map((city) => (
-                    <SelectItem key={city} value={city} className="dark:text-gray-300 dark:focus:bg-gray-700">
-                      {city}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                onChange={(city) => {
+                  if (!city) return;
+                  setForm((prev) => ({
+                    ...prev,
+                    city: city.name,
+                    // Auto-fill the province from the PSGC dataset (still editable above).
+                    province: city.province || prev.province,
+                  }));
+                }}
+                placeholder="Search all PH cities & municipalities…"
+                className={errors.city ? "[&>button]:border-red-500" : undefined}
+              />
               {errors.city && <p className="text-xs text-red-500">{errors.city}</p>}
             </div>
 
@@ -869,20 +871,18 @@ export default function DashboardSettingsPage() {
           <div className="space-y-4 py-4">
             {/* City */}
             <div className="space-y-2">
-              <Label htmlFor="zone-city" className="text-sm font-bold">City</Label>
-              <Select
+              <Label htmlFor="zone-city" className="text-sm font-bold">City / Municipality</Label>
+              <CityCombobox
                 value={zoneForm.city}
-                onValueChange={(v) => setZoneForm((prev) => ({ ...prev, city: v, barangay: "" }))}
-              >
-                <SelectTrigger className="rounded-xl bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 min-h-[44px]">
-                  <SelectValue placeholder="Select city" />
-                </SelectTrigger>
-                <SelectContent className="rounded-xl dark:bg-gray-800 dark:border-gray-700 max-h-[280px]">
-                  {ALL_CITIES.map((c) => (
-                    <SelectItem key={c} value={c} className="dark:text-gray-300 dark:focus:bg-gray-700">{c}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                onChange={(city) =>
+                  setZoneForm((prev) => ({
+                    ...prev,
+                    city: city?.name || prev.city,
+                    barangay: "",
+                  }))
+                }
+                placeholder="Search all PH cities & municipalities…"
+              />
             </div>
 
             {/* Barangay */}

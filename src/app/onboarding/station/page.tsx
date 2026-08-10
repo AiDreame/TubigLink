@@ -36,7 +36,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import toast from "react-hot-toast";
-import { MESSAGES, WATER_TYPES, PRODUCT_SIZES, ALL_SUPPORTED_CITIES, SAMPLE_BARANGAYS } from "@/lib/constants";
+import { MESSAGES, WATER_TYPES, PRODUCT_SIZES, SAMPLE_BARANGAYS } from "@/lib/constants";
+import { PH_PROVINCES } from "@/lib/ph-locations";
+import { CityCombobox } from "@/components/shared/CityCombobox";
 
 const STEPS = [
   { id: 1, label: "Account", icon: User },
@@ -44,6 +46,15 @@ const STEPS = [
   { id: 3, label: "Products", icon: Package },
   { id: 4, label: "Zones", icon: MapPin },
   { id: 5, label: "Review", icon: Clock },
+];
+
+// All 82 province-level units (81 provinces + Metro Manila/NCR), Metro
+// Manila first, then alphabetical — from the full PSGC dataset.
+const PROVINCE_OPTIONS = [
+  ...PH_PROVINCES.filter((p) => p.name === "Metro Manila"),
+  ...PH_PROVINCES.filter((p) => p.name !== "Metro Manila").sort((a, b) =>
+    a.name.localeCompare(b.name)
+  ),
 ];
 
 interface Product {
@@ -525,16 +536,30 @@ export default function StationOnboardingPage() {
           className="min-h-[48px]"
         />
       </div>
+      <div className="space-y-2">
+        <Label htmlFor="stationCity">City / Municipality *</Label>
+        <CityCombobox
+          value={stationCity}
+          onChange={(city) => {
+            if (!city) return;
+            setStationCity(city.name);
+            // Auto-fill the province from the PSGC dataset (still editable below).
+            setStationProvince(city.province);
+          }}
+          placeholder="Search all PH cities & municipalities…"
+          triggerClassName="min-h-[48px]"
+        />
+      </div>
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-2">
-          <Label htmlFor="stationCity">City *</Label>
-          <Select value={stationCity} onValueChange={setStationCity}>
-            <SelectTrigger id="stationCity" className="min-h-[48px]">
-              <SelectValue placeholder="Select city" />
+          <Label htmlFor="stationProvince">Province *</Label>
+          <Select value={stationProvince} onValueChange={setStationProvince}>
+            <SelectTrigger id="stationProvince" className="min-h-[48px]">
+              <SelectValue placeholder="Select province" />
             </SelectTrigger>
-            <SelectContent>
-              {ALL_SUPPORTED_CITIES.map((c) => (
-                <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>
+            <SelectContent className="max-h-[280px]">
+              {PROVINCE_OPTIONS.map((p) => (
+                <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -545,22 +570,13 @@ export default function StationOnboardingPage() {
             <SelectTrigger id="stationBarangay" className="min-h-[48px]">
               <SelectValue placeholder={stationCity ? "Select barangay" : "Pick city first"} />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="max-h-[280px]">
               {getBarangays().map((b) => (
                 <SelectItem key={b} value={b}>{b}</SelectItem>
               ))}
             </SelectContent>
           </Select>
         </div>
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="stationProvince">Province</Label>
-        <Input
-          id="stationProvince"
-          value={stationProvince}
-          onChange={(e) => setStationProvince(e.target.value)}
-          className="min-h-[48px]"
-        />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-2">
