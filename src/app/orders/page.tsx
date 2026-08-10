@@ -31,6 +31,7 @@ import { format } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { MESSAGES } from "@/lib/constants";
+import { NotificationBell } from "@/components/shared/NotificationBell";
 
 export default function OrdersPage() {
   const router = useRouter();
@@ -121,9 +122,12 @@ export default function OrdersPage() {
           </Button>
           <h1 className="text-xl font-bold text-card-foreground">{MESSAGES.myOrders}</h1>
         </div>
-        <Button variant="ghost" size="icon" className="rounded-full min-h-[44px] min-w-[44px]" aria-label="Search orders">
-          <Search className="h-5 w-5 text-muted-foreground" />
-        </Button>
+        <div className="flex items-center gap-1">
+          <NotificationBell className="hidden sm:block" />
+          <Button variant="ghost" size="icon" className="rounded-full min-h-[44px] min-w-[44px]" aria-label="Search orders">
+            <Search className="h-5 w-5 text-muted-foreground" />
+          </Button>
+        </div>
       </header>
 
       <main className="max-w-3xl mx-auto p-4">

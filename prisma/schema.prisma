@@ -253,16 +253,16 @@ model PaymentMethod {
 
 // ─── NOTIFICATION ───────────────────────────────────
 model Notification {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   userId    String
-  type      String // ORDER_STATUS | PROMO | SYSTEM
+  type      String // ORDER_NEW | ORDER_STATUS | PAYOUT | DISPUTE | SYSTEM
   title     String
-  message   String
-  data      String? // JSON payload
-  isRead    Boolean  @default(false)
-  createdAt DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id])
+  body      String
+  link      String? // relative path, e.g. /orders/<id> or /dashboard/orders
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id])
+  @@index([userId])
 }
 
 // ═══════════════════════════════════════════════════════

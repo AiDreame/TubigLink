@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { createNotification } from "@/lib/notifications";
 
 // POST /api/orders/[id]/reorder — Create a new order from a past order
 export async function POST(
@@ -81,14 +82,12 @@ export async function POST(
     });
 
     // Notify the station
-    await prisma.notification.create({
-      data: {
-        userId: originalOrder.station.userId,
-        type: "ORDER_STATUS",
-        title: "Reorder Received",
-        message: `Reorder #${order.id.substring(0, 8)} — ₱${total.toFixed(2)} (from #${params.id.substring(0, 8)})`,
-        data: JSON.stringify({ orderId: order.id, originalOrderId: params.id }),
-      },
+    await createNotification({
+      userId: originalOrder.station.userId,
+      type: "ORDER_NEW",
+      title: "Reorder Received",
+      body: `Reorder #${order.id.substring(0, 8)} — ₱${total.toFixed(2)} (from #${params.id.substring(0, 8)})`,
+      link: "/dashboard/orders",
     });
 
     return NextResponse.json({ success: true, data: order }, { status: 201 });

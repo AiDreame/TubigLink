@@ -876,6 +876,49 @@ async function main() {
     });
   }
 
+  // ─── Demo notifications for the bell ─────────────────
+  const bellCustomer = await prisma.user.findUnique({ where: { phone: "09170000002" } });
+  const bellProvider = await prisma.user.findUnique({ where: { phone: "09170000004" } });
+  if (bellCustomer) {
+    await prisma.notification.createMany({
+      data: [
+        {
+          userId: bellCustomer.id,
+          type: "ORDER_STATUS",
+          title: "Order accepted",
+          body: "Your order from Aquino Water Station is now: accepted.",
+          link: `/orders/${order1?.id ?? ""}`,
+        },
+        {
+          userId: bellCustomer.id,
+          type: "SYSTEM",
+          title: "Welcome to AquaLink!",
+          body: "You'll get notified here when your orders move or your water is on the way.",
+          link: "/orders",
+        },
+      ],
+    });
+  }
+  if (bellProvider) {
+    await prisma.notification.createMany({
+      data: [
+        {
+          userId: bellProvider.id,
+          type: "ORDER_NEW",
+          title: "New Order Received",
+          body: `New order #${order1?.id?.substring(0, 8) ?? ""} — ₱${(order1?.total ?? 0).toFixed(2)}`,
+          link: "/dashboard/orders",
+        },
+        {
+          userId: bellProvider.id,
+          type: "PAYOUT",
+          title: "Payout sent",
+          body: "Your payout of ₱1,200.00 has been paid.",
+          link: "/dashboard/earnings",
+        },
+      ],
+    });
+  }
   console.log("✅ Seed complete!");
   console.log("─── Test Accounts ───");
   console.log("📱 All accounts use password: password123");

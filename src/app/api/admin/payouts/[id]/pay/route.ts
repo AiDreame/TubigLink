@@ -113,10 +113,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       await prismaTx.notification.create({
         data: {
           userId: station.userId,
-          type: "PAYOUT_PAID",
+          type: "PAYOUT",
           title: "Payout sent",
-          message: `Your payout of ₱${(p.netCentavos / 100).toFixed(2)} for ${periodLabel} has been paid.`,
-          data: JSON.stringify({ payoutId: p.id }),
+          body: `Your payout of ₱${(p.netCentavos / 100).toFixed(2)} for ${periodLabel} has been paid.`,
+          link: "/dashboard/earnings",
         },
       });
     }

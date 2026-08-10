@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import { createNotification } from "@/lib/notifications";
 import { isProvisional, checkProvisionalLimits } from "@/lib/provisional";
 import { applyDeliveryAutoConfirmMany } from "@/lib/delivery";
 
@@ -51,7 +52,13 @@ export async function POST(req: NextRequest) {
     const deliveryFee = station.deliveryFee || 0;
     const total = subtotal + deliveryFee;
     const order = await prisma.order.create({ data: { userId: user.id, stationId, addressId, paymentMethod: method, paymentStatus: "PENDING", orderType: orderType || "ONCE", recurringDay: recurringDay || null, subtotal, deliveryFee, total, amountCentavos: Math.round(total * 100), notes: notes || null, status: "PENDING", items: { create: orderItems } }, include: { items: { include: { product: true } }, station: { select: { name: true } }, address: true } });
-    if (method === "COD") await prisma.notification.create({ data: { userId: station.userId, type: "ORDER_STATUS", title: "New Order Received", message: `New order #${order.id.substring(0, 8)} — ₱${total.toFixed(2)}`, data: JSON.stringify({ orderId: order.id }) } });
-    return NextResponse.json({ success: true, data: order, ...(method === "GCASH" ? { nextAction: "INITIALIZE_PAYMENT" } : {}) }, { status: 201 });
-  } catch (error) { console.error("Order creation error:", error); return NextResponse.json({ success: false, error: error instanceof Error ? error.message : "Failed to create order" }, { status: 500 }); }
+    // Notify the station about the new order (all payment methods).
+    await createNotification({
+      userId: station.userId,
+      type: "ORDER_NEW",
+      title: "New Order Received",
+      body: `New order #${order.id.substring(0, 8)} — ₱${total.toFixed(2)}`,
+      link: "/dashboard/orders",
+    });
+    return NextResponse.json({ success: true, data: order, ...(method === "GCASH" ? { nextAction: "INITIALIZE_PAYMENT" } : {}) }, { status: 201 });  } catch (error) { console.error("Order creation error:", error); return NextResponse.json({ success: false, error: error instanceof Error ? error.message : "Failed to create order" }, { status: 500 }); }
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import { createNotification } from "@/lib/notifications";
 import { applyDeliveryAutoConfirm } from "@/lib/delivery";
 
 // GET /api/orders/[id] — Get single order details
@@ -132,14 +133,12 @@ export async function PUT(
     });
 
     // Notify the customer about status change
-    await prisma.notification.create({
-      data: {
-        userId: order.userId,
-        type: "ORDER_STATUS",
-        title: `Order ${status.replace("_", " ").toLowerCase()}`,
-        message: `Your order from ${order.station.name} is now: ${status.replace("_", " ").toLowerCase()}`,
-        data: JSON.stringify({ orderId: order.id, status }),
-      },
+    await createNotification({
+      userId: order.userId,
+      type: "ORDER_STATUS",
+      title: `Order ${status.replace("_", " ").toLowerCase()}`,
+      body: `Your order from ${order.station.name} is now: ${status.replace("_", " ").toLowerCase()}`,
+      link: `/orders/${order.id}`,
     });
 
     return NextResponse.json({ success: true, data: order });
@@ -211,14 +210,12 @@ export async function DELETE(
     });
 
     // Create notification for the customer confirming cancellation
-    await prisma.notification.create({
-      data: {
-        userId: order.userId,
-        type: "ORDER_STATUS",
-        title: "Order cancelled",
-        message: `Your order from ${updatedOrder.station.name} has been cancelled as requested.`,
-        data: JSON.stringify({ orderId: order.id, status: "CANCELLED" }),
-      },
+    await createNotification({
+      userId: order.userId,
+      type: "ORDER_STATUS",
+      title: "Order cancelled",
+      body: `Your order from ${updatedOrder.station.name} has been cancelled as requested.`,
+      link: `/orders/${order.id}`,
     });
 
     return NextResponse.json({ success: true, data: updatedOrder });

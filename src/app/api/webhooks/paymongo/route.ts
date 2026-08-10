@@ -141,16 +141,17 @@ export async function POST(request: NextRequest) {
               },
         });
         if (succeeded) {
-          const notificationData = JSON.stringify({ payoutId: payout.id });
+          const periodLabel = `${payout.periodStart.toISOString().slice(0, 10)} to ${payout.periodEnd.toISOString().slice(0, 10)}`;
+          const payoutBody = `Your payout of ₱${(payout.netCentavos / 100).toFixed(2)} for ${periodLabel} has been paid.`;
           const station = await tx.station.findUnique({ where: { id: payout.stationId }, select: { userId: true } });
-          if (station && !(await tx.notification.findFirst({ where: { userId: station.userId, type: "PAYOUT_PAID", data: notificationData } }))) {
+          if (station && !(await tx.notification.findFirst({ where: { userId: station.userId, type: "PAYOUT", title: "Payout sent", body: payoutBody } }))) {
             await tx.notification.create({
               data: {
                 userId: station.userId,
-                type: "PAYOUT_PAID",
+                type: "PAYOUT",
                 title: "Payout sent",
-                message: `Your payout of ₱${(payout.netCentavos / 100).toFixed(2)} has been paid.`,
-                data: notificationData,
+                body: payoutBody,
+                link: "/dashboard/earnings",
               },
             });
           }
@@ -205,11 +206,11 @@ export async function POST(request: NextRequest) {
             ...(intentId && !order.paymentIntentId ? { paymentIntentId: intentId } : {}),
           } });
         }
-        const notificationData = JSON.stringify({ orderId: order.id, paymentStatus: "PAID" });
+        const paymentLink = `/dashboard/orders/${order.id}`;
         // Station.userId is loaded separately to keep this safe for stations with staff accounts.
         const station = await tx.station.findUnique({ where: { id: order.stationId }, select: { userId: true } });
-        if (station && !(await tx.notification.findFirst({ where: { userId: station.userId, type: "PAYMENT_RECEIVED", data: notificationData } }))) {
-          await tx.notification.create({ data: { userId: station.userId, type: "PAYMENT_RECEIVED", title: "Payment received", message: `Payment received for order ${order.id}.`, data: notificationData } });
+        if (station && !(await tx.notification.findFirst({ where: { userId: station.userId, type: "SYSTEM", link: paymentLink } }))) {
+          await tx.notification.create({ data: { userId: station.userId, type: "SYSTEM", title: "Payment received", body: `Payment received for order #${order.id.substring(0, 8)}.`, link: paymentLink } });
         }
       } else if (isFailed) {
         if (order.paymentStatus !== "PAID") await tx.order.update({ where: { id: order.id }, data: {

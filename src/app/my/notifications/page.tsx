@@ -10,6 +10,8 @@ import {
   CheckCheck,
   Star,
   Package,
+  Wallet,
+  ShieldAlert,
   Info,
   Tag,
   ChevronRight,
@@ -28,19 +30,23 @@ interface Notification {
   userId: string;
   type: string;
   title: string;
-  message: string;
-  data: string | null;
-  isRead: boolean;
+  body: string;
+  link: string | null;
+  readAt: string | null;
   createdAt: string;
 }
 
 // ─── Helpers ──────────────────────────────────────
 function getNotificationIcon(type: string) {
   switch (type) {
-    case "NEW_REVIEW":
-      return <Star className="h-4 w-4 text-yellow-500" aria-hidden="true" />;
+    case "ORDER_NEW":
+      return <Package className="h-4 w-4 text-blue-500" aria-hidden="true" />;
     case "ORDER_STATUS":
       return <Package className="h-4 w-4 text-blue-500" aria-hidden="true" />;
+    case "PAYOUT":
+      return <Wallet className="h-4 w-4 text-green-500" aria-hidden="true" />;
+    case "DISPUTE":
+      return <ShieldAlert className="h-4 w-4 text-red-500" aria-hidden="true" />;
     case "SYSTEM":
       return <Info className="h-4 w-4 text-gray-500" aria-hidden="true" />;
     case "PROMO":
@@ -53,10 +59,14 @@ function getNotificationIcon(type: string) {
 function getNotificationBg(type: string, isRead: boolean) {
   if (isRead) return "bg-card";
   switch (type) {
-    case "NEW_REVIEW":
-      return "bg-yellow-50 dark:bg-yellow-900/10";
+    case "ORDER_NEW":
+      return "bg-blue-50 dark:bg-blue-900/10";
     case "ORDER_STATUS":
       return "bg-blue-50 dark:bg-blue-900/10";
+    case "PAYOUT":
+      return "bg-green-50 dark:bg-green-900/10";
+    case "DISPUTE":
+      return "bg-red-50 dark:bg-red-900/10";
     case "SYSTEM":
       return "bg-gray-50 dark:bg-gray-900/10";
     case "PROMO":
@@ -67,25 +77,7 @@ function getNotificationBg(type: string, isRead: boolean) {
 }
 
 function getNotificationHref(notification: Notification): string | null {
-  if (!notification.data) return null;
-  try {
-    const parsed = JSON.parse(notification.data);
-    if (parsed.type === "review" && parsed.slug) {
-      return `/stations/${parsed.slug}`;
-    }
-    if (parsed.type === "review" && parsed.stationId) {
-      return `/stations/${parsed.stationId}`;
-    }
-    if (notification.type === "ORDER_STATUS" && parsed.orderId) {
-      return `/orders/${parsed.orderId}`;
-    }
-    if (parsed.orderId) {
-      return `/orders/${parsed.orderId}`;
-    }
-  } catch {
-    // Invalid JSON in data field — no link
-  }
-  return null;
+  return notification.link || null;
 }
 
 // ─── Main Page ────────────────────────────────────
@@ -105,8 +97,8 @@ export default function NotificationsPage() {
       const res = await fetch("/api/notifications");
       if (!res.ok) throw new Error("Failed to fetch notifications");
       const json = await res.json();
-      if (json.success) {
-        setNotifications(json.data);
+      if (json && Array.isArray(json.items)) {
+        setNotifications(json.items);
       } else {
         throw new Error(json.error || "Failed to fetch notifications");
       }
@@ -129,15 +121,15 @@ export default function NotificationsPage() {
   const handleMarkRead = async (id: string) => {
     setMarkingIds((prev) => new Set(prev).add(id));
     try {
-      const res = await fetch("/api/notifications", {
-        method: "PUT",
+      const res = await fetch("/api/notifications/read", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ notificationIds: [id] }),
+        body: JSON.stringify({ id }),
       });
       const json = await res.json();
       if (json.success) {
         setNotifications((prev) =>
-          prev.map((n) => (n.id === id ? { ...n, isRead: true } : n))
+          prev.map((n) => (n.id === id ? { ...n, readAt: n.readAt ?? new Date().toISOString() } : n))
         );
       } else {
         throw new Error(json.error || "Failed to mark as read");
@@ -154,18 +146,17 @@ export default function NotificationsPage() {
   };
 
   const handleMarkAllRead = async () => {
-    const unreadIds = notifications.filter((n) => !n.isRead).map((n) => n.id);
+    const unreadIds = notifications.filter((n) => !n.readAt).map((n) => n.id);
     if (unreadIds.length === 0) return;
-
     try {
-      const res = await fetch("/api/notifications", {
-        method: "PUT",
+      const res = await fetch("/api/notifications/read", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ allRead: true }),
+        body: JSON.stringify({ all: true }),
       });
       const json = await res.json();
       if (json.success) {
-        setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+        setNotifications((prev) => prev.map((n) => ({ ...n, readAt: n.readAt ?? new Date().toISOString() })));
         toast.success("All notifications marked as read");
       } else {
         throw new Error(json.error || "Failed to mark all as read");
@@ -177,7 +168,7 @@ export default function NotificationsPage() {
 
   const handleNotificationClick = (notification: Notification) => {
     // Mark as read if unread
-    if (!notification.isRead) {
+    if (!notification.readAt) {
       handleMarkRead(notification.id);
     }
     // Navigate if there's a valid link
@@ -187,7 +178,7 @@ export default function NotificationsPage() {
     }
   };
 
-  const unreadCount = notifications.filter((n) => !n.isRead).length;
+  const unreadCount = notifications.filter((n) => !n.readAt).length;
 
   // ── Loading State ──
   if (sessionStatus === "loading" || (sessionStatus === "authenticated" && isLoading)) {
@@ -308,11 +299,11 @@ export default function NotificationsPage() {
                   key={notification.id}
                   className={`relative rounded-2xl border shadow-sm overflow-hidden transition-all ${
                     isClickable ? "cursor-pointer hover:shadow-md" : ""
-                  } ${getNotificationBg(notification.type, notification.isRead)}`}
+                  } ${getNotificationBg(notification.type, !!notification.readAt)}`}
                   onClick={() => isClickable && handleNotificationClick(notification)}
                   role={isClickable ? "button" : undefined}
                   tabIndex={isClickable ? 0 : undefined}
-                  aria-label={`${notification.title}: ${notification.message}`}
+                  aria-label={`${notification.title}: ${notification.body}`}
                   onKeyDown={(e) => {
                     if (isClickable && e.key === "Enter") {
                       handleNotificationClick(notification);
@@ -321,17 +312,17 @@ export default function NotificationsPage() {
                 >
                   <div className="p-4 flex items-start gap-3">
                     {/* Unread indicator */}
-                    {!notification.isRead && (
+                    {!notification.readAt && (
                       <div className="absolute top-3 left-3 h-2.5 w-2.5 rounded-full bg-blue-600" />
                     )}
 
                     {/* Icon */}
                     <div
                       className={`h-10 w-10 rounded-full flex items-center justify-center shrink-0 ${
-                        notification.isRead
+                        notification.readAt
                           ? "bg-muted"
                           : "bg-white dark:bg-gray-800 shadow-sm"
-                      } ${!notification.isRead ? "ml-1" : ""}`}
+                      } ${!notification.readAt ? "ml-1" : ""}`}
                     >
                       {getNotificationIcon(notification.type)}
                     </div>
@@ -341,7 +332,7 @@ export default function NotificationsPage() {
                       <div className="flex items-start justify-between gap-2">
                         <h3
                           className={`text-sm font-bold truncate ${
-                            notification.isRead
+                            notification.readAt
                               ? "text-foreground"
                               : "text-foreground"
                           }`}
@@ -356,7 +347,7 @@ export default function NotificationsPage() {
                         )}
                       </div>
                       <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
-                        {notification.message}
+                        {notification.body}
                       </p>
                       <p className="text-[10px] text-muted-foreground/60 mt-1.5 uppercase tracking-wider">
                         {format(new Date(notification.createdAt), "MMM d, h:mm a")}
@@ -365,7 +356,7 @@ export default function NotificationsPage() {
                   </div>
 
                   {/* Mark as read button for unread non-clickable notifications */}
-                  {!notification.isRead && !isClickable && (
+                  {!notification.readAt && !isClickable && (
                     <div className="px-4 pb-3 pt-0">
                       <Button
                         variant="ghost"
