@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { NotificationBell } from "@/components/shared/NotificationBell";
 import { useSession, signOut } from "next-auth/react";
 
 const sidebarItems = [
@@ -113,6 +114,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </div>
 
           <div className="flex items-center gap-3">
+            <NotificationBell />
             <div className="text-right mr-2 hidden md:block">
               <p className="text-xs font-bold text-slate-900 dark:text-slate-100">{session?.user?.name}</p>
               <p className="text-[10px] text-slate-400">Super Admin</p>

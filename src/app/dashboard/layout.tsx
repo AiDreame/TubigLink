@@ -10,7 +10,6 @@ import {
   Package, 
   BarChart3, 
   Settings, 
-  Bell, 
   Menu, 
   X,
   LogOut,
@@ -21,6 +20,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { NotificationBell } from "@/components/shared/NotificationBell";
 import { cn } from "@/lib/utils";
 import { useSession, signOut } from "next-auth/react";
 
@@ -181,10 +181,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
 
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" className="rounded-full relative dark:text-gray-400">
-              <Bell className="h-5 w-5 text-gray-500 dark:text-gray-400" />
-              <span className="absolute top-2 right-2 h-2 w-2 bg-red-500 rounded-full border-2 border-white dark:border-gray-900" />
-            </Button>
+            <NotificationBell />
             <Button asChild variant="outline" size="sm" className="rounded-full hidden sm:flex dark:border-gray-700 dark:text-gray-300">
               <Link href={`/stations/${(session?.user as any)?.stationSlug || "my-station"}`}>View Store</Link>
             </Button>

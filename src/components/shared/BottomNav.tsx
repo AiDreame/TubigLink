@@ -6,6 +6,7 @@ import { Home, Search, ShoppingCart, User, LayoutDashboard, Map, Droplets } from
 import { useSession } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import { useCart } from "@/hooks/use-cart";
+import { NotificationBell } from "@/components/shared/NotificationBell";
 
 export function BottomNav() {
   const pathname = usePathname();
@@ -52,6 +53,9 @@ export function BottomNav() {
   return (
     <nav className="md:hidden bottom-nav bg-background/95 backdrop-blur-md border-t" role="navigation" aria-label="Main navigation">
       <div className="flex items-center justify-around py-1">
+        {session && (
+          <NotificationBell variant="bottom-nav" />
+        )}
         {items.map((item) => {
           const isActive = pathname === item.href;
           const Icon = item.icon;

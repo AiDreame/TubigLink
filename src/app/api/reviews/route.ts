@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { createNotification } from "@/lib/notifications";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
@@ -109,14 +110,12 @@ export async function POST(req: NextRequest) {
       select: { userId: true, slug: true },
     });
     if (station) {
-      await prisma.notification.create({
-        data: {
-          userId: station.userId,
-          type: "NEW_REVIEW",
-          title: "New Review Received",
-          message: `${rating}★ review on your station`,
-          data: JSON.stringify({ stationId, orderId, rating, slug: station.slug, type: "review" }),
-        },
+      await createNotification({
+        userId: station.userId,
+        type: "SYSTEM",
+        title: "New Review Received",
+        body: `${rating}★ review on your station`,
+        link: `/stations/${station.slug}`,
       });
     }
 

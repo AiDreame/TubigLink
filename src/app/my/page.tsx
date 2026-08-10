@@ -6,7 +6,6 @@ import Link from "next/link";
 import { useSession } from "next-auth/react";
 import {
   ArrowLeft,
-  Bell,
   Droplets,
   Package,
   Truck,
@@ -29,6 +28,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { MESSAGES } from "@/lib/constants";
+import { NotificationBell } from "@/components/shared/NotificationBell";
 import { format } from "date-fns";
 import toast from "react-hot-toast";
 
@@ -288,20 +288,7 @@ export default function MyDashboardPage() {
               </h1>
             </div>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="rounded-full min-h-[44px] min-w-[44px] relative"
-            onClick={() => router.push("/my/notifications")}
-            aria-label="Notifications"
-          >
-            <Bell className="h-5 w-5 text-muted-foreground" />
-            {unreadNotifications > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center shadow-sm">
-                {unreadNotifications > 9 ? "9+" : unreadNotifications}
-              </span>
-            )}
-          </Button>
+          <NotificationBell className="hidden sm:block" />
         </div>
       </header>
 

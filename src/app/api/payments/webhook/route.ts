@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { createNotification } from "@/lib/notifications";
 
 /**
  * POST /api/payments/webhook
@@ -43,14 +44,12 @@ export async function POST(req: NextRequest) {
 
       if (!station) return;
 
-      await prisma.notification.create({
-        data: {
-          userId: station.userId,
-          type: "ORDER_STATUS",
-          title: "New Order Received",
-          message: `New order #${orderId.substring(0, 8)} — ₱${order.total.toFixed(2)} (Payment confirmed)`,
-          data: JSON.stringify({ orderId, paymentId }),
-        },
+      await createNotification({
+        userId: station.userId,
+        type: "ORDER_NEW",
+        title: "New Order Received",
+        body: `New order #${orderId.substring(0, 8)} — ₱${order.total.toFixed(2)} (Payment confirmed)`,
+        link: "/dashboard/orders",
       });
     }
 

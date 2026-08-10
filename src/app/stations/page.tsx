@@ -10,6 +10,7 @@ import Link from "next/link";
 import { StationCard } from "@/components/customer/StationCard";
 import { StationWithProducts } from "@/types";
 import { Skeleton } from "@/components/ui/skeleton";
+import { NotificationBell } from "@/components/shared/NotificationBell";
 import { CitySelector } from "@/components/shared/CitySelector";
 import { useCityStore } from "@/hooks/use-city";
 
@@ -92,6 +93,7 @@ export default function StationsPage() {
                 <Home className="h-5 w-5" />
               </Button>
             </Link>
+            <NotificationBell className="hidden sm:block shrink-0" />
           </div>
 
           {/* City Selector + Quick Filter Pills */}

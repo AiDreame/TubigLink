@@ -25,6 +25,7 @@ import { useState, useCallback, useEffect } from "react";
 import { toast } from "react-hot-toast";
 import { useSession } from "next-auth/react";
 import { MESSAGES, PAYMENT_METHODS } from "@/lib/constants";
+import { NotificationBell } from "@/components/shared/NotificationBell";
 
 interface Address {
   id: string;
@@ -319,11 +320,14 @@ export default function CartPage() {
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <h1 className="text-xl font-bold text-card-foreground flex-1">{MESSAGES.myCart}</h1>
-        <Link href="/" aria-label="Home">
-          <Button variant="ghost" size="icon" className="rounded-full min-h-[44px] min-w-[44px]">
-            <Home className="h-5 w-5" />
-          </Button>
-        </Link>
+        <div className="flex items-center gap-1">
+          <NotificationBell />
+          <Link href="/" aria-label="Home">
+            <Button variant="ghost" size="icon" className="rounded-full min-h-[44px] min-w-[44px]">
+              <Home className="h-5 w-5" />
+            </Button>
+          </Link>
+        </div>
       </header>
 
       <main className="max-w-3xl mx-auto p-4 space-y-4">

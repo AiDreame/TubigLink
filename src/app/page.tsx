@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { CitySelector } from "@/components/shared/CitySelector";
+import { NotificationBell } from "@/components/shared/NotificationBell";
 import { ThemeToggle } from "@/components/shared/ThemeToggle";
 import dynamic from "next/dynamic";
 const StationMap = dynamic(() => import("@/components/shared/StationMap"), { ssr: false });
@@ -100,6 +101,7 @@ export default function HomePage() {
             </span>
           </div>
           <div className="flex items-center gap-3">
+            <NotificationBell className="hidden sm:block" />
             <ThemeToggle />
             <CitySelector />
             {isLoggedIn ? (

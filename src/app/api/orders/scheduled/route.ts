@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { createNotification } from "@/lib/notifications";
 import { applyDeliveryAutoConfirmMany } from "@/lib/delivery";
 
 // GET /api/orders/scheduled — List scheduled/recurring orders
@@ -124,14 +125,12 @@ export async function POST(req: NextRequest) {
     });
 
     // Notify the station
-    await prisma.notification.create({
-      data: {
-        userId: station.userId,
-        type: "ORDER_STATUS",
-        title: "New Scheduled Order",
-        message: `New recurring order #${order.id.substring(0, 8)} — every ${recurringDay} — ₱${total.toFixed(2)}`,
-        data: JSON.stringify({ orderId: order.id, recurringDay }),
-      },
+    await createNotification({
+      userId: station.userId,
+      type: "ORDER_NEW",
+      title: "New Scheduled Order",
+      body: `New recurring order #${order.id.substring(0, 8)} — every ${recurringDay} — ₱${total.toFixed(2)}`,
+      link: "/dashboard/orders",
     });
 
     return NextResponse.json({ success: true, data: order }, { status: 201 });
