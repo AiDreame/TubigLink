@@ -9,6 +9,7 @@ import { useState, useRef, useEffect } from "react";
 import { Search, ChevronDown, MapPin, Check, ChevronRight } from "lucide-react";
 import {
   PH_REGIONS,
+  citiesByProvince,
   getCitiesGroupedByRegion,
   searchCities,
   type CityLocation,
@@ -33,6 +34,12 @@ interface CityComboboxProps {
   className?: string;
   /** Height for the trigger, matching form inputs (default min-h-[44px]). */
   triggerClassName?: string;
+  /**
+   * Optional province filter: when set, the panel only lists/search shows
+   * cities/municipalities of that province (e.g. "Bohol"). Leave unset for
+   * the full national dataset.
+   */
+  province?: string;
 }
 
 export function CityCombobox({
@@ -42,6 +49,7 @@ export function CityCombobox({
   disabled = false,
   className,
   triggerClassName,
+  province,
 }: CityComboboxProps) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -82,6 +90,7 @@ export function CityCombobox({
         <div className="absolute left-0 right-0 top-full mt-1 z-50">
           <CityPickerPanel
             selectedName={value}
+            provinceFilter={province}
             onSelect={(city) => {
               onChange?.(city);
               setIsOpen(false);
@@ -98,14 +107,18 @@ interface CityPickerPanelProps {
   onSelect?: (city: CitySelection) => void;
   /** Extra classes for sizing (default w-80). */
   className?: string;
+  /** When set, restrict the panel to this province's cities/municipalities. */
+  provinceFilter?: string;
 }
 
 /**
  * Searchable, region→province grouped picker panel. Idle state shows
  * "Metro Manila" expanded (NCR first) and the other regions collapsed;
  * typing switches to flat ranked results across city/province/region.
+ * With a `provinceFilter`, the panel becomes a flat list of that province's
+ * cities (search stays within the province).
  */
-export function CityPickerPanel({ selectedName, onSelect, className }: CityPickerPanelProps) {
+export function CityPickerPanel({ selectedName, onSelect, className, provinceFilter }: CityPickerPanelProps) {
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(new Set(["ncr"]));
   const inputRef = useRef<HTMLInputElement>(null);
@@ -116,7 +129,12 @@ export function CityPickerPanel({ selectedName, onSelect, className }: CityPicke
     return () => clearTimeout(t);
   }, []);
 
-  const results: CitySearchResult[] = query.trim() ? searchCities(query, 60) : [];
+  const provinceCities = provinceFilter
+    ? citiesByProvince(provinceFilter).slice().sort((a, b) => a.name.localeCompare(b.name))
+    : [];
+  const results: CitySearchResult[] = query.trim()
+    ? searchCities(query, 60).filter((r) => !provinceFilter || r.province === provinceFilter)
+    : [];
   const grouped = getCitiesGroupedByRegion();
 
   const pick = (city: CityLocation) => {
@@ -180,6 +198,33 @@ export function CityPickerPanel({ selectedName, onSelect, className }: CityPicke
               </button>
             ))
           )
+        ) : provinceFilter ? (
+          <div className="space-y-0.5">
+            <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+              {provinceFilter}
+            </div>
+            {provinceCities.map((city) => (
+              <button
+                key={city.id}
+                type="button"
+                onClick={() => pick(city)}
+                className={cn(
+                  "w-full text-left px-3 py-1.5 rounded-lg text-sm transition-colors flex items-center gap-2",
+                  selectedName === city.name
+                    ? "bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium"
+                    : "text-card-foreground hover:bg-muted"
+                )}
+              >
+                <span className="truncate">{city.name}</span>
+                {!city.isCity && (
+                  <span className="ml-auto text-[10px] text-muted-foreground shrink-0">mun.</span>
+                )}
+                {selectedName === city.name && (
+                  <Check className="h-3.5 w-3.5 shrink-0 text-blue-500" />
+                )}
+              </button>
+            ))}
+          </div>
         ) : (
           grouped.map((group) => {
             const isExpanded = expanded.has(group.regionId);

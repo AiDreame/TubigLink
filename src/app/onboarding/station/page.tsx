@@ -36,9 +36,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import toast from "react-hot-toast";
-import { MESSAGES, WATER_TYPES, PRODUCT_SIZES, SAMPLE_BARANGAYS } from "@/lib/constants";
-import { PH_PROVINCES } from "@/lib/ph-locations";
+import { MESSAGES, WATER_TYPES, PRODUCT_SIZES } from "@/lib/constants";
 import { CityCombobox } from "@/components/shared/CityCombobox";
+import { ProvinceCombobox } from "@/components/shared/ProvinceCombobox";
+import { BarangayInput } from "@/components/shared/BarangayInput";
 
 const STEPS = [
   { id: 1, label: "Account", icon: User },
@@ -48,14 +49,6 @@ const STEPS = [
   { id: 5, label: "Review", icon: Clock },
 ];
 
-// All 82 province-level units (81 provinces + Metro Manila/NCR), Metro
-// Manila first, then alphabetical — from the full PSGC dataset.
-const PROVINCE_OPTIONS = [
-  ...PH_PROVINCES.filter((p) => p.name === "Metro Manila"),
-  ...PH_PROVINCES.filter((p) => p.name !== "Metro Manila").sort((a, b) =>
-    a.name.localeCompare(b.name)
-  ),
-];
 
 interface Product {
   type: string;
@@ -363,12 +356,6 @@ export default function StationOnboardingPage() {
     setZones(updated);
   };
 
-  const getBarangays = () => {
-    if (stationCity && SAMPLE_BARANGAYS[stationCity]) {
-      return SAMPLE_BARANGAYS[stationCity];
-    }
-    return [];
-  };
 
   const renderStepIndicator = () => (
     <div className="flex items-center justify-between px-2 mb-8">
@@ -553,29 +540,27 @@ export default function StationOnboardingPage() {
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-2">
           <Label htmlFor="stationProvince">Province *</Label>
-          <Select value={stationProvince} onValueChange={setStationProvince}>
-            <SelectTrigger id="stationProvince" className="min-h-[48px]">
-              <SelectValue placeholder="Select province" />
-            </SelectTrigger>
-            <SelectContent className="max-h-[280px]">
-              {PROVINCE_OPTIONS.map((p) => (
-                <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <ProvinceCombobox
+            value={stationProvince}
+            onChange={(p) => setStationProvince(p ?? "")}
+            placeholder="Type or select province…"
+            triggerClassName="min-h-[48px]"
+          />
         </div>
         <div className="space-y-2">
           <Label htmlFor="stationBarangay">Barangay *</Label>
-          <Select value={stationBarangay} onValueChange={setStationBarangay} disabled={!stationCity}>
-            <SelectTrigger id="stationBarangay" className="min-h-[48px]">
-              <SelectValue placeholder={stationCity ? "Select barangay" : "Pick city first"} />
-            </SelectTrigger>
-            <SelectContent className="max-h-[280px]">
-              {getBarangays().map((b) => (
-                <SelectItem key={b} value={b}>{b}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <BarangayInput
+            id="stationBarangay"
+            value={stationBarangay}
+            onChange={setStationBarangay}
+            city={stationCity || undefined}
+            onCityChange={(city, province) => {
+              setStationCity(city);
+              setStationProvince(province);
+            }}
+            placeholder={stationCity ? "Enter barangay…" : "Type barangay or pick city first"}
+            inputClassName="min-h-[48px]"
+          />
         </div>
       </div>
       <div className="grid grid-cols-2 gap-3">
@@ -728,7 +713,6 @@ export default function StationOnboardingPage() {
   );
 
   const renderStep4 = () => {
-    const barangays = getBarangays();
     return (
       <div className="space-y-5">
         <div className="text-center mb-6">
@@ -758,20 +742,14 @@ export default function StationOnboardingPage() {
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Barangay</Label>
-                <Select
+                <BarangayInput
                   value={zone.barangay}
-                  onValueChange={(v) => updateZone(i, "barangay", v)}
-                  disabled={!stationCity}
-                >
-                  <SelectTrigger className="min-h-[44px]">
-                    <SelectValue placeholder={stationCity ? "Select barangay" : "Set city in Step 2 first"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {barangays.map((b) => (
-                      <SelectItem key={b} value={b}>{b}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  onChange={(v) => updateZone(i, "barangay", v)}
+                  city={zone.city || stationCity || undefined}
+                  onCityChange={(city) => updateZone(i, "city", city)}
+                  placeholder="Type barangay…"
+                  className="min-h-[44px]"
+                />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
