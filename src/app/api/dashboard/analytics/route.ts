@@ -1,17 +1,88 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { authorizeDashboardStation, isAuthorizedStation } from "@/lib/station-auth";
+import { format } from "date-fns";
 
 // GET /api/dashboard/analytics — Rich analytics for station owner
 // Optional query params:
 //   days=7|30|90       — date range for ordersByDay (default: 30)
 //   fields=ordersByDay  — lightweight response with only ordersByDay
+//   from=YYYY-MM-DD&to=YYYY-MM-DD — custom inclusive date range (local time).
+//     Overrides `days`. All metrics are recomputed against [from 00:00, to 23:59:59]
+//     and the comparison block compares the range against the immediately
+//     preceding equal-length window. Validation: both or neither, valid ISO dates,
+//     from <= to, at most 366 days.
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Strictly parse YYYY-MM-DD into a local-time Date (rejects rollovers like 2026-02-31). */
+function parseISODate(value: string): Date | null {
+  if (!DATE_RE.test(value)) return null;
+  const [y, m, d] = value.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  if (dt.getFullYear() !== y || dt.getMonth() !== m - 1 || dt.getDate() !== d) return null;
+  return dt;
+}
+
+/** Local-timezone YYYY-MM-DD key (no UTC shift, matches the [00:00, 23:59:59] local filter). */
+function localDateKey(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/** Human label for an inclusive day range, e.g. "Jul 1–31, 2026" or "Dec 30, 2025 – Jan 3, 2026". */
+function formatRangeLabel(start: Date, end: Date): string {
+  const sameMonth = start.getFullYear() === end.getFullYear() && start.getMonth() === end.getMonth();
+  const sameYear = start.getFullYear() === end.getFullYear();
+  if (sameMonth) return `${format(start, "MMM")} ${format(start, "d")}–${format(end, "d")}, ${end.getFullYear()}`;
+  if (sameYear) return `${format(start, "MMM d")} – ${format(end, "MMM d")}, ${end.getFullYear()}`;
+  return `${format(start, "MMM d, yyyy")} – ${format(end, "MMM d, yyyy")}`;
+}
+
+interface DayDatum {
+  date: string;
+  count: number;
+  revenue: number;
+}
+
+/** Bucket orders into zero-filled daily buckets starting at `start` for `numDays` days. */
+function buildOrdersByDay(
+  start: Date,
+  numDays: number,
+  orders: { createdAt: Date; total: number }[],
+  keyFn: (d: Date) => string
+): DayDatum[] {
+  const map = new Map<string, { count: number; revenue: number }>();
+  for (let i = 0; i < numDays; i++) {
+    const d = new Date(start);
+    d.setDate(d.getDate() + i);
+    map.set(keyFn(d), { count: 0, revenue: 0 });
+  }
+  for (const order of orders) {
+    const key = keyFn(new Date(order.createdAt));
+    const existing = map.get(key);
+    if (existing) {
+      existing.count++;
+      existing.revenue += order.total || 0;
+    }
+  }
+  return Array.from(map.entries()).map(([date, data]) => ({
+    date,
+    count: data.count,
+    revenue: Math.round(data.revenue * 100) / 100,
+  }));
+}
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     let stationId = searchParams.get("stationId");
     const rawDays = searchParams.get("days");
     const fields = searchParams.get("fields");
+    const rawFrom = searchParams.get("from");
+    const rawTo = searchParams.get("to");
 
     // Validate days param — exact string match to prevent parseInt leniency
     let days = 30;
@@ -25,6 +96,53 @@ export async function GET(req: NextRequest) {
       days = parseInt(rawDays, 10);
     }
 
+    // ── Custom date range validation ──────────────────
+    const custom = rawFrom !== null || rawTo !== null;
+    let fromStart: Date | undefined;
+    let toEndExclusive: Date | undefined; // first instant AFTER the selected range
+    let prevStart: Date | undefined; // start of the equal-length preceding window
+    let rangeDays = 0;
+
+    if (custom) {
+      if (rawFrom === null || rawTo === null) {
+        return NextResponse.json(
+          { error: "Both 'from' and 'to' query params are required (YYYY-MM-DD)." },
+          { status: 400 }
+        );
+      }
+      const parsedFrom = parseISODate(rawFrom);
+      if (!parsedFrom) {
+        return NextResponse.json(
+          { error: "Invalid 'from' date. Expected YYYY-MM-DD." },
+          { status: 400 }
+        );
+      }
+      const parsedTo = parseISODate(rawTo);
+      if (!parsedTo) {
+        return NextResponse.json(
+          { error: "Invalid 'to' date. Expected YYYY-MM-DD." },
+          { status: 400 }
+        );
+      }
+      fromStart = new Date(parsedFrom.getFullYear(), parsedFrom.getMonth(), parsedFrom.getDate());
+      toEndExclusive = new Date(parsedTo.getFullYear(), parsedTo.getMonth(), parsedTo.getDate() + 1);
+      if (fromStart.getTime() >= toEndExclusive.getTime()) {
+        return NextResponse.json(
+          { error: "'from' date must not be after 'to' date." },
+          { status: 400 }
+        );
+      }
+      rangeDays = Math.round((toEndExclusive.getTime() - fromStart.getTime()) / 86400000);
+      if (rangeDays > 366) {
+        return NextResponse.json(
+          { error: "Date range must be at most 366 days." },
+          { status: 400 }
+        );
+      }
+      prevStart = new Date(fromStart);
+      prevStart.setDate(prevStart.getDate() - rangeDays);
+    }
+
     const access = await authorizeDashboardStation(stationId);
     if (!isAuthorizedStation(access)) return access;
     stationId = access.stationId;
@@ -34,38 +152,28 @@ export async function GET(req: NextRequest) {
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
 
-    // Dynamic range start
+    // Where clause for the selected window (custom) or all orders (default view)
+    const windowWhere = custom
+      ? { stationId, createdAt: { gte: fromStart!, lt: toEndExclusive! } }
+      : { stationId };
+
+    // Dynamic range start (default view)
     const rangeStart = new Date(startOfToday);
     rangeStart.setDate(rangeStart.getDate() - days + 1);
 
-    // Fetch orders for dynamic range
+    // Fetch orders for the chart window
     const rangeOrders = await prisma.order.findMany({
-      where: { stationId, createdAt: { gte: rangeStart } },
+      where: custom
+        ? { stationId, createdAt: { gte: fromStart!, lt: toEndExclusive! } }
+        : { stationId, createdAt: { gte: rangeStart } },
       select: { createdAt: true, status: true, total: true },
       orderBy: { createdAt: "asc" },
     });
 
     // Build ordersByDay with zero-fill for inclusive daily buckets
-    const ordersByDayMap = new Map<string, { count: number; revenue: number }>();
-    for (let i = 0; i < days; i++) {
-      const d = new Date(rangeStart);
-      d.setDate(d.getDate() + i);
-      const key = d.toISOString().split("T")[0];
-      ordersByDayMap.set(key, { count: 0, revenue: 0 });
-    }
-    for (const order of rangeOrders) {
-      const key = new Date(order.createdAt).toISOString().split("T")[0];
-      const existing = ordersByDayMap.get(key);
-      if (existing) {
-        existing.count++;
-        existing.revenue += order.total || 0;
-      }
-    }
-    const ordersByDay = Array.from(ordersByDayMap.entries()).map(([date, data]) => ({
-      date,
-      count: data.count,
-      revenue: Math.round(data.revenue * 100) / 100,
-    }));
+    const ordersByDay = custom
+      ? buildOrdersByDay(fromStart!, rangeDays, rangeOrders, localDateKey)
+      : buildOrdersByDay(rangeStart, days, rangeOrders, (d) => d.toISOString().split("T")[0]);
 
     // Lightweight response for overview graph
     if (fields === "ordersByDay") {
@@ -76,15 +184,17 @@ export async function GET(req: NextRequest) {
     }
 
     // ── Full response (backward-compatible) ────────────
-    // For full analytics, always use 30-day ordersByDay for chart consistency
+    // For the default (non-custom) full analytics, always use 30-day ordersByDay for chart consistency
     const startOfLast30Days = new Date(startOfToday);
     startOfLast30Days.setDate(startOfLast30Days.getDate() - 30);
 
     const last30DaysOrders =
-      days === 30
+      !custom && days === 30
         ? rangeOrders
         : await prisma.order.findMany({
-            where: { stationId, createdAt: { gte: startOfLast30Days } },
+            where: custom
+              ? { stationId, createdAt: { gte: fromStart!, lt: toEndExclusive! } }
+              : { stationId, createdAt: { gte: startOfLast30Days } },
             select: { createdAt: true, status: true, total: true },
             orderBy: { createdAt: "asc" },
           });
@@ -104,74 +214,98 @@ export async function GET(req: NextRequest) {
       completedTimes,
       avgOrderValueResult,
     ] = await Promise.all([
-      prisma.order.count({ where: { stationId } }),
+      prisma.order.count({ where: windowWhere }),
 
       prisma.order.findMany({
-        where: { stationId },
+        where: windowWhere,
         select: { userId: true, total: true, createdAt: true },
       }),
 
       prisma.order.groupBy({
         by: ["status"],
-        where: { stationId },
+        where: windowWhere,
         _count: { id: true },
       }),
 
       prisma.orderItem.groupBy({
         by: ["productId"],
-        where: { order: { stationId } },
+        where: custom
+          ? { order: { stationId, createdAt: { gte: fromStart!, lt: toEndExclusive! } } }
+          : { order: { stationId } },
         _sum: { quantity: true },
         orderBy: { _sum: { quantity: "desc" } },
         take: 10,
       }),
 
       prisma.order.findMany({
-        where: { stationId },
+        where: windowWhere,
         select: { createdAt: true },
       }),
 
       prisma.order.findMany({
-        where: { stationId },
+        where: windowWhere,
         select: { createdAt: true },
       }),
 
       prisma.order.groupBy({
         by: ["userId"],
-        where: { stationId },
+        where: windowWhere,
         _count: { id: true },
       }),
 
-      prisma.order.aggregate({
-        where: { stationId, createdAt: { gte: startOfMonth } },
-        _count: { id: true },
-        _sum: { total: true },
-      }),
+      custom
+        ? prisma.order.aggregate({
+            where: windowWhere,
+            _count: { id: true },
+            _sum: { total: true },
+          })
+        : prisma.order.aggregate({
+            where: { stationId, createdAt: { gte: startOfMonth } },
+            _count: { id: true },
+            _sum: { total: true },
+          }),
 
-      prisma.order.count({
-        where: { stationId, createdAt: { gte: startOfLastMonth, lt: startOfMonth } },
-      }),
+      custom
+        ? prisma.order.count({
+            where: { stationId, createdAt: { gte: prevStart!, lt: fromStart! } },
+          })
+        : prisma.order.count({
+            where: { stationId, createdAt: { gte: startOfLastMonth, lt: startOfMonth } },
+          }),
 
-      prisma.order.aggregate({
-        where: { stationId, status: "DELIVERED", createdAt: { gte: startOfLastMonth, lt: startOfMonth } },
-        _sum: { total: true },
-      }),
+      custom
+        ? prisma.order.aggregate({
+            where: { stationId, createdAt: { gte: prevStart!, lt: fromStart! } },
+            _sum: { total: true },
+          })
+        : prisma.order.aggregate({
+            where: { stationId, status: "DELIVERED", createdAt: { gte: startOfLastMonth, lt: startOfMonth } },
+            _sum: { total: true },
+          }),
 
       prisma.order.findMany({
-        where: { stationId, status: "DELIVERED" },
+        where: custom
+          ? { stationId, status: "DELIVERED", createdAt: { gte: fromStart!, lt: toEndExclusive! } }
+          : { stationId, status: "DELIVERED" },
         select: { createdAt: true, updatedAt: true },
         take: 20,
         orderBy: { createdAt: "desc" },
       }),
 
       prisma.order.aggregate({
-        where: { stationId, status: { not: "CANCELLED" } },
+        where: custom
+          ? { stationId, status: { not: "CANCELLED" }, createdAt: { gte: fromStart!, lt: toEndExclusive! } }
+          : { stationId, status: { not: "CANCELLED" } },
         _avg: { total: true },
       }),
     ]);
 
-    // ── Build 30-day ordersByDay ─────────────────────
-    let fullOrdersByDay: { date: string; count: number; revenue: number }[];
-    if (days === 30) {
+    // ── Build ordersByDay for the full response ────────
+    // Custom range: the range buckets ARE the chart. Default: 30-day buckets for chart consistency.
+    let fullOrdersByDay: DayDatum[];
+    if (custom) {
+      fullOrdersByDay = ordersByDay;
+    } else if (days === 30) {
       fullOrdersByDay = ordersByDay;
     } else {
       const fullMap = new Map<string, { count: number; revenue: number }>();
@@ -258,12 +392,50 @@ export async function GET(req: NextRequest) {
       ? Math.round(avgOrderValueResult._avg.total * 100) / 100
       : 0;
 
-    // ── monthlyComparison ───────────────────────────
-    const thisMonthOrders = monthOrders._count.id || 0;
-    const monthlyComparison = {
-      thisMonth: { orders: thisMonthOrders, revenue: monthOrders._sum?.total || 0 },
-      lastMonth: { orders: lastMonthOrdersCount, revenue: lastMonthRevenue._sum?.total || 0 },
+    // ── Comparison block ─────────────────────────────
+    // Custom range: selected window vs the immediately preceding equal-length window.
+    // Default view: this month vs last month (existing behavior preserved).
+    let monthlyComparison: {
+      thisMonth: { orders: number; revenue: number };
+      lastMonth: { orders: number; revenue: number };
     };
+    let range: { from: string; to: string; days: number } | null = null;
+    let comparison: {
+      custom: boolean;
+      thisLabel: string;
+      lastLabel: string;
+      title: string;
+    };
+
+    if (custom) {
+      monthlyComparison = {
+        thisMonth: { orders: monthOrders._count.id || 0, revenue: monthOrders._sum?.total || 0 },
+        lastMonth: { orders: lastMonthOrdersCount, revenue: lastMonthRevenue._sum?.total || 0 },
+      };
+      const thisEnd = new Date(toEndExclusive!.getTime() - 86400000);
+      const lastEnd = new Date(fromStart!.getTime() - 86400000);
+      const thisLabel = formatRangeLabel(fromStart!, thisEnd);
+      const lastLabel = formatRangeLabel(prevStart!, lastEnd);
+      range = { from: rawFrom!, to: rawTo!, days: rangeDays };
+      comparison = {
+        custom: true,
+        thisLabel,
+        lastLabel,
+        title: `${thisLabel} vs ${lastLabel}`,
+      };
+    } else {
+      const thisMonthOrders = monthOrders._count.id || 0;
+      monthlyComparison = {
+        thisMonth: { orders: thisMonthOrders, revenue: monthOrders._sum?.total || 0 },
+        lastMonth: { orders: lastMonthOrdersCount, revenue: lastMonthRevenue._sum?.total || 0 },
+      };
+      comparison = {
+        custom: false,
+        thisLabel: "This Month",
+        lastLabel: "Last Month",
+        title: "Monthly Comparison",
+      };
+    }
 
     // ── Average delivery time ────────────────────────
     const avgMinutes =
@@ -290,6 +462,9 @@ export async function GET(req: NextRequest) {
         avgOrderValue,
         totalOrders,
         monthlyComparison,
+        // New fields (backward-compatible additions)
+        range,
+        comparison,
       },
     });
   } catch (error) {
