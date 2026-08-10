@@ -8,7 +8,11 @@ import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
-import { MESSAGES, METRO_MANILA_CITIES, SAMPLE_BARANGAYS } from "@/lib/constants";
+import { MESSAGES, SAMPLE_BARANGAYS } from "@/lib/constants";
+import { getCityByName, normalizeCityName, type CityLocation } from "@/lib/ph-locations";
+import { ProvinceCombobox } from "@/components/shared/ProvinceCombobox";
+import { CityCombobox } from "@/components/shared/CityCombobox";
+import { BarangayInput } from "@/components/shared/BarangayInput";
 import {
   Dialog,
   DialogContent,
@@ -65,7 +69,7 @@ const emptyForm: AddressForm = {
   street: "",
   barangay: "",
   city: "",
-  province: "Metro Manila",
+  province: "",
   latitude: null,
   longitude: null,
 };
@@ -105,20 +109,12 @@ export default function AddressesPage() {
     };
   }, []);
 
-  // Case- and accent-insensitive match, so "Paranaque" ↔ "Parañaque" and
-  // "Las Pinas" ↔ "Las Piñas" compare equal.
-  const normalize = (s: string) =>
-    s
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/\s+/g, " ")
-      .trim();
-
   // Best-effort Nominatim reverse geocode (free, no key). Only prefills when
-  // the returned place maps cleanly onto the dialog's City/Barangay options;
-  // anything else (outside NCR, errors, timeouts, HTTP 429) leaves the
-  // dropdowns untouched and never blocks the user.
+  // the returned place maps cleanly onto the dialog's Province/City/Barangay
+  // fields; anything else (errors, timeouts, HTTP 429) leaves the fields
+  // untouched and never blocks the user. Unlike the old NCR-only version,
+  // the returned city resolves against the FULL PSGC dataset, so a pin in
+  // Bohol (or anywhere else) prefills province + city too.
   const reverseGeocode = async (lat: number, lng: number) => {
     const controller = new AbortController();
     geocodeAbortRef.current = controller;
@@ -134,12 +130,23 @@ export default function AddressesPage() {
       if (!a) return;
 
       const cityCandidates = [a.city, a.town, a.municipality, a.state];
-      const cityMatch = METRO_MANILA_CITIES.find((city) =>
-        cityCandidates.some(
-          (v) => typeof v === "string" && normalize(v) === normalize(city)
-        )
-      );
-      if (!cityMatch) return; // no clean match → keep the dropdowns as-is
+      const cityMatches = cityCandidates
+        .map((v) => (typeof v === "string" ? getCityByName(v) : undefined))
+        .filter((c): c is CityLocation => Boolean(c));
+      if (cityMatches.length === 0) return; // no clean match → keep the fields as-is
+      // Ambiguous municipality names (e.g. "Buenavista" exists in Bohol,
+      // Quezon, Marinduque, Guimaras) resolve against the state/province the
+      // geocoder returned, so a Bohol pin prefills Bohol/Buenavista.
+      const stateKey =
+        typeof a.state === "string" ? normalizeCityName(a.state) : "";
+      const cityMatch =
+        (stateKey &&
+          cityMatches.find(
+            (c) =>
+              normalizeCityName(c.province) === stateKey ||
+              normalizeCityName(c.region) === stateKey
+          )) ||
+        cityMatches[0];
 
       const suburbCandidates = [
         a.suburb,
@@ -148,23 +155,31 @@ export default function AddressesPage() {
         a.neighbourhood,
         a.neighborhood,
       ];
-      const barangays = SAMPLE_BARANGAYS[cityMatch] || [];
+      const brgyKey = Object.keys(SAMPLE_BARANGAYS).find(
+        (k) => normalizeCityName(k) === normalizeCityName(cityMatch.name)
+      );
+      const barangays = brgyKey ? SAMPLE_BARANGAYS[brgyKey] : [];
       const barangayMatch = barangays.find((b) =>
         suburbCandidates.some(
-          (v) => typeof v === "string" && normalize(v) === normalize(b)
+          (v) => typeof v === "string" && normalizeCityName(v) === normalizeCityName(b)
         )
       );
 
       setForm((f) => {
-        if (normalize(f.city) !== normalize(cityMatch)) {
-          // City moved by the geocode → mirror the dropdown's reset behavior
-          return { ...f, city: cityMatch, barangay: barangayMatch ?? "" };
+        if (normalizeCityName(f.city) !== normalizeCityName(cityMatch.name)) {
+          // City moved by the geocode → mirror the comboboxes' reset behavior
+          return {
+            ...f,
+            city: cityMatch.name,
+            province: cityMatch.province,
+            barangay: barangayMatch ?? "",
+          };
         }
         return barangayMatch ? { ...f, barangay: barangayMatch } : f;
       });
     } catch {
       // aborted (timeout / superseded by a new pin move), offline, or network
-      // error → silently leave the dropdowns untouched
+      // error → silently leave the fields untouched
     } finally {
       clearTimeout(timeout);
       if (geocodeAbortRef.current === controller) setGeocoding(false);
@@ -360,8 +375,19 @@ export default function AddressesPage() {
     }
   };
 
-  // Get available barangays for the selected city
-  const availableBarangays = form.city ? SAMPLE_BARANGAYS[form.city] || [] : [];
+  // Province changed → if the current city belongs to a different province,
+  // clear city + barangay so the city combobox (filtered by province) and
+  // barangay suggestions stay consistent.
+  const handleProvinceChange = (province: string | null) => {
+    setForm((f) => {
+      const nextProvince = province ?? "";
+      const cityLoc = f.city ? getCityByName(f.city) : undefined;
+      if (cityLoc && cityLoc.province !== nextProvince) {
+        return { ...f, province: nextProvince, city: "", barangay: "" };
+      }
+      return { ...f, province: nextProvince };
+    });
+  };
 
   return (
     <div className="min-h-screen bg-background pb-20">
@@ -582,49 +608,46 @@ export default function AddressesPage() {
               />
             </div>
 
-            {/* City */}
+            {/* Province */}
             <div className="space-y-1.5">
-              <Label htmlFor="city" className="text-card-foreground">City</Label>
-              <Select
-                value={form.city}
-                onValueChange={(value) => setForm((f) => ({ ...f, city: value, barangay: "" }))}
-              >
-                <SelectTrigger id="city" className="w-full">
-                  <SelectValue placeholder="Select city" />
-                </SelectTrigger>
-                <SelectContent>
-                  {METRO_MANILA_CITIES.map((city) => (
-                    <SelectItem key={city} value={city}>{city}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label htmlFor="province" className="text-card-foreground">Province</Label>
+              <ProvinceCombobox
+                value={form.province}
+                onChange={handleProvinceChange}
+                placeholder="Type or select province…"
+                triggerClassName="min-h-[44px]"
+              />
             </div>
 
-            {/* Barangay */}
+            {/* City — searchable over the full PH dataset, filtered to the
+                selected province when one is chosen */}
+            <div className="space-y-1.5">
+              <Label htmlFor="city" className="text-card-foreground">City</Label>
+              <CityCombobox
+                value={form.city}
+                province={form.province || undefined}
+                onChange={(city) =>
+                  setForm((f) =>
+                    city
+                      ? { ...f, city: city.name, province: city.province, barangay: "" }
+                      : { ...f, city: "", province: f.province }
+                  )
+                }
+                placeholder="Search city or municipality…"
+                triggerClassName="min-h-[44px]"
+              />
+            </div>
+
+            {/* Barangay — always typeable, with suggestions when known */}
             <div className="space-y-1.5">
               <Label htmlFor="barangay" className="text-card-foreground">Barangay</Label>
-              {availableBarangays.length > 0 ? (
-                <Select
-                  value={form.barangay}
-                  onValueChange={(value) => setForm((f) => ({ ...f, barangay: value }))}
-                >
-                  <SelectTrigger id="barangay" className="w-full">
-                    <SelectValue placeholder="Select barangay" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableBarangays.map((b) => (
-                      <SelectItem key={b} value={b}>{b}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <Input
-                  id="barangay"
-                  placeholder="Enter your barangay"
-                  value={form.barangay}
-                  onChange={(e) => setForm((f) => ({ ...f, barangay: e.target.value }))}
-                />
-              )}
+              <BarangayInput
+                id="barangay"
+                value={form.barangay}
+                onChange={(v) => setForm((f) => ({ ...f, barangay: v }))}
+                city={form.city || undefined}
+                placeholder="Enter your barangay"
+              />
             </div>
 
             {/* Street */}
@@ -660,17 +683,6 @@ export default function AddressesPage() {
                 onChange={onLocationChange}
                 heightClass="h-48"
                 hint="Click the map to set your delivery location, or drag the pin to fine-tune."
-              />
-            </div>
-
-            {/* Province */}
-            <div className="space-y-1.5">
-              <Label htmlFor="province" className="text-card-foreground">Province</Label>
-              <Input
-                id="province"
-                placeholder="e.g. Metro Manila"
-                value={form.province}
-                onChange={(e) => setForm((f) => ({ ...f, province: e.target.value }))}
               />
             </div>
 

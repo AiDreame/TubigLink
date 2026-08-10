@@ -53,9 +53,10 @@ import {
 import { useSession } from "next-auth/react";
 import toast from "react-hot-toast";
 import dynamic from "next/dynamic";
-import { SAMPLE_BARANGAYS, STATION_PAYMENT_METHODS } from "@/lib/constants";
-import { PH_PROVINCES } from "@/lib/ph-locations";
+import { STATION_PAYMENT_METHODS } from "@/lib/constants";
 import { CityCombobox } from "@/components/shared/CityCombobox";
+import { ProvinceCombobox } from "@/components/shared/ProvinceCombobox";
+import { BarangayInput } from "@/components/shared/BarangayInput";
 
 // Leaflet must never render server-side — same pattern as StationMap (ssr: false)
 const LocationPicker = dynamic(() => import("@/components/shared/LocationPicker"), {
@@ -99,14 +100,6 @@ interface StationData {
   products?: { id: string; name: string; type: string }[];
 }
 
-// All 82 province-level units (81 provinces + Metro Manila/NCR), Metro
-// Manila first, then alphabetical — from the full PSGC dataset.
-const PROVINCE_OPTIONS = [
-  ...PH_PROVINCES.filter((p) => p.name === "Metro Manila"),
-  ...PH_PROVINCES.filter((p) => p.name !== "Metro Manila").sort((a, b) =>
-    a.name.localeCompare(b.name)
-  ),
-];
 
 function PayoutSettings() {
   const [data,setData]=useState<any>(null); const [open,setOpen]=useState(false); const [code,setCode]=useState(""); const [number,setNumber]=useState(""); const [name,setName]=useState(""); const [method,setMethod]=useState("GCASH"); const [bank,setBank]=useState(""); const banks=["BPI","BDO","UnionBank","Metrobank","Landbank","RCBC","PNB","Security Bank","EastWest","Chinabank"]; const [loading,setLoading]=useState(false);
@@ -305,9 +298,6 @@ export default function DashboardSettingsPage() {
     toast.success("Delivery zone removed");
   };
 
-  const getCityBarangays = (city: string): string[] => {
-    return SAMPLE_BARANGAYS[city] || [];
-  };
 
   if (loading) {
     return (
@@ -507,23 +497,12 @@ export default function DashboardSettingsPage() {
               <Label htmlFor="province" className="text-sm font-bold">
                 Province <span className="text-red-500">*</span>
               </Label>
-              <Select
+              <ProvinceCombobox
                 value={form.province || ""}
-                onValueChange={(v) => setForm((prev) => ({ ...prev, province: v }))}
-              >
-                <SelectTrigger className={`rounded-xl bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 min-h-[44px] ${
-                  errors.province ? "border-red-500" : ""
-                }`}>
-                  <SelectValue placeholder="Select province" />
-                </SelectTrigger>
-                <SelectContent className="rounded-xl dark:bg-gray-800 dark:border-gray-700 max-h-[280px]">
-                  {PROVINCE_OPTIONS.map((p) => (
-                    <SelectItem key={p.id} value={p.name} className="dark:text-gray-300 dark:focus:bg-gray-700">
-                      {p.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                onChange={(v) => setForm((prev) => ({ ...prev, province: v ?? "" }))}
+                error={!!errors.province}
+                placeholder="Type or select province…"
+              />
               {errors.province && <p className="text-xs text-red-500">{errors.province}</p>}
             </div>
 
@@ -549,40 +528,20 @@ export default function DashboardSettingsPage() {
               {errors.city && <p className="text-xs text-red-500">{errors.city}</p>}
             </div>
 
-            {/* Barangay */}
+            {/* Barangay — always typeable, with suggestions when known */}
             <div className="space-y-2">
               <Label htmlFor="barangay" className="text-sm font-bold">
                 Barangay <span className="text-red-500">*</span>
               </Label>
-              {form.city && getCityBarangays(form.city).length > 0 ? (
-                <Select
-                  value={form.barangay || ""}
-                  onValueChange={(v) => setForm((prev) => ({ ...prev, barangay: v }))}
-                >
-                  <SelectTrigger className={`rounded-xl bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 min-h-[44px] ${
-                    errors.barangay ? "border-red-500" : ""
-                  }`}>
-                    <SelectValue placeholder="Select barangay" />
-                  </SelectTrigger>
-                  <SelectContent className="rounded-xl dark:bg-gray-800 dark:border-gray-700 max-h-[280px]">
-                    {getCityBarangays(form.city).map((bg) => (
-                      <SelectItem key={bg} value={bg} className="dark:text-gray-300 dark:focus:bg-gray-700">
-                        {bg}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <Input
-                  id="barangay"
-                  value={form.barangay || ""}
-                  onChange={(e) => setForm((prev) => ({ ...prev, barangay: e.target.value }))}
-                  className={`rounded-xl bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 min-h-[44px] ${
-                    errors.barangay ? "border-red-500" : ""
-                  }`}
-                  placeholder="Enter barangay"
-                />
-              )}
+              <BarangayInput
+                id="barangay"
+                value={form.barangay || ""}
+                onChange={(v) => setForm((prev) => ({ ...prev, barangay: v }))}
+                city={form.city || undefined}
+                error={errors.barangay}
+                placeholder="Enter barangay"
+                className="rounded-xl bg-white dark:bg-gray-800 dark:text-gray-300"
+              />
               {errors.barangay && <p className="text-xs text-red-500">{errors.barangay}</p>}
             </div>
 
@@ -885,31 +844,16 @@ export default function DashboardSettingsPage() {
               />
             </div>
 
-            {/* Barangay */}
+            {/* Barangay — always typeable, with suggestions when known */}
             <div className="space-y-2">
               <Label htmlFor="zone-barangay" className="text-sm font-bold">Barangay</Label>
-              {zoneForm.city && getCityBarangays(zoneForm.city).length > 0 ? (
-                <Select
-                  value={zoneForm.barangay}
-                  onValueChange={(v) => setZoneForm((prev) => ({ ...prev, barangay: v }))}
-                >
-                  <SelectTrigger className="rounded-xl bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 min-h-[44px]">
-                    <SelectValue placeholder="Select barangay" />
-                  </SelectTrigger>
-                  <SelectContent className="rounded-xl dark:bg-gray-800 dark:border-gray-700 max-h-[280px]">
-                    {getCityBarangays(zoneForm.city).map((bg) => (
-                      <SelectItem key={bg} value={bg} className="dark:text-gray-300 dark:focus:bg-gray-700">{bg}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <Input
-                  value={zoneForm.barangay}
-                  onChange={(e) => setZoneForm((prev) => ({ ...prev, barangay: e.target.value }))}
-                  className="rounded-xl bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 min-h-[44px]"
-                  placeholder="Enter barangay name"
-                />
-              )}
+              <BarangayInput
+                id="zone-barangay"
+                value={zoneForm.barangay}
+                onChange={(v) => setZoneForm((prev) => ({ ...prev, barangay: v }))}
+                city={zoneForm.city || undefined}
+                placeholder="Enter barangay name"
+              />
             </div>
 
             {/* Delivery Fee */}
