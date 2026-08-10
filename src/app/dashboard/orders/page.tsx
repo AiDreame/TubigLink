@@ -64,6 +64,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSession } from "next-auth/react";
 import toast from "react-hot-toast";
+import { normalizePhoneForDialing } from "@/lib/phone";
 
 interface Order {
   id: string;
@@ -442,15 +443,19 @@ export default function ProviderOrdersPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-8 w-8 rounded-full text-blue-600"
-                          onClick={() => window.open(`tel:${order.user.phone}`)}
-                          aria-label="Call customer"
-                        >
-                          <Phone className="h-4 w-4" />
-                        </Button>
+                        {order.user?.phone && (
+                          <Button
+                            asChild
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 rounded-full text-blue-600"
+                            aria-label="Call customer"
+                          >
+                            <a href={`tel:${normalizePhoneForDialing(order.user.phone)}`}>
+                              <Phone className="h-4 w-4" />
+                            </a>
+                          </Button>
+                        )}
                         <Button
                           size="icon"
                           variant="ghost"
@@ -653,13 +658,15 @@ export default function ProviderOrdersPage() {
                           </Button>
                           {order.user?.phone && (
                             <Button
+                              asChild
                               size="icon"
                               variant="ghost"
                               className="h-8 w-8 rounded-full text-blue-600"
-                              onClick={() => window.open(`tel:${order.user.phone}`)}
                               aria-label="Call customer"
                             >
-                              <Phone className="h-4 w-4" />
+                              <a href={`tel:${normalizePhoneForDialing(order.user.phone)}`}>
+                                <Phone className="h-4 w-4" />
+                              </a>
                             </Button>
                           )}
                           <DropdownMenu>
@@ -811,13 +818,15 @@ export default function ProviderOrdersPage() {
                     </div>
                     {detailOrder.user?.phone && (
                       <Button
+                        asChild
                         size="sm"
                         variant="outline"
                         className="rounded-full min-h-[44px] dark:border-gray-600 dark:text-gray-300"
-                        onClick={() => window.open(`tel:${detailOrder.user.phone}`)}
                       >
-                        <Phone className="h-4 w-4 mr-2" />
-                        Call
+                        <a href={`tel:${normalizePhoneForDialing(detailOrder.user.phone)}`}>
+                          <Phone className="h-4 w-4 mr-2" />
+                          Call
+                        </a>
                       </Button>
                     )}
                   </div>

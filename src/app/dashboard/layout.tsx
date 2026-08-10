@@ -43,12 +43,37 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname();
   const router = useRouter();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [pendingOrderCount, setPendingOrderCount] = useState(0);
   const { data: session, status } = useSession();
 
   const staffRole = (session?.user as any)?.staffRole;
   const isDriver = staffRole === "DRIVER";
   const isStaff = !!staffRole;
   const isDriverPage = pathname === "/dashboard/driver";
+
+  // Sidebar "Orders" badge: number of PENDING (new) orders awaiting action.
+  // Lightweight — polls the count endpoint (no full order list) every 45s and
+  // refetches on route change.
+  useEffect(() => {
+    if (status !== "authenticated" || isDriver) return;
+    let cancelled = false;
+    const fetchPendingCount = async () => {
+      try {
+        const res = await fetch("/api/dashboard/orders/count");
+        if (!res.ok) return;
+        const json: { count?: number } = await res.json();
+        if (!cancelled) setPendingOrderCount(json.count ?? 0);
+      } catch (error) {
+        console.error("[DashboardLayout] pending order count fetch failed", error);
+      }
+    };
+    fetchPendingCount();
+    const interval = setInterval(fetchPendingCount, 45_000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [status, pathname, isDriver]);
 
   // Redirect drivers to their page
   useEffect(() => {
@@ -133,6 +158,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 >
                   <item.icon className="h-5 w-5" />
                   {item.label}
+                  {item.href === "/dashboard/orders" && pendingOrderCount > 0 && (
+                    <span
+                      className="ml-auto flex items-center justify-center rounded-full bg-red-500 text-white font-bold shadow-sm h-4.5 min-w-[18px] px-1 text-[9px]"
+                      aria-label={`${pendingOrderCount} new ${pendingOrderCount === 1 ? "order" : "orders"} awaiting action`}
+                    >
+                      {pendingOrderCount > 9 ? "9+" : pendingOrderCount}
+                    </span>
+                  )}
                 </Link>
               );
             })}
