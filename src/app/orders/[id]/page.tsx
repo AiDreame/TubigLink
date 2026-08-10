@@ -429,7 +429,10 @@ export default function OrderDetailPage() {
                     {dispute ? (
                       <div className="mt-2 space-y-1 text-xs text-muted-foreground">
                         <p>Issue report: <span className="font-semibold text-card-foreground">{dispute.status.replace(/_/g, " ")}</span></p>
+                        <p>Type: <span className="font-semibold text-card-foreground">{dispute.type.replace(/_/g, " ")}</span></p>
+                        <p>Details: {dispute.description}</p>
                         <p>Station must respond by {format(new Date(dispute.responseDeadlineAt), "MMM d, yyyy h:mm a")}</p>
+                        {dispute.stationRespondedAt && <p>Station responded {format(new Date(dispute.stationRespondedAt), "MMM d, yyyy h:mm a")}</p>}
                         {dispute.stationResponse && <p>Station response: {dispute.stationResponse}</p>}
                         {dispute.resolution && <p>Resolution: {dispute.resolution}</p>}
                         {dispute.evidence && <DisputeEvidence evidence={dispute.evidence} alt="Issue evidence photo" />}
