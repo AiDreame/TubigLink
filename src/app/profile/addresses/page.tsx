@@ -130,10 +130,23 @@ export default function AddressesPage() {
       if (!a) return;
 
       const cityCandidates = [a.city, a.town, a.municipality, a.state];
-      const cityMatch = cityCandidates
+      const cityMatches = cityCandidates
         .map((v) => (typeof v === "string" ? getCityByName(v) : undefined))
-        .find((c): c is CityLocation => Boolean(c));
-      if (!cityMatch) return; // no clean match → keep the fields as-is
+        .filter((c): c is CityLocation => Boolean(c));
+      if (cityMatches.length === 0) return; // no clean match → keep the fields as-is
+      // Ambiguous municipality names (e.g. "Buenavista" exists in Bohol,
+      // Quezon, Marinduque, Guimaras) resolve against the state/province the
+      // geocoder returned, so a Bohol pin prefills Bohol/Buenavista.
+      const stateKey =
+        typeof a.state === "string" ? normalizeCityName(a.state) : "";
+      const cityMatch =
+        (stateKey &&
+          cityMatches.find(
+            (c) =>
+              normalizeCityName(c.province) === stateKey ||
+              normalizeCityName(c.region) === stateKey
+          )) ||
+        cityMatches[0];
 
       const suburbCandidates = [
         a.suburb,
