@@ -136,8 +136,8 @@ export async function PUT(
     await createNotification({
       userId: order.userId,
       type: "ORDER_STATUS",
-      title: `Order ${status.replace("_", " ").toLowerCase()}`,
-      body: `Your order from ${order.station.name} is now: ${status.replace("_", " ").toLowerCase()}`,
+      title: `Order ${status.replace(/_/g, " ").toLowerCase()}`,
+      body: `Your order from ${order.station.name} is now: ${status.replace(/_/g, " ").toLowerCase()}`,
       link: `/orders/${order.id}`,
     });
 

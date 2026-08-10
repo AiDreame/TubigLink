@@ -116,7 +116,7 @@ export default function AdminCompliancePage() {
       NON_COMPLIANT: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800",
       PENDING_REVIEW: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 border-blue-200 dark:border-blue-800",
     };
-    return <Badge variant="outline" className={`${styles[status]} font-medium`}>{status.replace("_", " ")}</Badge>;
+    return <Badge variant="outline" className={`${styles[status]} font-medium`}>{status.replace(/_/g, " ")}</Badge>;
   };
 
   const filteredStations = stations.filter((s) =>

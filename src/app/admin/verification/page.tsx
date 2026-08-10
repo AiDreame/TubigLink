@@ -302,7 +302,7 @@ export default function AdminVerificationPage() {
           <DropdownMenuTrigger asChild>
             <Button variant="outline" className="rounded-xl min-w-[140px]">
               <Filter className="h-4 w-4 mr-2" />
-              {statusFilter === "ALL" ? "All Status" : statusFilter.replace("_", " ")}
+              {statusFilter === "ALL" ? "All Status" : statusFilter.replace(/_/g, " ")}
               <ChevronDown className="h-4 w-4 ml-2" />
             </Button>
           </DropdownMenuTrigger>
@@ -429,7 +429,7 @@ export default function AdminVerificationPage() {
                     </div>
                     <div className="space-y-1">
                       <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Business Type</p>
-                      <p className="text-sm">{selectedStation.businessType.replace("_", " ")}</p>
+                      <p className="text-sm">{selectedStation.businessType.replace(/_/g, " ")}</p>
                     </div>
                     <div className="space-y-1 col-span-2">
                       <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Address</p>
