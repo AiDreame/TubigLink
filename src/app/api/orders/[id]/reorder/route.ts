@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { createNotification } from "@/lib/notifications";
 
@@ -8,6 +10,17 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
+    // Auth: only the order's owner may reorder it. 404 (not 403) for a
+    // foreign order so other customers' order ids don't leak existence.
+    const session = await getServerSession(authOptions);
+    const user = session?.user as any;
+    if (!user?.id) {
+      return NextResponse.json(
+        { success: false, error: "Authentication required" },
+        { status: 401 }
+      );
+    }
+
     // Fetch the original order with items
     const originalOrder = await prisma.order.findUnique({
       where: { id: params.id },
@@ -17,10 +30,30 @@ export async function POST(
       },
     });
 
-    if (!originalOrder) {
+    if (!originalOrder || originalOrder.userId !== user.id) {
       return NextResponse.json(
         { success: false, error: "Original order not found" },
         { status: 404 }
+      );
+    }
+
+    // Guard: the delivery address must still belong to the caller. The
+    // original order already belongs to them so this should always pass, but
+    // it keeps the new order from referencing a foreign address.
+    const address = await prisma.address.findFirst({
+      where: { id: originalOrder.addressId, userId: user.id },
+    });
+    if (!address) {
+      return NextResponse.json(
+        { success: false, error: "Address not found" },
+        { status: 400 }
+      );
+    }
+
+    if (!originalOrder.station) {
+      return NextResponse.json(
+        { success: false, error: "Station is no longer available" },
+        { status: 400 }
       );
     }
 
@@ -56,10 +89,13 @@ export async function POST(
     const deliveryFee = originalOrder.station.deliveryFee || 0;
     const total = subtotal + deliveryFee;
 
-    // Create the new order with the same items and address
+    // Create the new order with the same items and address. The caller's id
+    // is used (it equals the original owner after the guard above). For GCash
+    // orders, amountCentavos is REQUIRED by PayMongo when the payment intent
+    // is initialized.
     const order = await prisma.order.create({
       data: {
-        userId: originalOrder.userId,
+        userId: user.id,
         stationId: originalOrder.stationId,
         addressId: originalOrder.addressId,
         paymentMethod: originalOrder.paymentMethod,
@@ -68,6 +104,7 @@ export async function POST(
         subtotal,
         deliveryFee,
         total,
+        amountCentavos: Math.round(total * 100),
         notes: originalOrder.notes ? `Reorder from #${params.id.substring(0, 8)}: ${originalOrder.notes}` : `Reorder from #${params.id.substring(0, 8)}`,
         status: "PENDING",
         items: {
@@ -90,7 +127,14 @@ export async function POST(
       link: "/dashboard/orders",
     });
 
-    return NextResponse.json({ success: true, data: order }, { status: 201 });
+    // GCash orders need a payment step — signal the client to initialize the
+    // PayMongo intent, exactly like the normal checkout flow. COD returns as
+    // before (no payment step).
+    const isGcash = String(order.paymentMethod || "").toUpperCase() === "GCASH";
+    return NextResponse.json(
+      { success: true, data: order, ...(isGcash ? { nextAction: "INITIALIZE_PAYMENT" } : {}) },
+      { status: 201 }
+    );
   } catch (error) {
     console.error("Reorder error:", error);
     return NextResponse.json(

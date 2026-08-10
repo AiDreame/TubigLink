@@ -20,6 +20,7 @@ import {
   RefreshCw,
   Star,
   FileText,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -141,6 +142,7 @@ export default function MyDashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reorderingId, setReorderingId] = useState<string | null>(null);
+  const [redirectingOrderId, setRedirectingOrderId] = useState<string | null>(null);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
 
   const fetchDashboard = async () => {
@@ -191,13 +193,72 @@ export default function MyDashboardPage() {
     try {
       const res = await fetch(`/api/orders/${orderId}/reorder`, { method: "POST" });
       const json = await res.json();
-      if (json.success) {
-        toast.success(MESSAGES.reorderSuccess);
-        // Refresh the dashboard to show the new order
+      if (!json.success) throw new Error(json.error || "Reorder failed");
+
+      const order = json.data;
+      const isGcash = String(order?.paymentMethod || "").toUpperCase() === "GCASH";
+
+      // GCash reorders must be paid — mirror the cart checkout flow: persist
+      // the new order id so an abandoned payment can be resumed, reuse/mint an
+      // idempotency key, then initialize the PayMongo intent and redirect.
+      if (json.nextAction === "INITIALIZE_PAYMENT" && isGcash && order?.id) {
+        const stationId: string | undefined = order.stationId;
+        if (stationId) sessionStorage.setItem(`aq_gcash_order_${stationId}`, order.id);
+        const idemKey = `aq_gcash_idem_${order.id}`;
+        let idempotencyKey = sessionStorage.getItem(idemKey);
+        if (!idempotencyKey) {
+          idempotencyKey = crypto.randomUUID();
+          sessionStorage.setItem(idemKey, idempotencyKey);
+        }
+
+        let payResult: any;
+        try {
+          const payRes = await fetch("/api/payments/gcash/intent", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ orderId: order.id, idempotencyKey }),
+          });
+          payResult = await payRes.json();
+        } catch {
+          payResult = { success: false, error: "GCash payment could not be initialized. Please try again." };
+        }
+
+        const payStatus = String(payResult?.data?.status || "").toLowerCase();
+
+        // Payment already confirmed server-side — go straight to the order.
+        if (payResult?.success && ["succeeded", "paid"].includes(payStatus)) {
+          sessionStorage.removeItem(idemKey);
+          if (stationId) sessionStorage.removeItem(`aq_gcash_order_${stationId}`);
+          toast.success(MESSAGES.reorderSuccess);
+          fetchDashboard();
+          router.replace(`/orders/${order.id}`);
+          return;
+        }
+
+        const nextAction = payResult?.data?.nextAction;
+        if (payResult?.success && nextAction?.type === "redirect" && nextAction.url) {
+          toast.success(MESSAGES.reorderSuccess);
+          fetchDashboard();
+          setRedirectingOrderId(order.id);
+          // Redirecting to GCash to complete payment...
+          window.location.href = nextAction.url;
+          return;
+        }
+
+        // Payment couldn't be initialized — the order is still placed. The
+        // customer can retry from the cart (sessionStorage resume) or the
+        // order page once the PayMongo wallet gate is lifted.
+        toast.error(
+          payResult?.error ||
+            "Order placed, but GCash payment could not be started. You can complete it from your cart."
+        );
         fetchDashboard();
-      } else {
-        throw new Error(json.error || "Reorder failed");
+        return;
       }
+
+      // COD (and anything else) — no payment step.
+      toast.success(MESSAGES.reorderSuccess);
+      fetchDashboard();
     } catch (err: any) {
       toast.error(err.message || MESSAGES.reorderFailed);
     } finally {
@@ -606,6 +667,23 @@ export default function MyDashboardPage() {
           </div>
         </section>
       </main>
+
+      {/* Honest interim state while the browser follows the GCash checkout URL */}
+      {redirectingOrderId && (
+        <div
+          className="fixed inset-0 z-[100] bg-background/90 backdrop-blur-sm flex items-center justify-center p-6"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="bg-card rounded-2xl p-6 shadow-lg border max-w-sm w-full text-center space-y-3">
+            <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto" aria-hidden="true" />
+            <p className="font-bold text-foreground">Redirecting to GCash to complete payment...</p>
+            <p className="text-sm text-muted-foreground">
+              You'll be asked to authorize the payment in GCash. Don't close this window.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
