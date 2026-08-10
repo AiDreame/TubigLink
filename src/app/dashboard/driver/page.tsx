@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import toast from "react-hot-toast";
+import { normalizePhoneForDialing } from "@/lib/phone";
 
 interface OrderItem {
   id: string;
@@ -434,15 +435,15 @@ export default function DriverDashboardPage() {
                       <div className="flex items-center gap-2">
                         {order.user?.phone && (
                           <Button
+                            asChild
                             size="icon"
                             variant="ghost"
                             className="h-9 w-9 rounded-full text-blue-600"
-                            onClick={() =>
-                              window.open(`tel:${order.user.phone}`)
-                            }
                             aria-label="Call customer"
                           >
-                            <Phone className="h-4 w-4" />
+                            <a href={`tel:${normalizePhoneForDialing(order.user.phone)}`}>
+                              <Phone className="h-4 w-4" />
+                            </a>
                           </Button>
                         )}
 
