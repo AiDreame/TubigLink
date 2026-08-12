@@ -18,6 +18,7 @@ import {
   Users,
   Truck,
   AlertTriangle,
+  QrCode,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NotificationBell } from "@/components/shared/NotificationBell";
@@ -32,6 +33,7 @@ const sidebarItems = [
   { label: "Staff", icon: Users, href: "/dashboard/staff" },
   { label: "Earnings", icon: BarChart3, href: "/dashboard/earnings" },
   { label: "Analytics", icon: BarChart3, href: "/dashboard/analytics" },
+  { label: "QR Code", icon: QrCode, href: "/dashboard/qr" },
   { label: "Settings", icon: Settings, href: "/dashboard/settings" },
 ];
 
@@ -86,8 +88,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // Driver sees a minimal layout
   if (isDriver && isDriverPage) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col">
-        <header className="h-16 bg-white dark:bg-gray-900 border-b dark:border-gray-800 px-4 flex items-center justify-between sticky top-0 z-30">
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col print:bg-white">
+        <header className="h-16 bg-white dark:bg-gray-900 border-b dark:border-gray-800 px-4 flex items-center justify-between sticky top-0 z-30 print:hidden">
           <div className="flex items-center gap-2">
             <div className="h-8 w-8 rounded-lg bg-blue-600 flex items-center justify-center">
               <Droplets className="h-5 w-5 text-white" />
@@ -111,7 +113,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </Button>
           </div>
         </header>
-        <main className="flex-1 overflow-auto p-4">
+        <main className="flex-1 overflow-auto p-4 print:overflow-visible print:p-0">
           {children}
         </main>
       </div>
@@ -119,18 +121,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex print:bg-white">
       {/* Mobile Sidebar Overlay */}
       {isSidebarOpen && (
         <div 
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden" 
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden print:hidden" 
           onClick={() => setIsSidebarOpen(false)}
         />
       )}
 
       {/* Sidebar */}
       <aside className={cn(
-        "fixed inset-y-0 left-0 w-64 bg-white dark:bg-gray-900 border-r dark:border-gray-800 z-50 transition-transform lg:translate-x-0 lg:static lg:block",
+        "fixed inset-y-0 left-0 w-64 bg-white dark:bg-gray-900 border-r dark:border-gray-800 z-50 transition-transform lg:translate-x-0 lg:static lg:block print:hidden",
         isSidebarOpen ? "translate-x-0" : "-translate-x-full"
       )}>
         <div className="h-full flex flex-col p-6">
@@ -196,7 +198,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Navbar */}
-        <header className="h-16 bg-white dark:bg-gray-900 border-b dark:border-gray-800 px-4 lg:px-8 flex items-center justify-between sticky top-0 z-30">
+        <header className="h-16 bg-white dark:bg-gray-900 border-b dark:border-gray-800 px-4 lg:px-8 flex items-center justify-between sticky top-0 z-30 print:hidden">
           <Button 
             variant="ghost" 
             size="icon" 
@@ -221,7 +223,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
         </header>
 
-        <main className="flex-1 overflow-auto p-4 lg:p-8">
+        <main className="flex-1 overflow-auto p-4 lg:p-8 print:overflow-visible print:p-0">
           {children}
         </main>
       </div>
