@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireAdmin, parsePeriod, money, payoutInclude } from "../_lib";
 import { getActiveHoldsCentavos } from "@/lib/disputes";
+import { applyDeliveryAutoConfirmMany } from "@/lib/delivery";
 import { getPaymentIntent } from "@/lib/paymongo";
 import { PAYOUT_DISBURSEMENT_FEE_PESOS } from "@/lib/paymongo-disbursement";
 
@@ -16,8 +17,13 @@ export async function POST(req: NextRequest) {
   // zero transfer is sent — the pay route rejects netCentavos <= 0).
   const disbursementFeeCentavos = PAYOUT_DISBURSEMENT_FEE_PESOS * 100;
   for(const station of stations){
-    const orders=await prisma.order.findMany({where:{stationId:station.id,status:"DELIVERED",paymentStatus:"PAID",payoutEligibleAt:{not:null,lte:period.end},payoutItems:{none:{}}},select:{id:true,total:true,amountCentavos:true,commissionCentavos:true,processingFeeCentavos:true,paymentId:true,paymentIntentId:true,stationNetCentavos:true}});
-    for (const order of orders) {
+    // Audit I3 backfill: converge the lazy 24h auto-confirm BEFORE filtering on
+    // payoutEligibleAt so a DELIVERED order that passed its window but was never
+    // read still becomes eligible instead of silently missing the weekly payout.
+    const fetched=await prisma.order.findMany({where:{stationId:station.id,status:"DELIVERED",paymentStatus:"PAID",deliveredAt:{not:null},payoutItems:{none:{}}},select:{id:true,total:true,amountCentavos:true,commissionCentavos:true,processingFeeCentavos:true,paymentId:true,paymentIntentId:true,stationNetCentavos:true,status:true,deliveredAt:true,deliveryConfirmedAt:true,payoutEligibleAt:true}});
+    const orders=await applyDeliveryAutoConfirmMany(fetched);
+    const eligible=orders.filter((o:any)=>o.payoutEligibleAt && new Date(o.payoutEligibleAt).getTime() <= period.end.getTime());
+    for (const order of eligible) {
       if (order.processingFeeCentavos == null && (order.paymentId || order.paymentIntentId)) {
         // order.paymentId stores the PAYMENT INTENT id (see gcash/intent route); fees live on the
         // intent's payments array, so fetch the intent and sum fees across its payments.
@@ -31,15 +37,15 @@ export async function POST(req: NextRequest) {
         } else console.warn("Unable to backfill PayMongo processing fee", {orderId:order.id, error:remote.error.message});
       }
     }
-    const vals=orders.map(money); const g=vals.reduce((s,x)=>s+x.gross,0), c=vals.reduce((s,x)=>s+x.commission,0), f=vals.reduce((s,x)=>s+x.fee,0);
+    const vals=eligible.map(money); const g=vals.reduce((s,x)=>s+x.gross,0), c=vals.reduce((s,x)=>s+x.commission,0), f=vals.reduce((s,x)=>s+x.fee,0);
     const h=await getActiveHoldsCentavos(station.id);
     const recovered=await prisma.payoutItem.aggregate({where:{payout:{stationId:station.id,status:"PAID"},order:{paymentStatus:"REFUNDED"}},_sum:{netCentavos:true}});
     // Recover the station net actually paid; any PayMongo fee retained on refund stays with the station.
-    const adjustment=-(recovered._sum.netCentavos||0); if(!orders.length && !adjustment)continue;
+    const adjustment=-(recovered._sum.netCentavos||0); if(!eligible.length && !adjustment)continue;
     // netCentavos = gross − commission − processingFee − held − adjustments − disbursementFee, floored at 0.
     const netCentavos=Math.max(0, g-c-f-h+adjustment-disbursementFeeCentavos);
-    const p=await prisma.$transaction(async tx=>{const payout=await tx.payout.create({data:{stationId:station.id,periodStart:period.start,periodEnd:period.end,grossCentavos:g,commissionCentavos:c,processingFeeCentavos:f,disbursementFeeCentavos,heldCentavos:h,adjustmentCentavos:adjustment,netCentavos}}); if(orders.length) await tx.payoutItem.createMany({data:orders.map((o,i)=>({payoutId:payout.id,orderId:o.id,grossCentavos:vals[i].gross,commissionCentavos:vals[i].commission,processingFeeCentavos:vals[i].fee,heldCentavos:0,netCentavos:vals[i].net}))}); return tx.payout.findUnique({where:{id:payout.id},include:payoutInclude});});
-    created.push(p); ordersIncluded+=orders.length; gross+=g; commission+=c; fees+=f; held+=h; adjustments+=adjustment; disbursementFees+=disbursementFeeCentavos; netTotal+=netCentavos;
+    const p=await prisma.$transaction(async tx=>{const payout=await tx.payout.create({data:{stationId:station.id,periodStart:period.start,periodEnd:period.end,grossCentavos:g,commissionCentavos:c,processingFeeCentavos:f,disbursementFeeCentavos,heldCentavos:h,adjustmentCentavos:adjustment,netCentavos}}); if(eligible.length) await tx.payoutItem.createMany({data:eligible.map((o,i)=>({payoutId:payout.id,orderId:o.id,grossCentavos:vals[i].gross,commissionCentavos:vals[i].commission,processingFeeCentavos:vals[i].fee,heldCentavos:0,netCentavos:vals[i].net}))}); return tx.payout.findUnique({where:{id:payout.id},include:payoutInclude});});
+    created.push(p); ordersIncluded+=eligible.length; gross+=g; commission+=c; fees+=f; held+=h; adjustments+=adjustment; disbursementFees+=disbursementFeeCentavos; netTotal+=netCentavos;
   }
   return NextResponse.json({success:true,data:created,summary:{stationsProcessed:stations.length,payoutsCreated:created.length,ordersIncluded,grossCentavos:gross,commissionCentavos:commission,processingFeeCentavos:fees,heldCentavos:held,adjustmentCentavos:adjustments,disbursementFeeCentavos:disbursementFees,netCentavos:netTotal}});
 }
