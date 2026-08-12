@@ -90,7 +90,7 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-950">
       {/* ─── Header ─────────────────────────────── */}
-      <header className="bg-background/80 backdrop-blur-md sticky top-0 z-40 border-b border-border">
+      <header className="bg-background sticky top-0 z-40 border-b border-border">
         <div className="mx-auto max-w-7xl px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="h-9 w-9 rounded-full bg-blue-600 flex items-center justify-center">
