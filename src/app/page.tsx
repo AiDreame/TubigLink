@@ -167,7 +167,7 @@ export default function HomePage() {
           /* ─── Customer Dashboard ─────────── */
           <>
             <div className="bg-gradient-to-br from-blue-600 via-blue-700 to-cyan-600 text-white">
-              <div className="mx-auto max-w-7xl px-4 py-6">
+              <div className="mx-auto max-w-7xl px-4 py-8 md:py-10">
                 <div className="flex flex-col md:flex-row items-center gap-4">
                   <div className="flex-1 space-y-2">
                     <h1 className="text-2xl md:text-3xl font-bold leading-tight">
