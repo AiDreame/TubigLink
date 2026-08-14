@@ -93,6 +93,15 @@ export default function OrderDetailPage() {
   const [disputePhotoUploading, setDisputePhotoUploading] = useState(false);
   const [disputePhotoStatus, setDisputePhotoStatus] = useState<"idle" | "uploading" | "done" | "error">("idle");
   const [disputePhotoError, setDisputePhotoError] = useState<string | null>(null);
+  // Dispute window: the stored post-confirmation deadline once set; before the
+  // customer confirms, the window is 36h from delivery so issues can be
+  // reported before accepting the delivery (owner, Aug 14).
+  const disputeDeadline = order?.disputeDeadlineAt
+    ? new Date(order.disputeDeadlineAt)
+    : order?.deliveredAt
+      ? new Date(new Date(order.deliveredAt).getTime() + 36 * 60 * 60 * 1000)
+      : null;
+  const canReportIssue = !!order && order.paymentStatus === "PAID" && !dispute && disputeDeadline != null && disputeDeadline.getTime() > Date.now();
 
   const fetchDispute = useCallback(async (id: string) => {
     try {
@@ -166,7 +175,7 @@ export default function OrderDetailPage() {
       setDisputeEvidence("");
       setDisputePhotoStatus("idle");
       setDisputePhotoError(null);
-      await fetchDispute(order.id);
+      await Promise.all([fetchOrder(order.id), fetchDispute(order.id)]);
     } catch (err: any) {
       setDisputeError(err.message || "Unable to report issue");
     } finally {
@@ -373,7 +382,7 @@ export default function OrderDetailPage() {
             <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">#{order.id.slice(-8).toUpperCase()}</p>
           </div>
         </div>
-        <Button variant="outline" size="sm" className="rounded-full text-blue-600 dark:text-blue-400 border-blue-100 dark:border-blue-900/30 min-h-[44px]">
+        <Button variant="outline" size="sm" className="rounded-full text-blue-600 dark:text-blue-400 border-blue-100 dark:border-blue-900/30 min-h-[44px]" onClick={() => { setDisputeError(null); setDisputeDialogOpen(true); }}>
           {MESSAGES.support}
         </Button>
       </header>
@@ -507,7 +516,7 @@ export default function OrderDetailPage() {
                     <DialogHeader>
                       <DialogTitle className="text-card-foreground">Confirm Delivery?</DialogTitle>
                       <DialogDescription>
-                        Have you received your full order? Confirming closes the delivery and starts the 36-hour issue window.
+                        Have you received your full order? Confirming closes this delivery. You can report an issue anytime within 36 hours of delivery.
                       </DialogDescription>
                     </DialogHeader>
                     {confirmError && (
@@ -534,6 +543,20 @@ export default function OrderDetailPage() {
                     </DialogFooter>
                   </DialogContent>
                 </Dialog>
+                {canReportIssue ? (
+                  <>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Spotted a problem? You can report an issue until {format(disputeDeadline!, "MMM d, yyyy h:mm a")} — even before confirming delivery.
+                    </p>
+                    <Button variant="outline" className="w-full rounded-xl min-h-[44px]" onClick={() => { setDisputeError(null); setDisputeDialogOpen(true); }}>
+                      <HelpCircle className="h-4 w-4 mr-2" aria-hidden="true" /> Report an issue
+                    </Button>
+                  </>
+                ) : dispute ? (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Issue report: <span className="font-semibold text-card-foreground">{dispute.status.replace(/_/g, " ")}</span> — the station must respond by {format(new Date(dispute.responseDeadlineAt), "MMM d, yyyy h:mm a")}
+                  </p>
+                ) : null}
               </div>
             )}
           </div>

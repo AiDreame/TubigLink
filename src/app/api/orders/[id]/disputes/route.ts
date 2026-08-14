@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { createNotification, notifyAllAdmins, notifyStationUsers } from "@/lib/notifications";
 import { applyAutoEscalateMany, orderNetCentavos } from "@/lib/disputes";
+import { DISPUTE_WINDOW_HOURS } from "@/lib/delivery";
 
 const types = ["NOT_DELIVERED", "QUALITY", "OTHER"];
 const include = { order: { select: { id: true, total: true, paymentStatus: true, deliveryConfirmedAt: true } }, customer: { select: { id: true, name: true, phone: true } }, station: { select: { id: true, name: true } }, refund: true } as const;
@@ -25,8 +26,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
   if (order.userId !== user.id) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   const now = new Date();
-  if (order.paymentStatus !== "PAID") return NextResponse.json({ error: "payment not collected" }, { status: 400 });
-  if (!order.deliveryConfirmedAt || !order.disputeDeadlineAt || now > order.disputeDeadlineAt) return NextResponse.json({ error: "dispute window closed" }, { status: 400 });
+  if (order.paymentStatus !== "PAID") return NextResponse.json({ error: "Payment for this order isn't confirmed yet." }, { status: 400 });
+  if (!order.deliveredAt) return NextResponse.json({ error: "You can report an issue after your order is delivered." }, { status: 400 });
+  // Dispute window: the stored post-confirmation deadline once set; before the
+  // customer confirms, the window is 36h from delivery so issues can be
+  // reported before accepting the delivery (owner, Aug 14).
+  const disputeDeadline = order.disputeDeadlineAt ?? new Date(order.deliveredAt.getTime() + DISPUTE_WINDOW_HOURS * 60 * 60 * 1000);
+  if (now > disputeDeadline) return NextResponse.json({ error: "The window to report an issue for this order has closed." }, { status: 400 });
   if (await prisma.dispute.findFirst({ where: { orderId: order.id } })) return NextResponse.json({ error: "dispute already open" }, { status: 400 });
   const body = await req.json();
   const type = String(body.type || ""); const description = typeof body.description === "string" ? body.description.trim() : "";
