@@ -40,6 +40,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/shared/ErrorState";
 import DisputeEvidence, { isImageEvidence } from "@/components/shared/DisputeEvidence";
 import { MESSAGES } from "@/lib/constants";
+import { useLiveRefresh, LIVE_REFRESH_INTERVAL_MS } from "@/hooks/use-live-refresh";
 
 function paymentStatusLabel(status: string): string {
   switch (status) {
@@ -138,6 +139,15 @@ export default function OrderDetailPage() {
     fetchOrder(id);
     fetchDispute(id);
   }, [params.id, fetchOrder, fetchDispute]);
+
+  // Silent live refresh: re-fetches the order + dispute in the background so
+  // status changes, delivery confirmations and dispute updates appear without
+  // a manual refresh. Ticks pause while the tab is hidden (see useLiveRefresh).
+  useLiveRefresh(() => {
+    const id = params.id as string;
+    fetchOrder(id);
+    fetchDispute(id);
+  }, LIVE_REFRESH_INTERVAL_MS);
 
   const handleSubmitDispute = async () => {
     if (!order) return;
@@ -314,7 +324,10 @@ export default function OrderDetailPage() {
 
   const currentStepIndex = order ? statusSteps.findIndex(s => s.status === order.status) : -1;
 
-  if (isLoading) {
+  // Loading/error screens only while there is no data yet — a background
+  // live-refresh must never flash a skeleton or swap the page for an error
+  // state (last good data stays on screen until new data arrives).
+  if (isLoading && !order) {
     return (
       <div className="min-h-screen bg-background p-4 space-y-4" role="status" aria-label="Loading order details">
         <Skeleton className="h-10 w-40" />
@@ -325,7 +338,7 @@ export default function OrderDetailPage() {
     );
   }
 
-  if (error) {
+  if (error && !order) {
     return (
       <ErrorState
         title={MESSAGES.errorTitle}
