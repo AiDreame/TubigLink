@@ -29,7 +29,7 @@ export function ThemeToggle({ variant = "header", asSwitch = false }: ThemeToggl
         </div>
       );
     }
-    return <div className="h-9 w-9 rounded-full bg-gray-100 dark:bg-gray-800 animate-pulse" />;
+    return <div className="h-8 w-[108px] rounded-full bg-gray-100 dark:bg-gray-800 animate-pulse" />;
   }
 
   const isDark = resolvedTheme === "dark";
@@ -78,13 +78,13 @@ export function ThemeToggle({ variant = "header", asSwitch = false }: ThemeToggl
   ] as const;
 
   return (
-    <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-full p-1" role="radiogroup" aria-label="Theme selector">
+    <div className="flex items-center gap-0.5 bg-gray-100 dark:bg-gray-800 rounded-full p-0.5" role="radiogroup" aria-label="Theme selector">
       {modes.map(({ key, icon: Icon, label }) => (
         <button
           key={key}
           onClick={() => setTheme(key)}
           className={cn(
-            "h-8 w-8 rounded-full flex items-center justify-center transition-all touch-target",
+            "h-8 w-8 rounded-full flex items-center justify-center transition-all",
             theme === key
               ? "bg-white dark:bg-gray-700 shadow-sm text-blue-600 dark:text-yellow-400"
               : "text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
@@ -93,7 +93,7 @@ export function ThemeToggle({ variant = "header", asSwitch = false }: ThemeToggl
           role="radio"
           aria-checked={theme === key}
         >
-          <Icon className="h-4 w-4" aria-hidden="true" />
+          <Icon className="h-3.5 w-3.5" aria-hidden="true" />
         </button>
       ))}
     </div>
