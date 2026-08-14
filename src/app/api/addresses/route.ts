@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 
 // Parse optional latitude/longitude pair from a request body.
@@ -35,16 +37,22 @@ function parseCoordinates(
   return { ok: true, values: { latitude: lat, longitude: lng } };
 }
 
+// S-01 (security audit 2026-08-14): all handlers require a session; the acting
+// userId always comes from the session, never from query params or the body.
+async function requireUserId(): Promise<string | null> {
+  const session = await getServerSession(authOptions);
+  const sessionUser = session?.user as any;
+  return sessionUser?.id || null;
+}
+
 // GET /api/addresses — Get user's saved addresses
 export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
-    const userId = searchParams.get("userId");
-
+    const userId = await requireUserId();
     if (!userId) {
       return NextResponse.json(
-        { error: "User ID is required" },
-        { status: 400 }
+        { error: "Unauthorized" },
+        { status: 401 }
       );
     }
 
@@ -66,10 +74,18 @@ export async function GET(req: NextRequest) {
 // POST /api/addresses — Add a new address
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { userId, label, name, phone, street, barangay, city, province, zipCode, landmark, isDefault } = body;
+    const userId = await requireUserId();
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
 
-    if (!userId || !name || !street || !barangay || !city) {
+    const body = await req.json();
+    const { label, name, phone, street, barangay, city, province, zipCode, landmark, isDefault } = body;
+
+    if (!name || !street || !barangay || !city) {
       return NextResponse.json(
         { error: "Missing required address fields" },
         { status: 400 }
@@ -127,6 +143,14 @@ export async function POST(req: NextRequest) {
 // PUT /api/addresses?id=X — Update an existing address
 export async function PUT(req: NextRequest) {
   try {
+    const userId = await requireUserId();
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
 
@@ -138,7 +162,19 @@ export async function PUT(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { label, name, phone, street, barangay, city, province, zipCode, landmark, isDefault, userId } = body;
+    const { label, name, phone, street, barangay, city, province, zipCode, landmark, isDefault } = body;
+
+    // S-01: ownership check — the address must belong to the session user
+    const existing = await prisma.address.findFirst({
+      where: { id, userId },
+      select: { id: true },
+    });
+    if (!existing) {
+      return NextResponse.json(
+        { success: false, error: "Address not found" },
+        { status: 404 }
+      );
+    }
 
     const coords = parseCoordinates(body);
     if (!coords.ok) {
@@ -146,7 +182,7 @@ export async function PUT(req: NextRequest) {
     }
 
     // If setting as default, unset other defaults for this user
-    if (isDefault && userId) {
+    if (isDefault) {
       await prisma.address.updateMany({
         where: { userId, isDefault: true, id: { not: id } },
         data: { isDefault: false },
@@ -185,6 +221,14 @@ export async function PUT(req: NextRequest) {
 // PATCH /api/addresses?id=X — Partial update (e.g., set as default)
 export async function PATCH(req: NextRequest) {
   try {
+    const userId = await requireUserId();
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
 
@@ -197,15 +241,27 @@ export async function PATCH(req: NextRequest) {
 
     const body = await req.json();
 
+    // S-01: ownership check — the address must belong to the session user
+    const existing = await prisma.address.findFirst({
+      where: { id, userId },
+      select: { id: true },
+    });
+    if (!existing) {
+      return NextResponse.json(
+        { success: false, error: "Address not found" },
+        { status: 404 }
+      );
+    }
+
     const coords = parseCoordinates(body);
     if (!coords.ok) {
       return NextResponse.json({ success: false, error: coords.error }, { status: 400 });
     }
 
     // If setting as default, unset other defaults for this user
-    if (body.isDefault && body.userId) {
+    if (body.isDefault) {
       await prisma.address.updateMany({
-        where: { userId: body.userId, isDefault: true, id: { not: id } },
+        where: { userId, isDefault: true, id: { not: id } },
         data: { isDefault: false },
       });
     }
@@ -242,6 +298,14 @@ export async function PATCH(req: NextRequest) {
 // DELETE /api/addresses?id=X — Delete an address
 export async function DELETE(req: NextRequest) {
   try {
+    const userId = await requireUserId();
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
 
@@ -249,6 +313,18 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json(
         { error: "Address ID is required" },
         { status: 400 }
+      );
+    }
+
+    // S-01: ownership check — only the owner can delete their own address
+    const existing = await prisma.address.findFirst({
+      where: { id, userId },
+      select: { id: true },
+    });
+    if (!existing) {
+      return NextResponse.json(
+        { success: false, error: "Address not found" },
+        { status: 404 }
       );
     }
 

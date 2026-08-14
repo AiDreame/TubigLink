@@ -1,18 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+
+// S-01 (security audit 2026-08-14): both handlers require a session and act on
+// the session user only — never on a client-supplied userId.
 
 // GET /api/user/profile — Get user profile
 export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
-    const userId = searchParams.get("userId");
-
-    if (!userId) {
-      return NextResponse.json({ error: "User ID is required" }, { status: 400 });
+    const session = await getServerSession(authOptions);
+    const sessionUser = session?.user as any;
+    if (!sessionUser?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { id: sessionUser.id },
       select: {
         id: true,
         name: true,
@@ -44,15 +48,20 @@ export async function GET(req: NextRequest) {
 // PUT /api/user/profile — Update user profile
 export async function PUT(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { userId, name, email, avatar } = body;
-
-    if (!userId) {
-      return NextResponse.json({ error: "User ID is required" }, { status: 400 });
+    const session = await getServerSession(authOptions);
+    const sessionUser = session?.user as any;
+    if (!sessionUser?.id) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 }
+      );
     }
 
+    const body = await req.json();
+    const { name, email, avatar } = body;
+
     const user = await prisma.user.update({
-      where: { id: userId },
+      where: { id: sessionUser.id },
       data: {
         ...(name && { name }),
         ...(email && { email }),

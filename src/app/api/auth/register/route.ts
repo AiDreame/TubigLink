@@ -8,6 +8,11 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { name, phone, email, password, role } = body;
 
+    // S-02 (security audit 2026-08-14): whitelist roles server-side.
+    // Never accept privileged roles (ADMIN, etc.) from the client.
+    const ALLOWED_ROLES = ["CUSTOMER", "PROVIDER"];
+    const userRole = typeof role === "string" && ALLOWED_ROLES.includes(role) ? role : "CUSTOMER";
+
     // Validate required fields
     if (!phone || !name || !password) {
       return NextResponse.json(
@@ -38,12 +43,12 @@ export async function POST(req: Request) {
         phone,
         email: email || undefined,
         password: hashedPassword,
-        role: role || "CUSTOMER",
+        role: userRole,
       },
     });
 
     // If role is PROVIDER, also create a station
-    if (role === "PROVIDER" && body.stationName) {
+    if (userRole === "PROVIDER" && body.stationName) {
       const slug = slugify(body.stationName) + "-" + Math.random().toString(36).substring(2, 6);
 
       await prisma.station.create({
