@@ -1,16 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+
+// S-01 (security audit 2026-08-14): all handlers require a session; the acting
+// userId always comes from the session, never from query params or the body.
+async function requireUserId(): Promise<string | null> {
+  const session = await getServerSession(authOptions);
+  const sessionUser = session?.user as any;
+  return sessionUser?.id || null;
+}
 
 // GET /api/user/payment-methods — List saved payment methods
 export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
-    const userId = searchParams.get("userId");
-
+    const userId = await requireUserId();
     if (!userId) {
       return NextResponse.json(
-        { success: false, error: "User ID is required" },
-        { status: 400 }
+        { success: false, error: "Unauthorized" },
+        { status: 401 }
       );
     }
 
@@ -38,12 +46,20 @@ export async function GET(req: NextRequest) {
 // POST /api/user/payment-methods — Add a new payment method
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { userId, type, details } = body;
-
-    if (!userId || !type || !details) {
+    const userId = await requireUserId();
+    if (!userId) {
       return NextResponse.json(
-        { success: false, error: "Missing required fields (userId, type, details)" },
+        { success: false, error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
+    const body = await req.json();
+    const { type, details } = body;
+
+    if (!type || !details) {
+      return NextResponse.json(
+        { success: false, error: "Missing required fields (type, details)" },
         { status: 400 }
       );
     }
@@ -112,6 +128,14 @@ export async function POST(req: NextRequest) {
 // DELETE /api/user/payment-methods?id=X — Remove a payment method
 export async function DELETE(req: NextRequest) {
   try {
+    const userId = await requireUserId();
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
 
@@ -122,8 +146,9 @@ export async function DELETE(req: NextRequest) {
       );
     }
 
-    const method = await prisma.paymentMethod.findUnique({
-      where: { id },
+    // S-01: ownership check — only the owner can remove their payment method
+    const method = await prisma.paymentMethod.findFirst({
+      where: { id, userId },
     });
 
     if (!method) {

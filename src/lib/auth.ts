@@ -4,6 +4,11 @@ import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import bcrypt from "bcryptjs";
 import prisma from "./prisma";
 
+// S-04 (security audit 2026-08-14): pre-computed bcrypt hash (cost 12) of a
+// random string, used to equalize login timing for unknown phone numbers.
+const DUMMY_PASSWORD_HASH =
+  "$2a$12$Ioxn9SvsW9YvhDFDRVsHV.LVNdtpBLy9WrkrvST13opV7XCGQ.DRe";
+
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
   session: {
@@ -32,21 +37,22 @@ export const authOptions: NextAuthOptions = {
         });
 
         if (!user) {
-          // New user - they'll complete registration after OTP
-          // For now, return a minimal object that triggers the registration flow
+          // S-04 (security audit 2026-08-14): run bcrypt against a dummy hash
+          // so unknown-phone attempts take the same time as a real password
+          // check (mitigates user-enumeration timing).
+          await bcrypt.compare(credentials.password || "", DUMMY_PASSWORD_HASH);
           return null;
         }
 
-        // For demo/development, allow login without password
-        // In production, verify against bcrypt password
-        if (user.password) {
-          const isValid = await bcrypt.compare(
-            credentials.password || "",
-            user.password
-          );
-          if (!isValid) {
-            throw new Error("Invalid credentials");
-          }
+        // S-04: always require a valid password — no passwordless bypass.
+        // A missing/null password fails the bcrypt compare like any bad one.
+        const storedPassword = user.password || "";
+        const isValid = await bcrypt.compare(
+          credentials.password || "",
+          storedPassword
+        );
+        if (!isValid) {
+          throw new Error("Invalid credentials");
         }
 
         return {

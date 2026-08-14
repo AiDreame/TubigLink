@@ -1,20 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { createNotification } from "@/lib/notifications";
 import { applyDeliveryAutoConfirmMany } from "@/lib/delivery";
 
+// S-01 (security audit 2026-08-14): all handlers require a session; the acting
+// userId always comes from the session, never from query params or the body.
+
 // GET /api/orders/scheduled — List scheduled/recurring orders
 export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
-    const userId = searchParams.get("userId");
-
-    if (!userId) {
+    const session = await getServerSession(authOptions);
+    const sessionUser = session?.user as any;
+    if (!sessionUser?.id) {
       return NextResponse.json(
-        { success: false, error: "User ID is required" },
-        { status: 400 }
+        { success: false, error: "Unauthorized" },
+        { status: 401 }
       );
     }
+    const userId = sessionUser.id;
 
     const orders = await applyDeliveryAutoConfirmMany(
       await prisma.order.findMany({
@@ -45,10 +50,20 @@ export async function GET(req: NextRequest) {
 // POST /api/orders/scheduled — Create a scheduled/recurring order
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { userId, stationId, items, addressId, paymentMethod, notes, recurringDay } = body;
+    const session = await getServerSession(authOptions);
+    const sessionUser = session?.user as any;
+    if (!sessionUser?.id) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+    const userId = sessionUser.id;
 
-    if (!userId || !stationId || !items?.length || !addressId || !recurringDay) {
+    const body = await req.json();
+    const { stationId, items, addressId, paymentMethod, notes, recurringDay } = body;
+
+    if (!stationId || !items?.length || !addressId || !recurringDay) {
       return NextResponse.json(
         { success: false, error: "Missing required fields (userId, stationId, items, addressId, recurringDay)" },
         { status: 400 }
@@ -146,6 +161,15 @@ export async function POST(req: NextRequest) {
 // PUT /api/orders/scheduled?id=X — Update a scheduled order (e.g., change day, items)
 export async function PUT(req: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    const sessionUser = session?.user as any;
+    if (!sessionUser?.id) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
 
@@ -159,13 +183,13 @@ export async function PUT(req: NextRequest) {
     const body = await req.json();
     const { recurringDay, paymentMethod, addressId, notes, items } = body;
 
-    // Validate the order exists and is recurring
+    // Validate the order exists, is recurring, and belongs to the session user
     const existing = await prisma.order.findUnique({
       where: { id },
-      select: { id: true, orderType: true },
+      select: { id: true, orderType: true, userId: true },
     });
 
-    if (!existing) {
+    if (!existing || existing.userId !== sessionUser.id) {
       return NextResponse.json(
         { success: false, error: "Order not found" },
         { status: 404 }
@@ -274,6 +298,15 @@ export async function PUT(req: NextRequest) {
 // DELETE /api/orders/scheduled?id=X — Cancel a scheduled order
 export async function DELETE(req: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    const sessionUser = session?.user as any;
+    if (!sessionUser?.id) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
 
@@ -289,7 +322,7 @@ export async function DELETE(req: NextRequest) {
       select: { id: true, orderType: true, status: true, userId: true, stationId: true },
     });
 
-    if (!existing) {
+    if (!existing || existing.userId !== sessionUser.id) {
       return NextResponse.json(
         { success: false, error: "Order not found" },
         { status: 404 }
