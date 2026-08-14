@@ -1,15 +1,28 @@
 "use client";
 
 import { useTheme } from "next-themes";
-import { Sun, Moon, Monitor } from "lucide-react";
+import { Check, Moon, Monitor, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface ThemeToggleProps {
   variant?: "header" | "settings";
   /** For settings page — show as a row with label + switch */
   asSwitch?: boolean;
 }
+
+const modes = [
+  { key: "light", icon: Sun, label: "Light" },
+  { key: "dark", icon: Moon, label: "Dark" },
+  { key: "system", icon: Monitor, label: "System" },
+] as const;
 
 export function ThemeToggle({ variant = "header", asSwitch = false }: ThemeToggleProps) {
   const { theme, setTheme, resolvedTheme } = useTheme();
@@ -29,7 +42,7 @@ export function ThemeToggle({ variant = "header", asSwitch = false }: ThemeToggl
         </div>
       );
     }
-    return <div className="h-8 w-[108px] rounded-full bg-gray-100 dark:bg-gray-800 animate-pulse" />;
+    return <div className="h-8 w-8 rounded-full bg-gray-100 dark:bg-gray-800 animate-pulse" />;
   }
 
   const isDark = resolvedTheme === "dark";
@@ -70,32 +83,30 @@ export function ThemeToggle({ variant = "header", asSwitch = false }: ThemeToggl
     );
   }
 
-  // Header variant — three toggle buttons
-  const modes = [
-    { key: "light", icon: Sun, label: "Light mode" },
-    { key: "dark", icon: Moon, label: "Dark mode" },
-    { key: "system", icon: Monitor, label: "System theme" },
-  ] as const;
+  // Header variant — compact icon button with a theme dropdown
+  const currentMode = modes.find((m) => m.key === theme) ?? modes[0];
+  const CurrentIcon = currentMode.icon;
 
   return (
-    <div className="flex items-center gap-0.5 bg-gray-100 dark:bg-gray-800 rounded-full p-0.5" role="radiogroup" aria-label="Theme selector">
-      {modes.map(({ key, icon: Icon, label }) => (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
         <button
-          key={key}
-          onClick={() => setTheme(key)}
-          className={cn(
-            "h-8 w-8 rounded-full flex items-center justify-center transition-all",
-            theme === key
-              ? "bg-white dark:bg-gray-700 shadow-sm text-blue-600 dark:text-yellow-400"
-              : "text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
-          )}
-          aria-label={label}
-          role="radio"
-          aria-checked={theme === key}
+          className="h-8 w-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center transition-colors hover:bg-gray-200 dark:hover:bg-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+          aria-label="Select theme"
         >
-          <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+          <CurrentIcon className="h-4 w-4 text-blue-600 dark:text-yellow-400" aria-hidden="true" />
         </button>
-      ))}
-    </div>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-44">
+        <DropdownMenuLabel className="text-xs text-gray-400 font-medium">Theme</DropdownMenuLabel>
+        {modes.map(({ key, icon: Icon, label }) => (
+          <DropdownMenuItem key={key} onClick={() => setTheme(key)} className="gap-2.5 cursor-pointer">
+            <Icon className="h-4 w-4 text-gray-500 dark:text-gray-400" aria-hidden="true" />
+            <span className="flex-1">{label}</span>
+            {theme === key && <Check className="h-4 w-4 text-blue-600 dark:text-yellow-400" aria-hidden="true" />}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
