@@ -65,6 +65,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSession } from "next-auth/react";
 import toast from "react-hot-toast";
 import { normalizePhoneForDialing } from "@/lib/phone";
+import { useLiveRefresh, LIVE_REFRESH_INTERVAL_MS } from "@/hooks/use-live-refresh";
 
 interface Order {
   id: string;
@@ -196,6 +197,13 @@ export default function ProviderOrdersPage() {
       fetchStaff();
     }
   }, [session, fetchOrders, fetchStaff]);
+
+  // Silent live refresh: re-fetches the order list in the background so NEW
+  // incoming orders and status changes appear without a manual page refresh.
+  // Ticks pause while the tab is hidden (see useLiveRefresh). The initial
+  // loading guard below already requires `orders.length === 0`, so this never
+  // flashes a spinner over existing data.
+  useLiveRefresh(fetchOrders, LIVE_REFRESH_INTERVAL_MS, !!session?.user);
 
   const assignDriver = async (orderId: string, driverId: string | null) => {
     setAssigningId(orderId);

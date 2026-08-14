@@ -25,6 +25,7 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { MESSAGES } from "@/lib/constants";
 import { format } from "date-fns";
 import toast from "react-hot-toast";
+import { useLiveRefresh, LIVE_REFRESH_INTERVAL_MS } from "@/hooks/use-live-refresh";
 
 interface DashboardData {
   activeOrders: any[];
@@ -89,6 +90,11 @@ export function CustomerDashboard() {
     fetchDashboard();
   }, []);
 
+  // Silent live refresh: re-fetches the dashboard in the background so order
+  // status changes appear without a manual page refresh. Ticks pause while
+  // the tab is hidden (see useLiveRefresh).
+  useLiveRefresh(fetchDashboard, LIVE_REFRESH_INTERVAL_MS);
+
   const handleReorder = async (orderId: string) => {
     setReorderingId(orderId);
     try {
@@ -117,11 +123,14 @@ export function CustomerDashboard() {
     );
   };
 
-  if (isLoading) {
+  // Loading/error screens only while there is no data yet — a background
+  // live-refresh must never flash a skeleton or replace the dashboard with
+  // an error state (last good data stays on screen until new data arrives).
+  if (isLoading && !data) {
     return <DashboardSkeleton />;
   }
 
-  if (error) {
+  if (error && !data) {
     return (
       <div className="max-w-3xl mx-auto px-4 py-8">
         <ErrorState title="May error na nangyari" message={error} onRetry={fetchDashboard} />

@@ -25,6 +25,7 @@ import { Badge } from "@/components/ui/badge";
 import { MESSAGES } from "@/lib/constants";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
+import { useLiveRefresh, LIVE_REFRESH_INTERVAL_MS } from "@/hooks/use-live-refresh";
 import {
   LineChart,
   Line,
@@ -114,7 +115,7 @@ export default function DashboardHome() {
     [session]
   );
 
-  useEffect(() => {
+  const fetchDashboard = useCallback(async () => {
     if (!session?.user) return;
 
     fetch("/api/dashboard")
@@ -130,12 +131,24 @@ export default function DashboardHome() {
       .finally(() => setLoading(false));
   }, [session]);
 
+  useEffect(() => {
+    fetchDashboard();
+  }, [fetchDashboard]);
+
+  // Silent live refresh: re-fetches the dashboard in the background so new
+  // orders and status changes appear without a manual page refresh. Ticks
+  // pause while the tab is hidden (see useLiveRefresh).
+  useLiveRefresh(fetchDashboard, LIVE_REFRESH_INTERVAL_MS, !!session?.user);
+
   // Fetch order volume data on mount and when preset changes
   useEffect(() => {
     fetchOrderVolume(activePreset);
   }, [activePreset, fetchOrderVolume]);
 
-  if (loading) {
+  // Loading/error screens only while there is no data yet — a background
+  // live-refresh must never flash a spinner or replace the dashboard with an
+  // error state (last good data stays on screen until new data arrives).
+  if (loading && !data) {
     return (
       <div className="flex items-center justify-center py-32">
         <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
@@ -143,7 +156,7 @@ export default function DashboardHome() {
     );
   }
 
-  if (error) {
+  if (error && !data) {
     return (
       <div className="text-center py-32">
         <AlertCircle className="h-12 w-12 text-red-400 mx-auto mb-4" />
