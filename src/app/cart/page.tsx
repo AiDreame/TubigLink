@@ -487,9 +487,6 @@ export default function CartPage() {
                 You'll be redirected to GCash to authorize the payment after placing your order.
                 Your order will only be processed once payment is confirmed.
               </p>
-              <p className="text-xs text-blue-700 dark:text-blue-300">
-                Includes processing fee (2.23%) + service fee (1.5%), paid by the station.
-              </p>
             </div>
           )}
           {!stationAcceptsGcash && (
