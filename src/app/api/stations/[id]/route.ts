@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 
 // GET /api/stations/[id] — Get station details with products and reviews
@@ -49,21 +51,86 @@ export async function GET(
   }
 }
 
-// PUT /api/stations/[id] — Update station details
+// PUT /api/stations/[id] — Update station storefront details
+// N-02 (security audit 2026-08-18): previously unauthenticated + no field
+// whitelist (any anonymous caller could mutate any station, incl. the payout
+// destination and isActive/isFeatured). Now: session required, ownership
+// enforced (station owner or ADMIN), and only the storefront-editable fields
+// are accepted. Payout/approval/flag fields are NOT writable here — they
+// belong to the OTP-gated payout flow and admin flows only.
+const STOREFRONT_ALLOWED_FIELDS = [
+  "name", "slug", "description", "logo", "banner", "phone",
+  "address", "barangay", "city", "province",
+  "latitude", "longitude",
+  "deliveryFee", "minOrder",
+  "openingTime", "closingTime",
+] as const;
+
 export async function PUT(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
+    const session = await getServerSession(authOptions);
+    const sessionUser = session?.user as any;
+    if (!sessionUser?.id) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
     const { id } = params;
     const body = await req.json();
 
-    const station = await prisma.station.update({
-      where: { id },
-      data: body,
+    const station = await prisma.station.findFirst({
+      where: { OR: [{ id }, { slug: id }] },
     });
 
-    return NextResponse.json({ success: true, data: station });
+    if (!station) {
+      return NextResponse.json(
+        { success: false, error: "Station not found" },
+        { status: 404 }
+      );
+    }
+
+    // Ownership: station owner or platform ADMIN only.
+    const isOwner = station.userId === sessionUser.id;
+    const isAdmin = sessionUser.role === "ADMIN";
+    if (!isOwner && !isAdmin) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden" },
+        { status: 403 }
+      );
+    }
+
+    // Whitelist the writable fields — silently drop anything else (payout
+    // fields, isActive, isFeatured, approvedAt, etc.).
+    const filteredFields: Record<string, any> = {};
+    for (const [key, value] of Object.entries(body)) {
+      if ((STOREFRONT_ALLOWED_FIELDS as readonly string[]).includes(key)) {
+        filteredFields[key] = value;
+      }
+    }
+
+    // Keep slug consistent if the name changes but no slug was provided.
+    if (
+      filteredFields.name &&
+      !filteredFields.slug &&
+      filteredFields.name !== station.name
+    ) {
+      filteredFields.slug = filteredFields.name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/(^-|-$)/g, "");
+    }
+
+    const updatedStation = await prisma.station.update({
+      where: { id: station.id },
+      data: filteredFields,
+    });
+
+    return NextResponse.json({ success: true, data: updatedStation });
   } catch (error) {
     console.error("Station update error:", error);
     return NextResponse.json(

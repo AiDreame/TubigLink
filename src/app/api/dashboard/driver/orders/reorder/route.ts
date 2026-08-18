@@ -13,16 +13,8 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const staffId = (session.user as any).staffId;
-    const staffRole = (session.user as any).staffRole;
+    const userId = (session.user as any).id;
     const userRole = (session.user as any).role;
-
-    if (!staffId && userRole !== "PROVIDER" && userRole !== "ADMIN") {
-      return NextResponse.json(
-        { error: "Not authorized to reorder deliveries" },
-        { status: 403 }
-      );
-    }
 
     const body = await req.json();
     const { orders } = body;
@@ -34,12 +26,12 @@ export async function PUT(req: NextRequest) {
       );
     }
 
-    // Validate all orders exist and are assigned to this driver
+    // Validate all orders exist
     const orderIds = orders.map((o: any) => o.id);
 
     const existingOrders = await prisma.order.findMany({
       where: { id: { in: orderIds } },
-      select: { id: true, driverId: true },
+      select: { id: true, driverId: true, stationId: true },
     });
 
     const existingIds = new Set(existingOrders.map((o) => o.id));
@@ -52,14 +44,61 @@ export async function PUT(req: NextRequest) {
       }
     }
 
-    // If driver, only reorder own orders
-    if (staffRole === "DRIVER" || staffRole === "STAFF") {
+    // N-05/N-08 (security audit 2026-08-18): the caller's station scope is
+    // resolved from the DB — never from JWT claims — and every order must
+    // belong to it (mirrors how the DRIVER/STAFF path is scoped by driverId).
+    if (userRole === "ADMIN") {
+      // Platform admin may reorder any station's deliveries.
+    } else if (userRole === "PROVIDER") {
+      const owned = await prisma.station.findFirst({
+        where: { userId },
+        select: { id: true },
+      });
+      if (!owned) {
+        return NextResponse.json(
+          { error: "No station found for this account" },
+          { status: 403 }
+        );
+      }
       for (const o of existingOrders) {
-        if (o.driverId !== staffId) {
+        if (o.stationId !== owned.id) {
           return NextResponse.json(
-            { error: "Cannot reorder another driver's deliveries" },
+            { error: "Cannot reorder orders from another station" },
             { status: 403 }
           );
+        }
+      }
+    } else {
+      // STAFF or DRIVER role — resolve the active staff row from the DB.
+      const staff = await prisma.stationStaff.findFirst({
+        where: { userId, status: "ACTIVE" },
+        select: { id: true, stationId: true, role: true },
+      });
+      if (!staff) {
+        return NextResponse.json(
+          { error: "Not authorized to reorder deliveries" },
+          { status: 403 }
+        );
+      }
+      // Drivers/staff may only reorder deliveries assigned to them.
+      if (staff.role === "DRIVER" || staff.role === "STAFF") {
+        for (const o of existingOrders) {
+          if (o.driverId !== staff.id) {
+            return NextResponse.json(
+              { error: "Cannot reorder another driver's deliveries" },
+              { status: 403 }
+            );
+          }
+        }
+      } else {
+        // MANAGER/ADMIN staff — scoped to their own station.
+        for (const o of existingOrders) {
+          if (o.stationId !== staff.stationId) {
+            return NextResponse.json(
+              { error: "Cannot reorder orders from another station" },
+              { status: 403 }
+            );
+          }
         }
       }
     }

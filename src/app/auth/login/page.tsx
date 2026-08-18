@@ -28,6 +28,35 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") || "/";
 
+  // N-06 (security audit 2026-08-18): never redirect to an external origin.
+  // Only relative paths (or same-origin absolute URLs) are honored; anything
+  // else (https://evil.example, //host, javascript:, backslash tricks) falls
+  // back to "/".
+  function safeCallbackUrl(raw: string): string {
+    if (raw === "/") return raw;
+    // Relative paths only: starts with exactly one "/", no protocol-relative
+    // ("//"), no backslashes, no spaces/control chars (browser URL
+    // normalization would otherwise turn "\evil.com" into "//evil.com").
+    if (
+      raw.startsWith("/") &&
+      !raw.startsWith("//") &&
+      !/[\x00-\x20\\]/.test(raw)
+    ) {
+      return raw;
+    }
+    try {
+      const url = new URL(raw, window.location.origin);
+      if (url.origin === window.location.origin) {
+        return url.pathname + url.search + url.hash;
+      }
+    } catch {
+      // fall through to "/"
+    }
+    return "/";
+  }
+
+  const safeCb = safeCallbackUrl(callbackUrl);
+
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -60,7 +89,7 @@ function LoginForm() {
           .then((session) => {
             const role = session?.user?.role;
             if (callbackUrl && callbackUrl !== "/") {
-              router.push(callbackUrl);
+              router.push(safeCb);
             } else if (role === "PROVIDER") {
               router.push("/dashboard");
             } else if (role === "ADMIN") {
@@ -69,7 +98,7 @@ function LoginForm() {
               router.push("/");
             }
           })
-          .catch(() => router.push(callbackUrl));
+          .catch(() => router.push(safeCb));
       }
     } catch (error) {
       toast.error("Something went wrong. Please try again.");
@@ -98,7 +127,7 @@ function LoginForm() {
           .then((session) => {
             const role = session?.user?.role;
             if (callbackUrl && callbackUrl !== "/") {
-              router.push(callbackUrl);
+              router.push(safeCb);
             } else if (role === "PROVIDER") {
               router.push("/dashboard");
             } else if (role === "ADMIN") {
@@ -107,7 +136,7 @@ function LoginForm() {
               router.push("/");
             }
           })
-          .catch(() => router.push(callbackUrl));
+          .catch(() => router.push(safeCb));
       }
     } catch (error) {
       toast.error("Something went wrong.");

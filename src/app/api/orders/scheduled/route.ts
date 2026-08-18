@@ -78,6 +78,20 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // N-07 (security audit 2026-08-18): the address must belong to the session
+    // user (mirrors src/app/api/orders/route.ts POST). Otherwise a customer
+    // could bind a victim's addressId and read the victim's full address
+    // object through their own scheduled-order list.
+    const address = await prisma.address.findFirst({
+      where: { id: addressId, userId },
+    });
+    if (!address) {
+      return NextResponse.json(
+        { success: false, error: "Address not found" },
+        { status: 403 }
+      );
+    }
+
     // Calculate totals
     let subtotal = 0;
     const orderItems = [];
