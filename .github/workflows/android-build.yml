@@ -42,11 +42,11 @@ jobs:
       - name: Capacitor sync (embeds config + copies web assets into android/)
         run: npx cap sync android
 
-      - name: Setup JDK 17 (AGP 8.13 requirement)
+      - name: Setup JDK 21 (Capacitor 8 needs Java 21; AGP 8.13 supports it)
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
 
       - name: Write release signing config (only when the keystore secret exists)
         working-directory: android
