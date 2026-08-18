@@ -183,6 +183,7 @@ export async function PUT(req: NextRequest) {
         { status: 401 }
       );
     }
+    const userId = sessionUser.id;
 
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
@@ -203,7 +204,7 @@ export async function PUT(req: NextRequest) {
       select: { id: true, orderType: true, userId: true },
     });
 
-    if (!existing || existing.userId !== sessionUser.id) {
+    if (!existing || existing.userId !== userId) {
       return NextResponse.json(
         { success: false, error: "Order not found" },
         { status: 404 }
@@ -223,6 +224,23 @@ export async function PUT(req: NextRequest) {
         return NextResponse.json(
           { success: false, error: "Invalid recurringDay" },
           { status: 400 }
+        );
+      }
+    }
+
+    // N-07 class (security audit 2026-08-18): a rebind must only ever point at
+    // an address owned by the session user (mirrors POST in this file). Without
+    // this, a customer could bind their own scheduled order to a victim's
+    // addressId and read the victim's full address object through their own
+    // scheduled-order list (GET includes `address: true`).
+    if (addressId !== undefined) {
+      const address = await prisma.address.findFirst({
+        where: { id: addressId, userId },
+      });
+      if (!address) {
+        return NextResponse.json(
+          { success: false, error: "Address not found" },
+          { status: 403 }
         );
       }
     }
