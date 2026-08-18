@@ -1,0 +1,92 @@
+# Android APK build for the AquaLink native shell (Capacitor).
+#
+# Local APK builds are NOT feasible on the dev box (JDK 17 + Android SDK ≈ 2.5–4 GB;
+# the machine has 3.9 GB RAM and hosts the live app) — so Gradle builds run here, on
+# GitHub-hosted runners, on every push/PR to v3.
+#
+# The web app is never built here: the shell is REMOTE-URL mode, i.e. it loads the
+# deployed Next.js app from server.url (see capacitor.config.ts). `cap sync` embeds
+# that config + copies the placeholder www/ into the native project, which is why
+# sync MUST run after checkout on every build.
+#
+# Release signing: if the KEYSTORE_BASE64 secret is set, CI writes android/keystore.properties
+# + android/keystore.jks and assembleRelease produces a signed APK. Without the secret,
+# android/app/build.gradle falls back to the debug key so the release build still succeeds
+# (fine for smoke-testing the pipeline; the store needs the real upload keystore).
+name: android-build
+
+on:
+  push:
+    branches: [v3]
+  pull_request:
+    branches: [v3]
+  workflow_dispatch:
+
+jobs:
+  build-android:
+    name: Capacitor sync + Gradle APK (debug + release)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Capacitor sync (embeds config + copies web assets into android/)
+        run: npx cap sync android
+
+      - name: Setup JDK 17 (AGP 8.13 requirement)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Write release signing config (only when the keystore secret exists)
+        working-directory: android
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > keystore.jks
+            cat > keystore.properties <<EOF
+storeFile=keystore.jks
+storePassword=$KEYSTORE_PASSWORD
+keyAlias=$KEYSTORE_ALIAS
+keyPassword=$KEYSTORE_KEY_PASSWORD
+EOF
+            echo "keystore.properties written — release APK will be signed with the upload key."
+          else
+            echo "KEYSTORE_BASE64 not set — release APK will be signed with the debug key (build.gradle fallback)."
+          fi
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEYSTORE_ALIAS: ${{ secrets.KEYSTORE_ALIAS }}
+          KEYSTORE_KEY_PASSWORD: ${{ secrets.KEYSTORE_KEY_PASSWORD }}
+
+      - name: Build debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug
+
+      - name: Build release APK
+        working-directory: android
+        run: ./gradlew assembleRelease
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: aqualink-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+      - name: Upload release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: aqualink-release-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
