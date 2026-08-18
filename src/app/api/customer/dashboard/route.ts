@@ -7,14 +7,13 @@ import { applyDeliveryAutoConfirmMany } from "@/lib/delivery";
 // GET /api/customer/dashboard — Aggregated customer dashboard data
 export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
-    let userId = searchParams.get("userId");
-
-    // If no userId in query, try to get from the session
-    if (!userId) {
-      const session = await getServerSession(authOptions);
-      userId = (session?.user as any)?.id;
-    }
+    // N-01 (security audit 2026-08-18): the acting userId is ALWAYS derived
+    // from the session. Any `?userId=` query param is ignored (callers
+    // src/app/my/page.tsx and src/components/customer/Dashboard.tsx already
+    // pass the session id, so the param is a harmless no-op).
+    const session = await getServerSession(authOptions);
+    const sessionUser = session?.user as any;
+    const userId = sessionUser?.id;
 
     if (!userId) {
       return NextResponse.json(

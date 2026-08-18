@@ -42,16 +42,24 @@ export async function PUT(
 
     const userId = (session.user as any).id;
     const userRole = (session.user as any).role;
-    const staffId = (session.user as any).staffId;
-    const staffRole = (session.user as any).staffRole;
 
+    // N-03/N-08 (security audit 2026-08-18): staff identity is resolved from
+    // the DB, scoped to THIS order's station — never from JWT staffRole claims
+    // (a deactivated or cross-station staffer must not retain powers).
     const isOwner = order.station.userId === userId;
     const isAdmin = userRole === "ADMIN";
-    const isAssignedDriver = order.driverId && order.driverId === staffId;
-    const isStationStaff = staffRole === "ADMIN" || staffRole === "MANAGER" || staffRole === "STAFF";
+    let staffRow: { id: string; role: string } | null = null;
+    if (!isOwner && !isAdmin) {
+      staffRow = await prisma.stationStaff.findFirst({
+        where: { userId, stationId: order.stationId, status: "ACTIVE" },
+        select: { id: true, role: true },
+      });
+    }
+    const isStationStaff = !!staffRow;
+    const isAssignedDriver = !!staffRow && order.driverId === staffRow.id;
 
     // Driver can only update to OUT_FOR_DELIVERY or DELIVERED, and only for assigned orders
-    if (isAssignedDriver && (staffRole === "DRIVER" || staffRole === "STAFF")) {
+    if (isAssignedDriver && staffRow && (staffRow.role === "DRIVER" || staffRow.role === "STAFF")) {
       if (status !== "OUT_FOR_DELIVERY" && status !== "DELIVERED") {
         return NextResponse.json(
           { error: "Drivers can only start or complete deliveries" },
