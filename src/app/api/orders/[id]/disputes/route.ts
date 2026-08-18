@@ -5,6 +5,7 @@ import prisma from "@/lib/prisma";
 import { createNotification, notifyAllAdmins, notifyStationUsers } from "@/lib/notifications";
 import { applyAutoEscalateMany, orderNetCentavos } from "@/lib/disputes";
 import { DISPUTE_WINDOW_HOURS } from "@/lib/delivery";
+import { rateLimit, tooManyRequests } from "@/lib/rate-limit";
 
 const types = ["NOT_DELIVERED", "QUALITY", "OTHER"];
 const include = { order: { select: { id: true, total: true, paymentStatus: true, deliveryConfirmedAt: true } }, customer: { select: { id: true, name: true, phone: true } }, station: { select: { id: true, name: true } }, refund: true } as const;
@@ -22,6 +23,15 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const user = (await getServerSession(authOptions))?.user as any;
   if (!user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // S-05 (security audit 2026-08-14): per-user cap on dispute creation — 10 /
+  // hour (token bucket). Spam disputes would bury station staff and admins.
+  const rl = rateLimit(`dispute-create:${user.id}`, 10, 60 * 60 * 1000);
+  if (!rl.ok) {
+    return tooManyRequests(
+      "You've filed too many issue reports recently. Please try again later.",
+      rl.retryAfterSec
+    );
+  }
   const order = await prisma.order.findUnique({ where: { id: params.id }, include: { station: { select: { id: true, name: true, userId: true } }, items: true } });
   if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
   if (order.userId !== user.id) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });

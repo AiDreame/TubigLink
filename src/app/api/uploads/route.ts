@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import path from "path";
 import { mkdir, writeFile } from "fs/promises";
 import crypto from "crypto";
+import { consumeUploadQuota, tooManyRequests } from "@/lib/rate-limit";
 
 // POST /api/uploads — Upload an image for a customer issue report (dispute).
 // Any logged-in user may upload; files land in uploads/disputes/ and are served
@@ -90,6 +91,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { error: "File contents do not match the declared file type" },
         { status: 400 }
+      );
+    }
+
+    // S-05 (security audit 2026-08-14): per-user upload quota — 50 MB per
+    // rolling 24h (in-memory; no Upload model in the schema). Keeps the
+    // existing 5 MB-per-file cap; this stops storage fill from unlimited
+    // uploads. Consumed before write; only fully validated files count.
+    const quota = consumeUploadQuota(user.id, buffer.length);
+    if (!quota.ok) {
+      return tooManyRequests(
+        "You've reached today's upload limit. Please try again later.",
+        quota.retryAfterSec
       );
     }
 

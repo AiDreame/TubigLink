@@ -3,6 +3,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import bcrypt from "bcryptjs";
 import prisma from "./prisma";
+import { clientIp, rateLimit } from "./rate-limit";
 
 // S-04 (security audit 2026-08-14): pre-computed bcrypt hash (cost 12) of a
 // random string, used to equalize login timing for unknown phone numbers.
@@ -25,9 +26,23 @@ export const authOptions: NextAuthOptions = {
         phone: { label: "Phone Number", type: "tel" },
         password: { label: "Password", type: "password" },
       },
-      async authorize(credentials) {
+      async authorize(credentials, req) {
         if (!credentials?.phone) {
           throw new Error("Phone number is required");
+        }
+
+        // S-05 (security audit 2026-08-14): brute-force throttle — per
+        // phone+IP, 5 attempts / 15 min (token bucket). Checked BEFORE bcrypt
+        // so throttled attempts cost nothing. Returning null surfaces the same
+        // generic "invalid credentials" error as a bad password — no lockout
+        // info leak to an attacker.
+        const ip = clientIp(req);
+        const rl = rateLimit(`login:${credentials.phone.trim()}:${ip}`, 5, 15 * 60 * 1000);
+        if (!rl.ok) {
+          console.warn(
+            `[rate-limit] login throttled phone=${credentials.phone} ip=${ip} retryIn=${rl.retryAfterSec}s`
+          );
+          return null;
         }
 
         // For phone OTP flow, we check if the user exists

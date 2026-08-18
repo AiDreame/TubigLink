@@ -2,9 +2,21 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import prisma from "@/lib/prisma";
 import { slugify } from "@/lib/utils";
+import { clientIp, rateLimit, tooManyRequests } from "@/lib/rate-limit";
 
 export async function POST(req: Request) {
   try {
+    // S-05 (security audit 2026-08-14): per-IP signup throttle — 5 attempts /
+    // hour (token bucket). Checked before any work so throttled attempts cost
+    // nothing. Also caps the S-04 "phone already registered" enumeration
+    // oracle at 5 probes/hour/IP.
+    const rl = rateLimit(`register:${clientIp(req)}`, 5, 60 * 60 * 1000);
+    if (!rl.ok) {
+      return tooManyRequests(
+        "Too many sign-up attempts from this address. Please try again later.",
+        rl.retryAfterSec
+      );
+    }
     const body = await req.json();
     const { name, phone, email, password, role } = body;
 
