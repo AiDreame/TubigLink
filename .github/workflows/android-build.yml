@@ -53,12 +53,11 @@ jobs:
         run: |
           if [ -n "$KEYSTORE_BASE64" ]; then
             echo "$KEYSTORE_BASE64" | base64 -d > keystore.jks
-            cat > keystore.properties <<EOF
-storeFile=keystore.jks
-storePassword=$KEYSTORE_PASSWORD
-keyAlias=$KEYSTORE_ALIAS
-keyPassword=$KEYSTORE_KEY_PASSWORD
-EOF
+            printf '%s\n' \
+              'storeFile=keystore.jks' \
+              "storePassword=$KEYSTORE_PASSWORD" \
+              "keyAlias=$KEYSTORE_ALIAS" \
+              "keyPassword=$KEYSTORE_KEY_PASSWORD" > keystore.properties
             echo "keystore.properties written — release APK will be signed with the upload key."
           else
             echo "KEYSTORE_BASE64 not set — release APK will be signed with the debug key (build.gradle fallback)."
