@@ -3,6 +3,7 @@ import prisma from "@/lib/prisma";
 import { createNotification } from "@/lib/notifications";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { rateLimit, tooManyRequests } from "@/lib/rate-limit";
 
 // GET /api/reviews?stationId={id} — List reviews for a station
 export async function GET(req: NextRequest) {
@@ -42,6 +43,16 @@ export async function POST(req: NextRequest) {
     const authenticatedUserId = (session?.user as any)?.id;
     if (!authenticatedUserId) {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
+    // S-05 (security audit 2026-08-14): per-user cap on review creation — 10 /
+    // hour (token bucket). Review spam would poison station ratings.
+    const rl = rateLimit(`review-create:${authenticatedUserId}`, 10, 60 * 60 * 1000);
+    if (!rl.ok) {
+      return tooManyRequests(
+        "You've posted too many reviews recently. Please try again later.",
+        rl.retryAfterSec
+      );
     }
 
     const body = await req.json();

@@ -5,8 +5,17 @@ import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { encryptOtp, hashOtp } from "@/lib/payout-security";
 import { sendEmail, type SendEmailResult } from "@/lib/email";
+import { tooManyRequests } from "@/lib/rate-limit";
 
 const EMAIL_SEND_TIMEOUT_MS = 8000;
+
+// S-05 (security audit 2026-08-14): OTP send is the email-bomb vector — every
+// request writes an OTP row AND fires an email to the recipient's inbox. Throttle
+// per recipient (the station owner who receives the code): 60s cooldown between
+// sends + 10/day cap. Implemented against the OtpCode rows themselves (every
+// send writes one), so it survives process restarts and adds no in-memory state.
+const OTP_COOLDOWN_MS = 60 * 1000;
+const OTP_DAILY_CAP = 10;
 
 export async function POST(req: NextRequest) {
   try {
@@ -21,6 +30,40 @@ export async function POST(req: NextRequest) {
     });
     if (!station || (user.role !== "ADMIN" && station.userId !== user.id))
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    // S-05: throttles below are keyed on the OTP recipient (station.userId) —
+    // that inbox is what an email bomb would flood.
+    const now = Date.now();
+    const recentRow = await prisma.otpCode.findFirst({
+      where: { userId: station.userId, createdAt: { gte: new Date(now - OTP_COOLDOWN_MS) } },
+      select: { createdAt: true },
+      orderBy: { createdAt: "desc" },
+    });
+    if (recentRow) {
+      const retryAfterSec = Math.max(1, Math.ceil((recentRow.createdAt.getTime() + OTP_COOLDOWN_MS - now) / 1000));
+      return tooManyRequests(
+        "Please wait about a minute before requesting another security code.",
+        retryAfterSec
+      );
+    }
+    const oldestInWindow = await prisma.otpCode.findFirst({
+      where: { userId: station.userId, createdAt: { gte: new Date(now - 24 * 3600 * 1000) } },
+      select: { createdAt: true },
+      orderBy: { createdAt: "asc" },
+    });
+    const sentToday = await prisma.otpCode.count({
+      where: { userId: station.userId, createdAt: { gte: new Date(now - 24 * 3600 * 1000) } },
+    });
+    if (sentToday >= OTP_DAILY_CAP) {
+      // Reset happens as the oldest row in the window ages past 24h; fall back
+      // to 1h if we somehow cannot compute it.
+      const retryAfterSec = oldestInWindow
+        ? Math.max(1, Math.ceil((oldestInWindow.createdAt.getTime() + 24 * 3600 * 1000 - now) / 1000))
+        : 3600;
+      return tooManyRequests(
+        `You've reached today's limit of ${OTP_DAILY_CAP} security codes. Please try again tomorrow.`,
+        retryAfterSec
+      );
+    }
     const code = String(crypto.randomInt(0, 1000000)).padStart(6, "0");
     const row = await prisma.otpCode.create({
       data: {
