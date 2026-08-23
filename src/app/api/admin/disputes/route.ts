@@ -5,7 +5,7 @@ import prisma from "@/lib/prisma";
 import { applyAutoEscalateMany } from "@/lib/disputes";
 import { createRefund } from "@/lib/paymongo";
 
-const include = { order: { select: { id: true, total: true, paymentStatus: true, paymentId: true, paymentIntentId: true } }, customer: { select: { name: true, phone: true } }, station: { select: { id: true, name: true } }, refund: true } as const;
+const include = { order: { select: { id: true, total: true, paymentStatus: true, paymentId: true, paymentIntentId: true } }, customer: { select: { name: true, phone: true } }, station: { select: { id: true, name: true } }, refund: true, messages: { orderBy: { createdAt: "asc" } } } as const;
 async function admin() { const u = (await getServerSession(authOptions))?.user as any; return u?.id && u.role === "ADMIN" ? u : null; }
 export async function GET() { const u = await admin(); if (!u) return NextResponse.json({ error: "Forbidden" }, { status: 403 }); const rows = await prisma.dispute.findMany({ include, orderBy: { openedAt: "desc" } }); return NextResponse.json({ success: true, data: await applyAutoEscalateMany(rows) }); }
 export async function POST(req: NextRequest) {

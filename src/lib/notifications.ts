@@ -7,6 +7,7 @@ import type { Prisma } from "@prisma/client";
  *  ORDER_STATUS -> an order's status changed (customer)
  *  PAYOUT       -> a payout was sent to the station
  *  DISPUTE      -> a dispute was filed on an order (station)
+ *  SUPPORT      -> a general support ticket / support reply (Aug 19)
  *  SYSTEM       -> everything else (payment received, review, promo, ...)
  */
 export type NotificationType =
@@ -14,6 +15,7 @@ export type NotificationType =
   | "ORDER_STATUS"
   | "PAYOUT"
   | "DISPUTE"
+  | "SUPPORT"
   | "SYSTEM";
 
 export interface CreateNotificationInput {

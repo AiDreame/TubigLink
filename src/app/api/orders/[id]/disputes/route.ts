@@ -6,9 +6,10 @@ import { createNotification, notifyAllAdmins, notifyStationUsers } from "@/lib/n
 import { applyAutoEscalateMany, orderNetCentavos } from "@/lib/disputes";
 import { DISPUTE_WINDOW_HOURS } from "@/lib/delivery";
 import { rateLimit, tooManyRequests } from "@/lib/rate-limit";
+import { pushDisputeCreated } from "@/lib/discord";
 
 const types = ["NOT_DELIVERED", "QUALITY", "OTHER"];
-const include = { order: { select: { id: true, total: true, paymentStatus: true, deliveryConfirmedAt: true } }, customer: { select: { id: true, name: true, phone: true } }, station: { select: { id: true, name: true } }, refund: true } as const;
+const include = { order: { select: { id: true, total: true, paymentStatus: true, deliveryConfirmedAt: true } }, customer: { select: { id: true, name: true, phone: true } }, station: { select: { id: true, name: true } }, refund: true, messages: { orderBy: { createdAt: "asc" } } } as const;
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const user = (await getServerSession(authOptions))?.user as any;
   if (!user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -49,12 +50,19 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const evidence = body.evidence == null ? null : String(body.evidence).trim();
   if (!types.includes(type) || !description || description.length > 2000 || (evidence && evidence.length > 4000)) return NextResponse.json({ error: "Invalid dispute details" }, { status: 400 });
   const dispute = await prisma.dispute.create({ data: { orderId: order.id, customerId: user.id, stationId: order.stationId, type, description, evidence, amountHeldCentavos: orderNetCentavos(order), openedAt: now, responseDeadlineAt: new Date(now.getTime() + 24 * 3600000), status: "OPEN" }, include: include });
+  // Seed the support conversation with the customer's report, then mirror it
+  // into the Discord support thread (fire-and-forget; no-op when unconfigured).
+  const customerName = user.name || user.phone || "A customer";
+  await prisma.disputeMessage.create({ data: { disputeId: dispute.id, authorRole: "CUSTOMER", authorName: customerName, content: description } });
+  void pushDisputeCreated(
+    { id: dispute.id, orderId: order.id, type, description },
+    { customerName }
+  );
   // Notify everyone involved, each with a role-appropriate link:
   //  - station owner + all active staff  -> /dashboard/disputes
   //  - every admin                       -> /admin/disputes
   //  - the customer (confirmation)       -> /orders/<id>
   const stationName = order.station?.name || "the station";
-  const customerName = user.name || user.phone || "A customer";
   await notifyStationUsers(order.stationId, {
     type: "DISPUTE",
     title: "Dispute filed",
