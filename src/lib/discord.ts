@@ -98,32 +98,39 @@ const ROLE_LABEL: Record<string, string> = {
   STAFF: "AquaLink Support",
 };
 
-/** Initial ticket body posted to the support channel (before a thread exists). */
-function ticketContent(dispute: {
+/**
+ * Initial ticket body posted to the support channel (before a thread exists).
+ * Drives BOTH order-bound disputes and general support tickets: the order link
+ * block is only rendered when an order is actually linked (Aug 19).
+ */
+function ticketContent(issue: {
   id: string;
-  orderId: string;
+  orderId?: string | null;
   type: string;
   description: string;
-  customerName: string;
+  reporterName: string;
   appUrl: string;
+  reporterLabel?: string;
 }): string {
-  const orderShort = dispute.orderId.slice(0, 8);
-  const link = `${dispute.appUrl}/orders/${dispute.orderId}`;
-  const type = (dispute.type || "OTHER").replace(/_/g, " ");
-  return [
-    `[ticket:${dispute.id}] **New issue report — Order #${orderShort}**`,
-    `**Type:** ${type}`,
-    `**Customer:** ${dispute.customerName || "AquaLink customer"}`,
+  const type = (issue.type || "OTHER").replace(/_/g, " ");
+  const reporter = issue.reporterLabel || "Customer";
+  const lines = [
+    `[ticket:${issue.id}] **New issue report — ${type}**`,
+    `**Category:** ${type}`,
+    `**${reporter}:** ${issue.reporterName || "AquaLink user"}`,
     ``,
-    `${dispute.description || "(no details)"}`,
-    ``,
-    `Order link: ${link}`,
-  ].join("\n");
+    `${issue.description || "(no details)"}`,
+  ];
+  // Optional order linkage — only rendered when an order is actually provided.
+  if (issue.orderId) {
+    lines.push(``, `Order link: ${issue.appUrl}/orders/${issue.orderId}`);
+  }
+  return lines.join("\n");
 }
 
 /**
- * Push the initial ticket when a dispute is created. Fire-and-forget: never
- * blocks the request; failures are swallowed and logged.
+ * Push the initial ticket when a Dispute is created (order-bound). Fire-and-
+ * forget: never blocks the request; failures are swallowed and logged.
  */
 export async function pushDisputeCreated(
   dispute: {
@@ -134,14 +141,39 @@ export async function pushDisputeCreated(
   },
   opts: { customerName?: string }
 ): Promise<void> {
+  return pushSupportTicketCreated(
+    {
+      id: dispute.id,
+      orderId: dispute.orderId,
+      category: dispute.type,
+      description: dispute.description,
+    },
+    { reporterName: opts.customerName, reporterLabel: "Customer" }
+  );
+}
+
+/**
+ * Push the initial ticket for a general support ticket (order optional).
+ * Fire-and-forget; a no-op when Discord is not configured (graceful).
+ */
+export async function pushSupportTicketCreated(
+  ticket: {
+    id: string;
+    orderId?: string | null;
+    category: string;
+    description: string;
+  },
+  opts: { reporterName?: string; reporterLabel?: string }
+): Promise<void> {
   const cfg = getDiscordConfig();
   if (!cfg) return;
   const content = ticketContent({
-    id: dispute.id,
-    orderId: dispute.orderId,
-    type: dispute.type,
-    description: dispute.description,
-    customerName: opts.customerName || "",
+    id: ticket.id,
+    orderId: ticket.orderId || null,
+    type: ticket.category,
+    description: ticket.description,
+    reporterName: opts.reporterName || "",
+    reporterLabel: opts.reporterLabel,
     appUrl: cfg.appUrl,
   });
   // No thread yet: post to the channel; the bot threads it and binds it back.

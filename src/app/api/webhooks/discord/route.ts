@@ -52,25 +52,36 @@ export async function POST(req: NextRequest) {
   const action = String(body.action || "");
 
   if (action === "bind") {
-    const disputeId = String(body.disputeId || "").trim();
+    const ticketId = String(body.disputeId || "").trim();
     const threadId = String(body.threadId || "").trim();
     const channelId = body.channelId == null ? null : String(body.channelId).trim();
-    if (!disputeId || !/^\d+$/.test(threadId)) {
+    if (!ticketId || !/^\d+$/.test(threadId)) {
       return NextResponse.json({ error: "Invalid bind payload" }, { status: 400 });
     }
-    const dispute = await prisma.dispute.findUnique({ where: { id: disputeId } });
-    if (!dispute) {
-      return NextResponse.json({ error: "Dispute not found" }, { status: 404 });
+    // The marker id can be a Dispute id OR a SupportTicket id (Aug 19).
+    const dispute = await prisma.dispute.findUnique({ where: { id: ticketId } });
+    if (dispute) {
+      if (dispute.discordThreadId && dispute.discordThreadId !== threadId) {
+        return NextResponse.json({ error: "Already bound" }, { status: 409 });
+      }
+      await prisma.dispute.update({
+        where: { id: ticketId },
+        data: { discordThreadId: threadId, discordChannelId: channelId },
+      });
+      return NextResponse.json({ success: true, data: { ticketId, threadId } });
     }
-    // Only allow a bind if the dispute is not already bound to a different thread.
-    if (dispute.discordThreadId && dispute.discordThreadId !== threadId) {
-      return NextResponse.json({ error: "Dispute already bound" }, { status: 409 });
+    const ticket = await prisma.supportTicket.findUnique({ where: { id: ticketId } });
+    if (!ticket) {
+      return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
     }
-    const updated = await prisma.dispute.update({
-      where: { id: disputeId },
+    if (ticket.discordThreadId && ticket.discordThreadId !== threadId) {
+      return NextResponse.json({ error: "Already bound" }, { status: 409 });
+    }
+    await prisma.supportTicket.update({
+      where: { id: ticketId },
       data: { discordThreadId: threadId, discordChannelId: channelId },
     });
-    return NextResponse.json({ success: true, data: { disputeId, threadId } });
+    return NextResponse.json({ success: true, data: { ticketId, threadId } });
   }
 
   if (action === "message") {
@@ -85,12 +96,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid message payload" }, { status: 400 });
     }
 
+    // Reverse-map threadId -> Dispute OR SupportTicket (Aug 19).
     const dispute = await prisma.dispute.findFirst({
       where: { discordThreadId: threadId },
       include: { order: true, station: { select: { name: true } } },
     });
-    if (!dispute) {
-      return NextResponse.json({ error: "No dispute for thread" }, { status: 404 });
+    const ticket = dispute
+      ? null
+      : await prisma.supportTicket.findFirst({
+          where: { discordThreadId: threadId },
+          include: { user: { select: { name: true, phone: true } }, order: true },
+        });
+    if (!dispute && !ticket) {
+      return NextResponse.json({ error: "No ticket for thread" }, { status: 404 });
     }
 
     // Rate-limit inbound per thread (anti-spam even though the sender is
@@ -99,9 +117,37 @@ export async function POST(req: NextRequest) {
     if (!rl.ok) return tooManyRequests("Rate limit exceeded", rl.retryAfterSec);
 
     const authorName = String(body.authorName || "Support").trim().slice(0, 80) || "Support";
+
+    if (ticket) {
+      const message = await prisma.disputeMessage.create({
+        data: {
+          ticketId: ticket.id,
+          authorRole: "STAFF",
+          authorName,
+          content,
+        },
+      });
+      // Notify the ticket creator and every admin that support replied.
+      await createNotification({
+        userId: ticket.userId,
+        type: "SUPPORT",
+        title: "Support replied",
+        body: "AquaLink support replied to your issue report.",
+        link: `/support/${ticket.id}`,
+      });
+      await notifyAllAdmins({
+        type: "SUPPORT",
+        title: "Support replied to ticket",
+        body: `AquaLink support replied to a support ticket.`,
+        link: `/admin/support`,
+      });
+      return NextResponse.json({ success: true, data: message });
+    }
+
+    // Dispute branch (dispute is non-null here).
     const message = await prisma.disputeMessage.create({
       data: {
-        disputeId: dispute.id,
+        disputeId: dispute!.id,
         authorRole: "STAFF",
         authorName,
         content,
@@ -110,22 +156,22 @@ export async function POST(req: NextRequest) {
 
     // Notify the customer, the station and every admin that support replied.
     await createNotification({
-      userId: dispute.customerId,
+      userId: dispute!.customerId,
       type: "DISPUTE",
       title: "Support replied",
-      body: `AquaLink support replied to your issue report on order #${dispute.orderId.slice(0, 8)}.`,
-      link: `/orders/${dispute.orderId}`,
+      body: `AquaLink support replied to your issue report on order #${dispute!.orderId.slice(0, 8)}.`,
+      link: `/orders/${dispute!.orderId}`,
     });
-    await notifyStationUsers(dispute.stationId, {
+    await notifyStationUsers(dispute!.stationId, {
       type: "DISPUTE",
       title: "Support replied to dispute",
-      body: `AquaLink support replied to the dispute on order #${dispute.orderId.slice(0, 8)}.`,
+      body: `AquaLink support replied to the dispute on order #${dispute!.orderId.slice(0, 8)}.`,
       link: "/dashboard/disputes",
     });
     await notifyAllAdmins({
       type: "DISPUTE",
       title: "Support replied to dispute",
-      body: `AquaLink support replied to the dispute on order #${dispute.orderId.slice(0, 8)}.`,
+      body: `AquaLink support replied to the dispute on order #${dispute!.orderId.slice(0, 8)}.`,
       link: "/admin/disputes",
     });
 

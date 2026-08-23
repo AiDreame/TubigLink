@@ -4,6 +4,7 @@ import { Toaster } from "react-hot-toast";
 import "./globals.css";
 import { Providers } from "@/components/shared/Providers";
 import { BottomNav } from "@/components/shared/BottomNav";
+import { SupportFab } from "@/components/shared/SupportFab";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -84,6 +85,7 @@ export default function RootLayout({
         <Providers>
           {children}
           <BottomNav />
+          <SupportFab />
           <Toaster
             position="top-center"
             toastOptions={{
