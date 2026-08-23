@@ -444,6 +444,12 @@ model Dispute {
   resolution         String?
   resolvedAt         DateTime?
   refundId           String?   @unique
+  // Discord two-way support bridge (Aug 18). When configured, a dispute
+  // mirrors into a support thread; inbound support replies append
+  // DisputeMessage rows so the conversation is 3-party visible in-app.
+  discordThreadId    String?
+  discordChannelId   String?
+  messages           DisputeMessage[]
   order              Order     @relation(fields: [orderId], references: [id])
   customer           User      @relation("CustomerDisputes", fields: [customerId], references: [id])
   station            Station   @relation(fields: [stationId], references: [id])
@@ -452,6 +458,22 @@ model Dispute {
   @@index([stationId, status])
   @@index([orderId])
   @@index([responseDeadlineAt])
+  @@index([discordThreadId])
+}
+
+// A single message in a dispute's support conversation. Used for two-way
+// Discord bridging: customer/station replies created in-app appear here, and
+// support replies typed in the Discord thread are appended by the incoming
+// webhook as authorRole=STAFF so all 3 parties see them.
+model DisputeMessage {
+  id         String   @id @default(cuid())
+  disputeId  String
+  authorRole String // CUSTOMER | STATION | ADMIN | STAFF
+  authorName String
+  content    String
+  createdAt  DateTime @default(now())
+  dispute    Dispute  @relation(fields: [disputeId], references: [id])
+  @@index([disputeId])
 }
 
 model Payout {

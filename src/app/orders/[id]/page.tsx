@@ -88,6 +88,10 @@ export default function OrderDetailPage() {
   const [disputeEvidence, setDisputeEvidence] = useState("");
   const [disputeSubmitting, setDisputeSubmitting] = useState(false);
   const [disputeError, setDisputeError] = useState<string | null>(null);
+  // Support conversation reply state
+  const [replyText, setReplyText] = useState("");
+  const [replySending, setReplySending] = useState(false);
+  const [replyError, setReplyError] = useState<string | null>(null);
 
   // Dispute photo upload state ("idle" | "uploading" | "done" | "error")
   const [disputePhotoUploading, setDisputePhotoUploading] = useState(false);
@@ -180,6 +184,26 @@ export default function OrderDetailPage() {
       setDisputeError(err.message || "Unable to report issue");
     } finally {
       setDisputeSubmitting(false);
+    }
+  };
+  const handleDisputeReply = async () => {
+    if (!dispute || !replyText.trim()) return;
+    setReplySending(true);
+    setReplyError(null);
+    try {
+      const res = await fetch(`/api/disputes/${dispute.id}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: replyText.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "Unable to send reply");
+      setReplyText("");
+      await fetchDispute(order?.id || String(params.id));
+    } catch (err: any) {
+      setReplyError(err.message || "Unable to send reply");
+    } finally {
+      setReplySending(false);
     }
   };
 
@@ -458,6 +482,50 @@ export default function OrderDetailPage() {
                         {dispute.stationResponse && <p>Station response: {dispute.stationResponse}</p>}
                         {dispute.resolution && <p>Resolution: {dispute.resolution}</p>}
                         {dispute.evidence && <DisputeEvidence evidence={dispute.evidence} alt="Issue evidence photo" />}
+                        {Array.isArray(dispute.messages) && dispute.messages.length > 0 && (
+                          <div className="mt-3 space-y-2">
+                            <p className="font-semibold text-card-foreground text-xs uppercase tracking-wide">Support conversation</p>
+                            {dispute.messages.map((msg: any) => (
+                              <div
+                                key={msg.id}
+                                className={
+                                  "rounded-xl p-2 " +
+                                  (msg.authorRole === "STAFF" || msg.authorRole === "ADMIN"
+                                    ? "bg-blue-50 dark:bg-blue-900/20"
+                                    : "bg-muted/50")
+                                }
+                              >
+                                <p className="font-semibold text-card-foreground text-[11px]">
+                                  {msg.authorRole === "STAFF" || msg.authorRole === "ADMIN" ? "AquaLink Support" : msg.authorRole === "STATION" ? "Station" : "You"}
+                                  {msg.authorName ? <span className="font-normal text-muted-foreground"> · {msg.authorName}</span> : null}
+                                </p>
+                                <p className="text-card-foreground whitespace-pre-wrap break-words">{msg.content}</p>
+                                <p className="text-[10px] text-muted-foreground">{format(new Date(msg.createdAt), "MMM d, h:mm a")}</p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {["OPEN", "STATION_RESPONDED", "UNDER_REVIEW"].includes(dispute.status) && (
+                          <div className="mt-3">
+                            <textarea
+                              value={replyText}
+                              onChange={(e) => setReplyText(e.target.value)}
+                              placeholder="Reply to support…"
+                              rows={2}
+                              className="w-full rounded-xl border border-border bg-background p-3 text-sm"
+                            />
+                            {replyError && (
+                              <p className="text-xs text-red-600 dark:text-red-400 mt-1">{replyError}</p>
+                            )}
+                            <Button
+                              className="mt-2 rounded-xl min-h-[40px]"
+                              onClick={handleDisputeReply}
+                              disabled={replySending || !replyText.trim()}
+                            >
+                              {replySending ? "Sending…" : "Send reply"}
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     ) : order.paymentStatus === "PAID" && order.disputeDeadlineAt && new Date(order.disputeDeadlineAt).getTime() > Date.now() ? (
                       <>
