@@ -393,6 +393,65 @@ export default function OrderDetailPage() {
     );
   }
 
+  // A dispute is "actionable" for the customer while it's still being handled
+  // (OPEN, or the station has replied, or it's under review). Once it's
+  // RESOLVED/CLOSED (terminal) the reply box is hidden but history remains.
+  const canReplyToDispute = !!dispute && ["OPEN", "STATION_RESPONDED", "UNDER_REVIEW"].includes(dispute.status);
+
+  // Shared dispute conversation thread + reply box. Rendered once, below the
+  // delivery-confirmation flow, on BOTH the "not yet confirmed" and the
+  // "delivery confirmed" branches so a customer can always see the full
+  // support conversation and reply whenever an actionable dispute exists —
+  // regardless of whether they've confirmed delivery yet.
+  const disputeThread = dispute ? (
+    <div className="mt-3 space-y-2">
+      {Array.isArray(dispute.messages) && dispute.messages.length > 0 && (
+        <div className="mt-3 space-y-2">
+          <p className="font-semibold text-card-foreground text-xs uppercase tracking-wide">Support conversation</p>
+          {dispute.messages.map((msg: any) => (
+            <div
+              key={msg.id}
+              className={
+                "rounded-xl p-2 " +
+                (msg.authorRole === "STAFF" || msg.authorRole === "ADMIN"
+                  ? "bg-blue-50 dark:bg-blue-900/20"
+                  : "bg-muted/50")
+              }
+            >
+              <p className="font-semibold text-card-foreground text-[11px]">
+                {msg.authorRole === "STAFF" || msg.authorRole === "ADMIN" ? "AquaLink Support" : msg.authorRole === "STATION" ? "Station" : "You"}
+                {msg.authorName ? <span className="font-normal text-muted-foreground"> · {msg.authorName}</span> : null}
+              </p>
+              <p className="text-card-foreground whitespace-pre-wrap break-words">{msg.content}</p>
+              <p className="text-[10px] text-muted-foreground">{format(new Date(msg.createdAt), "MMM d, h:mm a")}</p>
+            </div>
+          ))}
+        </div>
+      )}
+      {canReplyToDispute && (
+        <div className="mt-3">
+          <textarea
+            value={replyText}
+            onChange={(e) => setReplyText(e.target.value)}
+            placeholder="Reply to support…"
+            rows={2}
+            className="w-full rounded-xl border border-border bg-background p-3 text-sm"
+          />
+          {replyError && (
+            <p className="text-xs text-red-600 dark:text-red-400 mt-1">{replyError}</p>
+          )}
+          <Button
+            className="mt-2 rounded-xl min-h-[40px]"
+            onClick={handleDisputeReply}
+            disabled={replySending || !replyText.trim()}
+          >
+            {replySending ? "Sending…" : "Send reply"}
+          </Button>
+        </div>
+      )}
+    </div>
+  ) : null;
+
   return (
     <div className="min-h-screen bg-background pb-24">
       {/* Header */}
@@ -482,50 +541,7 @@ export default function OrderDetailPage() {
                         {dispute.stationResponse && <p>Station response: {dispute.stationResponse}</p>}
                         {dispute.resolution && <p>Resolution: {dispute.resolution}</p>}
                         {dispute.evidence && <DisputeEvidence evidence={dispute.evidence} alt="Issue evidence photo" />}
-                        {Array.isArray(dispute.messages) && dispute.messages.length > 0 && (
-                          <div className="mt-3 space-y-2">
-                            <p className="font-semibold text-card-foreground text-xs uppercase tracking-wide">Support conversation</p>
-                            {dispute.messages.map((msg: any) => (
-                              <div
-                                key={msg.id}
-                                className={
-                                  "rounded-xl p-2 " +
-                                  (msg.authorRole === "STAFF" || msg.authorRole === "ADMIN"
-                                    ? "bg-blue-50 dark:bg-blue-900/20"
-                                    : "bg-muted/50")
-                                }
-                              >
-                                <p className="font-semibold text-card-foreground text-[11px]">
-                                  {msg.authorRole === "STAFF" || msg.authorRole === "ADMIN" ? "AquaLink Support" : msg.authorRole === "STATION" ? "Station" : "You"}
-                                  {msg.authorName ? <span className="font-normal text-muted-foreground"> · {msg.authorName}</span> : null}
-                                </p>
-                                <p className="text-card-foreground whitespace-pre-wrap break-words">{msg.content}</p>
-                                <p className="text-[10px] text-muted-foreground">{format(new Date(msg.createdAt), "MMM d, h:mm a")}</p>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        {["OPEN", "STATION_RESPONDED", "UNDER_REVIEW"].includes(dispute.status) && (
-                          <div className="mt-3">
-                            <textarea
-                              value={replyText}
-                              onChange={(e) => setReplyText(e.target.value)}
-                              placeholder="Reply to support…"
-                              rows={2}
-                              className="w-full rounded-xl border border-border bg-background p-3 text-sm"
-                            />
-                            {replyError && (
-                              <p className="text-xs text-red-600 dark:text-red-400 mt-1">{replyError}</p>
-                            )}
-                            <Button
-                              className="mt-2 rounded-xl min-h-[40px]"
-                              onClick={handleDisputeReply}
-                              disabled={replySending || !replyText.trim()}
-                            >
-                              {replySending ? "Sending…" : "Send reply"}
-                            </Button>
-                          </div>
-                        )}
+                        {disputeThread}
                       </div>
                     ) : order.paymentStatus === "PAID" && order.disputeDeadlineAt && new Date(order.disputeDeadlineAt).getTime() > Date.now() ? (
                       <>
@@ -621,9 +637,12 @@ export default function OrderDetailPage() {
                     </Button>
                   </>
                 ) : dispute ? (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Issue report: <span className="font-semibold text-card-foreground">{dispute.status.replace(/_/g, " ")}</span> — the station must respond by {format(new Date(dispute.responseDeadlineAt), "MMM d, yyyy h:mm a")}
-                  </p>
+                  <>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Issue report: <span className="font-semibold text-card-foreground">{dispute.status.replace(/_/g, " ")}</span> — the station must respond by {format(new Date(dispute.responseDeadlineAt), "MMM d, yyyy h:mm a")}
+                    </p>
+                    {disputeThread}
+                  </>
                 ) : null}
               </div>
             )}
