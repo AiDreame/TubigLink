@@ -182,10 +182,10 @@ export function NotificationBell({
       {open && (
         <div
           className={cn(
-            "absolute z-[100] w-[min(92vw,24rem)] overflow-hidden rounded-2xl border border-border bg-card text-card-foreground shadow-2xl",
+            "fixed z-[100] flex w-[min(92vw,24rem)] max-h-[min(76vh,560px)] flex-col overflow-hidden rounded-2xl border border-border bg-card text-card-foreground shadow-2xl",
             variant === "header"
-              ? "right-0 top-full mt-2"
-              : "bottom-full left-1/2 mb-3 -translate-x-1/2"
+              ? "top-20 right-3"
+              : "bottom-20 left-1/2 -translate-x-1/2"
           )}
           role="menu"
           aria-label="Notifications"
@@ -204,7 +204,7 @@ export function NotificationBell({
             )}
           </div>
 
-          <div className="max-h-[60vh] overflow-y-auto">
+          <div className="max-h-[min(60vh,440px)] min-h-0 overflow-y-auto">
             {loading && items.length === 0 ? (
               <div className="px-4 py-8 text-center text-sm text-muted-foreground">
                 Loading…
