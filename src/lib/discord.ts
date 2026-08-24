@@ -201,3 +201,21 @@ export async function pushDisputeMessage(
     content,
   });
 }
+
+/**
+ * Push a short status-change note (RESOLVED / CLOSED) into a ticket's bound
+ * Discord thread. Fire-and-forget; no-op when Discord is unconfigured or the
+ * thread has not been bound yet. Used by the status-update (close/resolve)
+ * endpoint so support staff see in Discord that a ticket moved state.
+ */
+export async function pushTicketStatusChange(
+  ticket: { id: string; discordThreadId: string | null },
+  status: string,
+  actorName: string
+): Promise<void> {
+  const cfg = getDiscordConfig();
+  if (!cfg || !ticket.discordThreadId) return;
+  const label = status === "CLOSED" ? "Closed" : status === "RESOLVED" ? "Resolved" : status;
+  const content = `✅ Ticket marked **${label}** by ${actorName || "AquaLink user"}.`;
+  await postToWebhook(`${cfg.webhookUrl}?thread_id=${ticket.discordThreadId}`, { content });
+}

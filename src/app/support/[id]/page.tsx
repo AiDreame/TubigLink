@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { format } from "date-fns";
+import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -37,6 +38,16 @@ export default function SupportTicketPage() {
   const [replyText, setReplyText] = useState("");
   const [replySending, setReplySending] = useState(false);
   const [replyError, setReplyError] = useState<string | null>(null);
+  const [statusUpdating, setStatusUpdating] = useState(false);
+  const [statusError, setStatusError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState<"RESOLVED" | "CLOSED" | null>(null);
+
+  const { data: session } = useSession();
+  const me = session?.user as any;
+  const canManage =
+    !!me?.id &&
+    !!ticket &&
+    (ticket.userId === me.id || me.role === "ADMIN");
 
   const fetchTicket = useCallback(async () => {
     try {
@@ -90,6 +101,26 @@ export default function SupportTicketPage() {
     }
   };
 
+  const setStatus = async (status: "RESOLVED" | "CLOSED") => {
+    setStatusUpdating(true);
+    setStatusError(null);
+    try {
+      const res = await fetch(`/api/support-tickets/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "Unable to update ticket status");
+      await fetchTicket();
+    } catch (err: any) {
+      setStatusError(err.message || "Unable to update ticket status");
+    } finally {
+      setStatusUpdating(false);
+      setConfirming(null);
+    }
+  };
+
   return (
     <main className="min-h-screen bg-background">
       <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur-md px-4 py-3 flex items-center gap-3">
@@ -114,6 +145,40 @@ export default function SupportTicketPage() {
               <Link href={`/orders/${ticket.orderId}`} className="mt-2 inline-block text-sm text-blue-600 hover:underline">
                 Linked order #{ticket.orderId.slice(0, 8)}
               </Link>
+            )}
+            {canManage && (ticket.status === "OPEN" || ticket.status === "RESOLVED") && (
+              <div className="mt-3 pt-3 border-t">
+                {statusError && <p className="text-xs text-red-600 dark:text-red-400 mb-2">{statusError}</p>}
+                {confirming ? (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm text-muted-foreground mr-1">
+                      Mark as {confirming === "RESOLVED" ? "resolved" : "closed"}?
+                    </span>
+                    <Button
+                      size="sm"
+                      variant={confirming === "CLOSED" ? "destructive" : "default"}
+                      onClick={() => setStatus(confirming)}
+                      disabled={statusUpdating}
+                    >
+                      {statusUpdating ? "Updating…" : "Confirm"}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setConfirming(null)} disabled={statusUpdating}>
+                      Cancel
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    {ticket.status === "OPEN" && (
+                      <Button size="sm" variant="outline" onClick={() => setConfirming("RESOLVED")} disabled={statusUpdating}>
+                        Resolve
+                      </Button>
+                    )}
+                    <Button size="sm" variant="destructive" onClick={() => setConfirming("CLOSED")} disabled={statusUpdating}>
+                      Close
+                    </Button>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         )}
