@@ -854,7 +854,7 @@ export default function ProviderOrdersPage() {
                       <CreditCard className="h-3 w-3" />
                       Payment
                     </div>
-                    <p className="text-sm font-bold dark:text-white">{detailOrder.paymentMethod === "GCASH" ? "GCash" : "Cash on Delivery"}</p>
+                    <p className="text-sm font-bold dark:text-white">{detailOrder.paymentMethod === "GCASH" ? (detailOrder.paymentStatus === "PAID" ? "GCash (Paid)" : "GCash") : "Cash on Delivery"}</p>
                   </div>
                 </div>
 
