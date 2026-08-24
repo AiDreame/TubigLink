@@ -530,7 +530,7 @@ export default function OrderDetailPage() {
                     ) : order.paymentStatus === "PAID" && order.disputeDeadlineAt && new Date(order.disputeDeadlineAt).getTime() > Date.now() ? (
                       <>
                         <p className="text-xs text-muted-foreground">You can report an issue until {format(new Date(order.disputeDeadlineAt), "MMM d, yyyy h:mm a")}</p>
-                        <Button variant="outline" className="mt-2 rounded-xl min-h-[44px]" onClick={() => { setDisputeError(null); setDisputeDialogOpen(true); }}>
+                        <Button variant="outline" className="mt-2 w-full rounded-xl min-h-[44px]" onClick={() => { setDisputeError(null); setDisputeDialogOpen(true); }}>
                           <HelpCircle className="h-4 w-4 mr-2" aria-hidden="true" /> Report an issue
                         </Button>
                       </>
