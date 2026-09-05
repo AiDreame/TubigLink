@@ -19,6 +19,7 @@ import {
   Truck,
   AlertTriangle,
   QrCode,
+  LifeBuoy,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NotificationBell } from "@/components/shared/NotificationBell";
@@ -34,6 +35,7 @@ const sidebarItems = [
   { label: "Earnings", icon: BarChart3, href: "/dashboard/earnings" },
   { label: "Analytics", icon: BarChart3, href: "/dashboard/analytics" },
   { label: "QR Code", icon: QrCode, href: "/dashboard/qr" },
+  { label: "Support", icon: LifeBuoy, href: "/support" },
   { label: "Settings", icon: Settings, href: "/dashboard/settings" },
 ];
 

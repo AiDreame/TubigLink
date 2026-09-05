@@ -11,7 +11,8 @@ import {
   AlertCircle,
   Plus,
   Settings,
-  Loader2
+  Loader2,
+  LifeBuoy
 } from "lucide-react";
 import { 
   Card, 
@@ -425,6 +426,12 @@ export default function DashboardHome() {
                   <Button variant="outline" className="w-full h-20 flex flex-col gap-2 rounded-2xl min-h-[80px] dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-700">
                     <Settings className="h-5 w-5" aria-hidden="true" />
                     <span className="text-xs">{MESSAGES.editStation}</span>
+                  </Button>
+                </Link>
+                <Link href="/support">
+                  <Button variant="outline" className="w-full h-20 flex flex-col gap-2 rounded-2xl min-h-[80px] dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-700">
+                    <LifeBuoy className="h-5 w-5" aria-hidden="true" />
+                    <span className="text-xs">My support tickets</span>
                   </Button>
                 </Link>
               </div>
