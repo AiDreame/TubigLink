@@ -4,8 +4,12 @@ import { createNotification } from "@/lib/notifications";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { rateLimit, tooManyRequests } from "@/lib/rate-limit";
+import { reviewDisplayName } from "@/lib/review-display";
 
-// GET /api/reviews?stationId={id} — List reviews for a station
+// GET /api/reviews?stationId={id} — List reviews for a station.
+// PUBLIC endpoint. N-09: reviewer identities are mapped to display-safe first
+// names ("Juan") with a "Verified Customer" fallback — full personal names
+// never leave this API. DB rows are untouched.
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -21,12 +25,19 @@ export async function GET(req: NextRequest) {
     const reviews = await prisma.review.findMany({
       where: { stationId },
       include: {
-        user: { select: { name: true, avatar: true } },
+        user: { select: { name: true } },
       },
       orderBy: { createdAt: "desc" },
     });
 
-    return NextResponse.json({ success: true, data: reviews });
+    const data = reviews.map((r: any) => ({
+      ...r,
+      user: {
+        name: reviewDisplayName(r.user?.name ?? null),
+      },
+    }));
+
+    return NextResponse.json({ success: true, data });
   } catch (error) {
     console.error("Review fetch error:", error);
     return NextResponse.json(
