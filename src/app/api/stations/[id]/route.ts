@@ -2,8 +2,24 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import { reviewDisplayName } from "@/lib/review-display";
 
-// GET /api/stations/[id] — Get station details with products and reviews
+// GET /api/stations/[id] — Get station details with products and reviews.
+//
+// PUBLIC endpoint (no auth). N-09 (owner decision): the owner's PERSONAL
+// name + phone (User.name/User.phone) must never appear on the public
+// storefront. This endpoint no longer includes the station owner's user
+// record at all; the storefront contact block uses the BUSINESS-provided
+// Station.phone (set via onboarding/settings), and storefront visitors reach
+// the owner through the contact form (POST /api/stations/[id]/contact).
+//
+// REVIEWS: public here too — reviewer identities are mapped to display-safe
+// first names ("Juan", "Verified Customer" fallback). Real names stay in the
+// DB, untouched.
+//
+// PAYOUT/BANK fields (payoutBankName etc.) are NOT needed by any public
+// consumer (only /api/admin/payouts reads them, from a different endpoint)
+// and are dropped from this response.
 export async function GET(
   req: NextRequest,
   { params }: { params: { id: string } }
@@ -23,13 +39,10 @@ export async function GET(
         deliveryZones: true,
         reviews: {
           include: {
-            user: { select: { name: true, avatar: true } },
+            user: { select: { name: true } },
           },
           orderBy: { createdAt: "desc" },
           take: 20,
-        },
-        user: {
-          select: { name: true, phone: true },
         },
       },
     });
@@ -41,7 +54,32 @@ export async function GET(
       );
     }
 
-    return NextResponse.json({ success: true, data: station });
+    // Decompose to a plain object so we can drop non-public fields and shape
+    // the review payload (Prisma results are class instances; mutation on the
+    // response object is not reliable, and `user` is already excluded above).
+    const { reviews, ...rest } = station as any;
+    const publicReviews = (reviews || []).map((r: any) => ({
+      ...r,
+      user: {
+        name: reviewDisplayName(r.user?.name ?? null),
+      },
+    }));
+    const publicStation: Record<string, any> = { ...rest };
+    // Payout/bank destination fields are for admins only — never public.
+    for (const key of [
+      "payoutMethod",
+      "payoutBankName",
+      "payoutAccountName",
+      "payoutAccountLast4",
+      "payoutDetails",
+    ]) {
+      delete publicStation[key];
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: { ...publicStation, reviews: publicReviews },
+    });
   } catch (error) {
     console.error("Station fetch error:", error);
     return NextResponse.json(

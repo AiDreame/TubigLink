@@ -193,7 +193,9 @@ export default function SupportTicketPage() {
               ? "AquaLink Support"
               : msg.authorRole === "STATION"
                 ? "Station"
-                : "You";
+                : msg.authorRole === "VISITOR"
+                  ? "Visitor"
+                  : "You";
             return (
               <div
                 key={msg.id}

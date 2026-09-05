@@ -12,7 +12,9 @@ import {
   ShoppingBag,
   MessageSquare,
   ChevronRight,
-  Share2
+  Share2,
+  Send,
+  CheckCircle2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +27,9 @@ import { useCart } from "@/hooks/use-cart";
 import { MESSAGES } from "@/lib/constants";
 import { format } from "date-fns";
 import Link from "next/link";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 
 export default function StationDetailPage() {
   const params = useParams();
@@ -34,6 +39,11 @@ export default function StationDetailPage() {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [contactName, setContactName] = useState("");
+  const [contactMessage, setContactMessage] = useState("");
+  const [contactSending, setContactSending] = useState(false);
+  const [contactSent, setContactSent] = useState(false);
+  const [contactError, setContactError] = useState<string | null>(null);
 
   const fetchStation = useCallback(async (id: string) => {
     setIsLoading(true);
@@ -63,6 +73,33 @@ export default function StationDetailPage() {
       setIsLoading(false);
     }
   }, []);
+
+  // Contact form (N-09): anonymous-friendly, POSTs to the station contact
+  // route. Only visitor name + message leave the form; no phone capture.
+  const submitContact = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!station || contactSending) return;
+    setContactSending(true);
+    setContactError(null);
+    try {
+      const res = await fetch(`/api/stations/${station.id}/contact`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: contactName.trim(), message: contactMessage.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || "Hindi naipadala ang mensahe. Subukan muli.");
+      }
+      setContactSent(true);
+      setContactName("");
+      setContactMessage("");
+    } catch (err: any) {
+      setContactError(err.message || "Hindi naipadala ang mensahe. Subukan muli.");
+    } finally {
+      setContactSending(false);
+    }
+  };
 
   useEffect(() => {
     const id = params.id as string;
@@ -270,6 +307,81 @@ export default function StationDetailPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Contact form (N-09): public visitors message the station owner
+                  without ever seeing the owner's personal name/phone. */}
+              <div className="bg-card rounded-2xl p-6 shadow-sm border border-border space-y-4">
+                <div>
+                  <h3 className="font-bold mb-1 text-card-foreground flex items-center gap-2">
+                    <MessageSquare className="h-4 w-4 text-blue-600 dark:text-blue-400" aria-hidden="true" />
+                    {MESSAGES.contact} {station.name}
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    The station will receive your message and reply here. No phone number needed.
+                  </p>
+                </div>
+
+                {contactSent ? (
+                  <div className="rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 p-4 flex items-start gap-2">
+                    <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400 shrink-0" aria-hidden="true" />
+                    <div>
+                      <p className="text-sm font-semibold text-green-700 dark:text-green-300">Message sent!</p>
+                      <p className="text-xs text-green-700/80 dark:text-green-300/80">
+                        The station got your message. They will reply in this app's support conversation.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <form onSubmit={submitContact} className="space-y-3">
+                    <div className="space-y-1">
+                      <Label htmlFor="contact-name" className="text-xs">Your name</Label>
+                      <Input
+                        id="contact-name"
+                        value={contactName}
+                        onChange={(e) => setContactName(e.target.value)}
+                        placeholder="e.g. Maria"
+                        maxLength={80}
+                        required
+                        className="w-full"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="contact-message" className="text-xs">Message</Label>
+                      <Textarea
+                        id="contact-message"
+                        value={contactMessage}
+                        onChange={(e) => setContactMessage(e.target.value)}
+                        placeholder="Ask about products, delivery, or your order…"
+                        maxLength={2000}
+                        rows={4}
+                        required
+                        className="w-full"
+                      />
+                      <p className="text-right text-[10px] text-muted-foreground">{contactMessage.length}/2000</p>
+                    </div>
+                    {contactError && (
+                      <p className="text-xs text-red-600 dark:text-red-400">{contactError}</p>
+                    )}
+                    <Button
+                      type="submit"
+                      className="w-full rounded-xl min-h-[44px]"
+                      disabled={contactSending || !contactName.trim() || !contactMessage.trim()}
+                    >
+                      {contactSending ? (
+                        <span className="flex items-center gap-2">
+                          <span className="h-4 w-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                          Sending…
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-2">
+                          <Send className="h-4 w-4" aria-hidden="true" />
+                          Send message
+                        </span>
+                      )}
+                    </Button>
+                  </form>
+                )}
+              </div>
             </TabsContent>
 
             <TabsContent value="reviews" className="mt-6 space-y-4" role="tabpanel">
@@ -289,10 +401,10 @@ export default function StationDetailPage() {
                       <div className="flex justify-between items-start mb-2">
                         <div className="flex items-center gap-2">
                           <div className="h-8 w-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold text-xs">
-                            {review.user?.name?.[0] || "U"}
+                            {(review.user?.name || "U").charAt(0).toUpperCase() || "U"}
                           </div>
                           <div>
-                            <p className="text-sm font-bold text-card-foreground">{review.user?.name || "Anonymous User"}</p>
+                            <p className="text-sm font-bold text-card-foreground">{review.user?.name || "Verified Customer"}</p>
                             <p className="text-[10px] text-muted-foreground">{format(new Date(review.createdAt), "MMM d, yyyy")}</p>
                           </div>
                         </div>
