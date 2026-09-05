@@ -1,24 +1,66 @@
 "use client";
 
+import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { 
-  ArrowLeft, 
-  User, 
-  Bell, 
-  Shield, 
-  Smartphone, 
-  Moon, 
-  Globe, 
-  ChevronRight
+import { signOut, useSession } from "next-auth/react";
+import {
+  ArrowLeft,
+  User,
+  Bell,
+  Shield,
+  Smartphone,
+  Moon,
+  Globe,
+  ChevronRight,
+  Loader2,
 } from "lucide-react";
+import toast from "react-hot-toast";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { ThemeToggle } from "@/components/shared/ThemeToggle";
 import { MESSAGES } from "@/lib/constants";
 
 export default function SettingsPage() {
   const router = useRouter();
+  const { data: session } = useSession();
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
+  const [deleting, setDeleting] = useState(false);
+
+  const userPhone = (session?.user as any)?.phone as string | undefined;
+  const confirmed = confirmText.trim() === "DELETE";
+
+  const handleDelete = async () => {
+    if (!confirmed || deleting) return;
+    setDeleting(true);
+    try {
+      const res = await fetch("/api/me", { method: "DELETE" });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(body?.error || "Could not delete your account.");
+        setDeleting(false);
+        return;
+      }
+      setDeleteOpen(false);
+      toast.success("Your account has been deleted.");
+      await signOut({ redirect: false });
+      router.push("/account-deleted");
+    } catch {
+      toast.error("Something went wrong. Please try again.");
+      setDeleting(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background pb-20">
@@ -121,9 +163,77 @@ export default function SettingsPage() {
           </div>
         </section>
 
-        <Button variant="ghost" className="w-full text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-300 font-bold min-h-[44px]" aria-label="Delete account">
+        <p className="text-center text-sm text-muted-foreground">
+          Read our{" "}
+          <Link href="/privacy" className="text-blue-600 dark:text-blue-400 font-medium hover:underline">
+            Privacy Policy
+          </Link>
+        </p>
+
+        <Button
+          variant="ghost"
+          className="w-full text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-300 font-bold min-h-[44px]"
+          aria-label="Delete account"
+          onClick={() => {
+            setConfirmText("");
+            setDeleteOpen(true);
+          }}
+        >
           Delete Account
         </Button>
+
+        <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Delete your account?</DialogTitle>
+              <DialogDescription>
+                This permanently deletes your account and personal data.
+                {userPhone ? (
+                  <>
+                    {" "}Account: <span className="font-bold">{userPhone}</span>.
+                  </>
+                ) : null}{" "}
+                Orders and business records are kept for legal purposes with
+                your personal details removed. This cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">
+                To confirm, type <span className="font-bold text-card-foreground">DELETE</span> below.
+              </p>
+              <Input
+                value={confirmText}
+                onChange={(e) => setConfirmText(e.target.value)}
+                placeholder="DELETE"
+                autoComplete="off"
+                aria-label="Type DELETE to confirm account deletion"
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setDeleteOpen(false)}
+                disabled={deleting}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleDelete}
+                disabled={!confirmed || deleting}
+                aria-label="Confirm account deletion"
+              >
+                {deleting ? (
+                  <span className="flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Deleting…
+                  </span>
+                ) : (
+                  "Delete my account"
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </main>
     </div>
   );

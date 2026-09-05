@@ -59,6 +59,14 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
+        // Account deletion (Apple 5.1.1(v)): deleted users can never sign back
+        // in. Generic null (same as unknown phone) to avoid leaking which
+        // numbers belonged to deleted accounts.
+        if ((user as any).deletedAt) {
+          await bcrypt.compare(credentials.password || "", DUMMY_PASSWORD_HASH);
+          return null;
+        }
+
         // S-04: always require a valid password — no passwordless bypass.
         // A missing/null password fails the bcrypt compare like any bad one.
         const storedPassword = user.password || "";
@@ -91,6 +99,23 @@ export const authOptions: NextAuthOptions = {
       // Ensure token.id has a value (use token.sub as fallback)
       if (!token.id && token.sub) {
         token.id = token.sub;
+      }
+
+      // Account deletion (Apple 5.1.1(v)): a soft-deleted user's existing
+      // sessions stop working — clear the token identity so protected routes
+      // 401 and the client is forced back to sign-in.
+      if (token.id) {
+        try {
+          const live = await prisma.user.findUnique({
+            where: { id: token.id as string },
+            select: { deletedAt: true },
+          });
+          if (!live || live.deletedAt) {
+            return { ...token, id: undefined, role: undefined, phone: undefined } as any;
+          }
+        } catch {
+          // DB hiccup — keep the token rather than logging everyone out.
+        }
       }
 
       // Check if user is a station staff member (driver, staff, manager, admin)
