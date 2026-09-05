@@ -15,7 +15,8 @@ import {
   CalendarDays,
   Droplets,
   ArrowRight,
-  Star
+  Star,
+  LifeBuoy
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -421,6 +422,21 @@ export function CustomerDashboard() {
               <p className="text-[10px] text-muted-foreground">{stats.scheduledCount} active</p>
             </div>
           </Link>
+          <Link
+            href="/support"
+            className="bg-card rounded-2xl border border-border shadow-sm p-4 flex items-center gap-3 hover:shadow-md transition-shadow min-h-[56px]"
+            aria-label="My support tickets"
+          >
+            <div className="h-10 w-10 rounded-xl bg-red-50 dark:bg-red-900/30 flex items-center justify-center text-red-600 dark:text-red-400 shrink-0">
+              <LifeBuoy className="h-5 w-5" aria-hidden="true" />
+            </div>
+            <div>
+              <p className="font-bold text-sm text-card-foreground">My support tickets</p>
+              <p className="text-[10px] text-muted-foreground">Check replies &amp; status</p>
+            </div>
+          </Link>
+          {/* Filler tile keeps the 2-col grid balanced at 6 slots (invisible) */}
+          <div className="rounded-2xl border border-transparent p-4 min-h-[56px]" aria-hidden="true" />
         </div>
       </section>
     </div>
