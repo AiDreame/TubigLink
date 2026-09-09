@@ -201,7 +201,6 @@ export async function POST(request: NextRequest) {
       }
 
       if (isPaid) {
-        const wasPaid = order.paymentStatus === "PAID";
         if (order.amountCentavos != null && typeof resourceAttributes.amount === "number" && order.amountCentavos !== resourceAttributes.amount) {
           console.warn("PayMongo payment amount mismatch", { orderId: order.id, expected: order.amountCentavos, received: resourceAttributes.amount });
         }
@@ -236,7 +235,7 @@ export async function POST(request: NextRequest) {
       }
       await tx.paymentEvent.update({ where: { id: event.id }, data: { orderId: order.id, processedAt: new Date() } });
       paymentAudit = (
-        (isPaid && !wasPaid) ? { kind: "payment.paid" as const, orderId: order.id, stationId: order.stationId }
+        (isPaid && order.paymentStatus !== "PAID") ? { kind: "payment.paid" as const, orderId: order.id, stationId: order.stationId }
         : (isFailed && order.paymentStatus !== "PAID") ? { kind: "payment.failed" as const, orderId: order.id, stationId: order.stationId }
         : isRefund ? { kind: "payment.refunded" as const, orderId: order.id, stationId: order.stationId }
         : null
