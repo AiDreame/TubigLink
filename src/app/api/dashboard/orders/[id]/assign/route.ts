@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { recordAudit } from "@/lib/audit";
 
 // PUT /api/dashboard/orders/[id]/assign — Assign a driver to an order
 // Station owner (PROVIDER) or ADMIN role staff only
@@ -98,6 +99,7 @@ export async function PUT(
       },
     });
 
+    void recordAudit({ actor: { id: userId, role: userRole || "PROVIDER" }, action: "order.driver_assign", entityType: "order", entityId: order.id, details: { before: order.driverId, after: updated.driverId, stationId: order.stationId } });
     return NextResponse.json({ success: true, data: updated });
   } catch (error) {
     console.error("Assign driver error:", error);

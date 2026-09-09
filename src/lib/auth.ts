@@ -51,11 +51,30 @@ export const authOptions: NextAuthOptions = {
           where: { phone: credentials.phone },
         });
 
+        // Audit-trail Phase 1 (S-07): login success + failure capture. The
+        // helper runs post-decision, fire-and-forget, and never throws — so it
+        // cannot change auth behavior. Lazy import avoids an auth<->audit
+        // module cycle (audit.ts imports authOptions from this file).
+        const auditLogin = (ok: boolean, userId?: string, role?: string) => {
+          import("./audit")
+            .then((m) =>
+              m.recordAudit({
+                actor: ok && userId ? { id: userId, role: role || "CUSTOMER" } : null,
+                action: ok ? "user.login" : "user.login_failed",
+                entityType: "user",
+                entityId: userId,
+                details: { phone: credentials.phone },
+              })
+            )
+            .catch(() => undefined);
+        };
+
         if (!user) {
           // S-04 (security audit 2026-08-14): run bcrypt against a dummy hash
           // so unknown-phone attempts take the same time as a real password
           // check (mitigates user-enumeration timing).
           await bcrypt.compare(credentials.password || "", DUMMY_PASSWORD_HASH);
+          auditLogin(false);
           return null;
         }
 
@@ -64,6 +83,7 @@ export const authOptions: NextAuthOptions = {
         // numbers belonged to deleted accounts.
         if ((user as any).deletedAt) {
           await bcrypt.compare(credentials.password || "", DUMMY_PASSWORD_HASH);
+          auditLogin(false, user.id, user.role);
           return null;
         }
 
@@ -75,8 +95,10 @@ export const authOptions: NextAuthOptions = {
           storedPassword
         );
         if (!isValid) {
+          auditLogin(false, user.id, user.role);
           throw new Error("Invalid credentials");
         }
+        auditLogin(true, user.id, user.role);
 
         return {
           id: user.id,

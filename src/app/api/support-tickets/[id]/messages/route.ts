@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { pushDisputeMessage } from "@/lib/discord";
 import { rateLimit, tooManyRequests } from "@/lib/rate-limit";
+import { recordAudit } from "@/lib/audit";
 
 /**
  * In-app support conversation for a GENERAL support ticket. The creator (the
@@ -63,5 +64,6 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     { authorRole, authorName, content }
   );
 
+  void recordAudit({ actor: { id: user.id, role: user.role || "CUSTOMER" }, action: "support.reply", entityType: "supportTicket", entityId: ticket.id, details: { authorRole } });
   return NextResponse.json({ success: true, data: message });
 }

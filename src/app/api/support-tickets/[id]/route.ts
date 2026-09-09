@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { pushTicketStatusChange } from "@/lib/discord";
+import { recordAudit } from "@/lib/audit";
 
 /**
  * Update a general support ticket's status (creator or admin only). Owner
@@ -61,5 +62,6 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const actorName = (user.name || user.phone || user.role || "User").slice(0, 80);
   void pushTicketStatusChange(ticket, status, actorName);
 
+  void recordAudit({ actor: { id: user.id, role: user.role || "CUSTOMER" }, action: ticket.status === "CLOSED" ? "dispute.close" : "dispute.resolve", entityType: "supportTicket", entityId: updated.id, details: { before: ticket.status, after: updated.status } });
   return NextResponse.json({ success: true, data: { id: updated.id, status: updated.status } });
 }

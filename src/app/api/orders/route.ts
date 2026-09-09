@@ -5,6 +5,7 @@ import prisma from "@/lib/prisma";
 import { createNotification } from "@/lib/notifications";
 import { isProvisional, checkProvisionalLimits } from "@/lib/provisional";
 import { applyDeliveryAutoConfirmMany } from "@/lib/delivery";
+import { recordAudit } from "@/lib/audit";
 
 export async function GET(req: NextRequest) {
   try {
@@ -60,5 +61,6 @@ export async function POST(req: NextRequest) {
       body: `New order #${order.id.substring(0, 8)} — ₱${total.toFixed(2)}`,
       link: "/dashboard/orders",
     });
+    void recordAudit({ actor: { id: user.id, role: user.role || "CUSTOMER" }, action: "order.create", entityType: "order", entityId: order.id, details: { stationId, total, paymentMethod: method, items: orderItems.length } });
     return NextResponse.json({ success: true, data: order, ...(method === "GCASH" ? { nextAction: "INITIALIZE_PAYMENT" } : {}) }, { status: 201 });  } catch (error) { console.error("Order creation error:", error); return NextResponse.json({ success: false, error: error instanceof Error ? error.message : "Failed to create order" }, { status: 500 }); }
 }

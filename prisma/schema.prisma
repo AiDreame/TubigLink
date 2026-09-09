@@ -513,6 +513,25 @@ model DisputeMessage {
   @@index([ticketId])
 }
 
+// ─── AUDIT LOG (Phase 1, owner audit-trail request) ───
+// System-wide WHO-did-WHAT-WHEN capture for users, stations, admins.
+// actorId/entityId are plain string references (NO FK relations) so rows
+// survive user/station deletion. Phase 2 (Discord delivery) reads this table.
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actorRole  String? // CUSTOMER | PROVIDER | ADMIN | STAFF | SYSTEM
+  action     String // machine-readable, e.g. "order.status_change"
+  entityType String? // user | station | order | payout | dispute | supportTicket | staff | review
+  entityId   String?
+  details    String? // compact JSON context (before/after, amounts, names)
+  createdAt  DateTime @default(now())
+
+  @@index([actorId, createdAt])
+  @@index([entityType, entityId])
+  @@index([action, createdAt])
+}
+
 model Payout {
   id                 String       @id @default(cuid())
   stationId          String

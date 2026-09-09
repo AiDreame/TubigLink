@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { ALL_PERMISSIONS } from "@/lib/permissions";
+import { recordAudit } from "@/lib/audit";
 
 // PUT /api/station/staff/[id] — Update staff permissions or role (owner only)
 export async function PUT(
@@ -82,6 +83,7 @@ export async function PUT(
       },
     });
 
+    void recordAudit({ actor: { id: userId, role: "PROVIDER" }, action: updateData.status === "DEACTIVATED" ? "staff.deactivate" : "staff.update", entityType: "staff", entityId: staffId, details: { stationId: staff.stationId, before: { role: staff.role, status: staff.status }, after: { role: updatedStaff.role, status: updatedStaff.status } } });
     return NextResponse.json({
       success: true,
       data: updatedStaff,
@@ -133,6 +135,7 @@ export async function DELETE(
       },
     });
 
+    void recordAudit({ actor: { id: userId, role: "PROVIDER" }, action: "staff.deactivate", entityType: "staff", entityId: staffId, details: { stationId: staff.stationId, via: "owner_remove" } });
     return NextResponse.json({
       success: true,
       data: { id: updatedStaff.id, status: "DEACTIVATED" },

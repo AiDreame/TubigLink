@@ -5,6 +5,7 @@ import { getActiveHoldsCentavos } from "@/lib/disputes";
 import { applyDeliveryAutoConfirmMany } from "@/lib/delivery";
 import { getPaymentIntent } from "@/lib/paymongo";
 import { PAYOUT_DISBURSEMENT_FEE_PESOS } from "@/lib/paymongo-disbursement";
+import { recordAudit } from "@/lib/audit";
 
 export async function POST(req: NextRequest) {
   if (!await requireAdmin()) return NextResponse.json({error:"Forbidden"},{status:403});
@@ -47,5 +48,6 @@ export async function POST(req: NextRequest) {
     const p=await prisma.$transaction(async tx=>{const payout=await tx.payout.create({data:{stationId:station.id,periodStart:period.start,periodEnd:period.end,grossCentavos:g,commissionCentavos:c,processingFeeCentavos:f,disbursementFeeCentavos,heldCentavos:h,adjustmentCentavos:adjustment,netCentavos}}); if(eligible.length) await tx.payoutItem.createMany({data:eligible.map((o,i)=>({payoutId:payout.id,orderId:o.id,grossCentavos:vals[i].gross,commissionCentavos:vals[i].commission,processingFeeCentavos:vals[i].fee,heldCentavos:0,netCentavos:vals[i].net}))}); return tx.payout.findUnique({where:{id:payout.id},include:payoutInclude});});
     created.push(p); ordersIncluded+=eligible.length; gross+=g; commission+=c; fees+=f; held+=h; adjustments+=adjustment; disbursementFees+=disbursementFeeCentavos; netTotal+=netCentavos;
   }
+  for (const p of created) { void recordAudit({ action: "payout.prepare", entityType: "payout", entityId: (p as any)?.id, details: { stationId: (p as any)?.stationId, netCentavos: (p as any)?.netCentavos, ordersIncluded: (p as any)?.payoutItems?.length ?? undefined } }); }
   return NextResponse.json({success:true,data:created,summary:{stationsProcessed:stations.length,payoutsCreated:created.length,ordersIncluded,grossCentavos:gross,commissionCentavos:commission,processingFeeCentavos:fees,heldCentavos:held,adjustmentCentavos:adjustments,disbursementFeeCentavos:disbursementFees,netCentavos:netTotal}});
 }

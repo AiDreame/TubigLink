@@ -5,6 +5,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { rateLimit, tooManyRequests } from "@/lib/rate-limit";
 import { reviewDisplayName } from "@/lib/review-display";
+import { recordAudit } from "@/lib/audit";
 
 // GET /api/reviews?stationId={id} — List reviews for a station.
 // PUBLIC endpoint. N-09: reviewer identities are mapped to display-safe first
@@ -141,6 +142,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    void recordAudit({ actor: { id: authenticatedUserId, role: "CUSTOMER" }, action: "review.create", entityType: "review", entityId: review.id, details: { stationId: order.stationId, orderId, rating } });
     return NextResponse.json({ success: true, data: review }, { status: 201 });
   } catch (error) {
     console.error("Review creation error:", error);

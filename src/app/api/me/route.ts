@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import { recordAudit } from "@/lib/audit";
 
 // DELETE /api/me — delete the authenticated user's own account.
 // Apple review guideline 5.1.1(v): users must be able to delete their account
@@ -99,6 +100,7 @@ export async function DELETE() {
         }),
       ]);
       await prisma.user.delete({ where: { id: user.id } });
+      void recordAudit({ actor: { id: user.id, role: sessionUser.role || "CUSTOMER" }, action: "user.delete", entityType: "user", entityId: user.id, details: { mode: "hard" } });
       return NextResponse.json({ success: true, mode: "hard" });
     }
 
@@ -152,6 +154,7 @@ export async function DELETE() {
       }),
     ]);
 
+    void recordAudit({ actor: { id: user.id, role: sessionUser.role || "CUSTOMER" }, action: "user.delete", entityType: "user", entityId: user.id, details: { mode: "soft" } });
     return NextResponse.json({ success: true, mode: "soft" });
   } catch (error) {
     console.error("Account deletion error:", error);

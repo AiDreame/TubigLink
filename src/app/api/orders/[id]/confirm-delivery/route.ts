@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { deliveryTimeline } from "@/lib/delivery";
+import { recordAudit } from "@/lib/audit";
 
 // POST /api/orders/[orderId]/confirm-delivery — Customer confirms their delivery.
 //
@@ -94,6 +95,7 @@ export async function POST(
       },
     });
 
+    void recordAudit({ actor: { id: user.id, role: user.role || "CUSTOMER" }, action: "order.delivery_confirm", entityType: "order", entityId: order.id, details: { disputeDeadlineAt: timeline.disputeDeadlineAt?.toISOString?.() ?? String(timeline.disputeDeadlineAt) } });
     return NextResponse.json({ success: true, data: updated });
   } catch (error) {
     console.error("Confirm delivery error:", error);

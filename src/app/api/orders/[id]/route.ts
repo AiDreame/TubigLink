@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { createNotification } from "@/lib/notifications";
 import { applyDeliveryAutoConfirm } from "@/lib/delivery";
+import { recordAudit } from "@/lib/audit";
 
 // GET /api/orders/[id] — Get single order details
 export async function GET(
@@ -132,6 +133,7 @@ export async function PUT(
       },
     });
 
+    void recordAudit({ actor: { id: userId, role: user.role || "CUSTOMER" }, action: "order.status_change", entityType: "order", entityId: order.id, details: { before: currentOrder.status, after: status, stationId: currentOrder.stationId } });
     // Notify the customer about status change
     await createNotification({
       userId: order.userId,
@@ -209,6 +211,7 @@ export async function DELETE(
       },
     });
 
+    void recordAudit({ actor: { id: userId, role: "CUSTOMER" }, action: "order.status_change", entityType: "order", entityId: order.id, details: { before: order.status, after: "CANCELLED", via: "customer_cancel" } });
     // Create notification for the customer confirming cancellation
     await createNotification({
       userId: order.userId,

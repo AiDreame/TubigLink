@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import { recordAudit } from "@/lib/audit";
 
 // POST /api/admin/verification/reject — Reject a station with reason
 export async function POST(req: NextRequest) {
@@ -93,6 +94,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    void recordAudit({ action: "station.reject", entityType: "station", entityId: stationId, details: { rejectionReason } });
     return NextResponse.json({
       success: true,
       data: updatedStation,

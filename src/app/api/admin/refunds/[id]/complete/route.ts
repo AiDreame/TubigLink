@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import { recordAudit } from "@/lib/audit";
 export async function POST(_req: Request, { params }: { params: { id: string } }) {
   const user = (await getServerSession(authOptions))?.user as any;
   if (!user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -17,5 +18,6 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
     if (dispute) await tx.dispute.update({ where: { id: dispute.id }, data: { status: "REFUNDED" } });
     return r;
   });
+  void recordAudit({ action: "payment.refunded", entityType: "order", entityId: refund.orderId, details: { refundId: refund.id, amountCentavos: refund.amountCentavos, via: "admin_manual_complete" } });
   return NextResponse.json({ success: true, data: updated });
 }

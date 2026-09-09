@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import prisma from "@/lib/prisma";
 import { slugify } from "@/lib/utils";
 import { clientIp, rateLimit, tooManyRequests } from "@/lib/rate-limit";
+import { recordAudit } from "@/lib/audit";
 
 export async function POST(req: Request) {
   try {
@@ -76,6 +77,7 @@ export async function POST(req: Request) {
       });
     }
 
+    void recordAudit({ action: "user.register", entityType: "user", entityId: user.id, details: { role: user.role, stationName: userRole === "PROVIDER" ? body.stationName || null : null } });
     return NextResponse.json(
       {
         success: true,

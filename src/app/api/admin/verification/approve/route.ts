@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import { recordAudit } from "@/lib/audit";
 
 // POST /api/admin/verification/approve — Full approval of a station
 export async function POST(req: NextRequest) {
@@ -103,6 +104,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    void recordAudit({ actor: { id: adminId, role: "ADMIN" }, action: "station.approve", entityType: "station", entityId: stationId, details: { stationName: station.name, complianceScore } });
     return NextResponse.json({
       success: true,
       data: updatedStation,

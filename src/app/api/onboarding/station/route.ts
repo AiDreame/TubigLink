@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { slugify } from "@/lib/utils";
+import { recordAudit } from "@/lib/audit";
 
 // POST /api/onboarding/station — Create or update onboarding data
 export async function POST(req: NextRequest) {
@@ -203,6 +204,7 @@ export async function POST(req: NextRequest) {
         },
       });
 
+      void recordAudit({ action: "station.create", entityType: "station", entityId: updated.id, details: { stationName: updated.name, via: "onboarding_complete" } });
       return NextResponse.json({
         success: true,
         message: "Onboarding complete! Your station is now live.",

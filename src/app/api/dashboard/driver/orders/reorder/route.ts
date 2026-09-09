@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { recordAudit } from "@/lib/audit";
 
 // PUT /api/dashboard/driver/orders/reorder — Update delivery sequence
 // Accepts { orders: [{ id, deliveryOrder }] }
@@ -113,6 +114,7 @@ export async function PUT(req: NextRequest) {
       )
     );
 
+    void recordAudit({ actor: { id: userId, role: userRole || "PROVIDER" }, action: "order.delivery_reorder", entityType: "order", entityId: orderIds[0], details: { orderIds, count: orderIds.length } });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Reorder error:", error);

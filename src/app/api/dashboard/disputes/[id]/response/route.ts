@@ -5,6 +5,7 @@ import prisma from "@/lib/prisma";
 import { pushDisputeMessage } from "@/lib/discord";
 import { createNotification, notifyAllAdmins } from "@/lib/notifications";
 import { applyAutoEscalate } from "@/lib/disputes";
+import { recordAudit } from "@/lib/audit";
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const user = (await getServerSession(authOptions))?.user as any;
@@ -48,5 +49,6 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     body: `${d.station?.name || "The station"} responded to the dispute on order #${d.orderId.substring(0, 8)}.`,
     link: "/admin/disputes",
   });
+  void recordAudit({ actor: { id: user.id, role: user.role || "PROVIDER" }, action: "dispute.reply", entityType: "dispute", entityId: d.id, details: { orderId: d.orderId, authorRole: "STATION" } });
   return NextResponse.json({ success: true, data: updated });
 }
