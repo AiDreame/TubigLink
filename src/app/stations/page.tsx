@@ -224,15 +224,15 @@ export default function StationsPage() {
             className="absolute inset-0 bg-black/20 dark:bg-black/50 backdrop-blur-sm" 
             onClick={() => setShowFilters(false)}
           />
-          <div className="relative w-full max-w-xs bg-card h-full shadow-xl p-6 flex flex-col border-l border-border">
-            <div className="flex items-center justify-between mb-8">
+          <div className="relative w-full max-w-xs bg-card h-full shadow-xl flex flex-col border-l border-border">
+            <div className="flex items-center justify-between px-6 py-5 pb-4 border-b border-border">
               <h2 className="text-xl font-bold text-card-foreground">Filters</h2>
               <Button variant="ghost" size="icon" onClick={() => setShowFilters(false)}>
                 <X className="h-6 w-6" />
               </Button>
             </div>
             
-            <div className="space-y-6">
+            <div className="flex-1 min-h-0 overflow-y-auto space-y-6 px-6 py-6">
               <div>
                 <h3 className="font-semibold mb-3 text-card-foreground">Sort By</h3>
                 <div className="grid grid-cols-1 gap-2">
@@ -256,7 +256,7 @@ export default function StationsPage() {
               </div>
             </div>
 
-            <div className="mt-auto pt-6 border-t border-border flex gap-3">
+            <div className="px-6 py-4 border-t border-border flex gap-3">
               <Button 
                 variant="outline" 
                 className="flex-1 rounded-xl"
