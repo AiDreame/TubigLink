@@ -12,7 +12,7 @@ import { CitySelector } from "@/components/shared/CitySelector";
 import { NotificationBell } from "@/components/shared/NotificationBell";
 import { ThemeToggle } from "@/components/shared/ThemeToggle";
 import dynamic from "next/dynamic";
-const StationMap = dynamic(() => import("@/components/shared/StationMap"), { ssr: false });
+const StationFinder = dynamic(() => import("@/components/shared/StationFinder"), { ssr: false });
 import { useCityStore } from "@/hooks/use-city";
 import { CITIES_BY_REGION } from "@/lib/constants";
 import {
@@ -47,11 +47,26 @@ export default function HomePage() {
     const featuredParams = new URLSearchParams({ featured: "true", limit: "6" });
     if (selectedCity) featuredParams.append("city", selectedCity);
     
-    const allParams = new URLSearchParams({ limit: "500" });
+    const allParams = new URLSearchParams({ limit: "50" });
+
+    // Paginated fetch: the API caps `limit` at 50, so walk pages to get
+    // every station for the finder list + map.
+    const fetchAllStations = async (): Promise<any[]> => {
+      const out: any[] = [];
+      let page = 1;
+      for (;;) {
+        allParams.set("page", String(page));
+        const r = await fetch(`/api/stations?${allParams.toString()}`).then((r) => r.json());
+        out.push(...(r.data || []));
+        if (!r.hasMore || page >= 10) break; // 10 pages × 50 = 500 cap
+        page += 1;
+      }
+      return out;
+    };
 
     const fetches: Promise<any>[] = [
       fetch(`/api/stations?${featuredParams.toString()}`).then((r) => r.json()),
-      fetch(`/api/stations?${allParams.toString()}`).then((r) => r.json()),
+      fetchAllStations(),
       fetch("/api/stats").then((r) => r.json()).catch(() => ({ success: false })),
     ];
 
@@ -63,9 +78,9 @@ export default function HomePage() {
     }
 
     Promise.all(fetches)
-      .then(([featuredData, allData, statsData, dashData]) => {
+      .then(([featuredData, allStations, statsData, dashData]) => {
         setFeaturedStations(featuredData.data || []);
-        setAllMapStations(allData.data || []);
+        setAllMapStations(allStations || []);
         if (statsData.success) setPlatformStats(statsData.data);
         if (dashData?.success) setProviderDashboard(dashData.data);
         setIsLoadingStations(false);
@@ -345,8 +360,8 @@ export default function HomePage() {
               </div>
             </section>
 
-            {/* ─── Map for visitors ──────────── */}
-            <StationMap stations={allMapStations} selectedCity={selectedCity} />
+            {/* ─── Find stations: list + map ──────────── */}
+            <StationFinder stations={allMapStations} selectedCity={selectedCity} isLoading={isLoadingStations} />
 
             {/* ─── Platform Stats ──────────────────────── */}
             <section className="mx-auto max-w-7xl px-4 py-8 lg:py-12">
