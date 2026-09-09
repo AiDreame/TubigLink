@@ -8,9 +8,12 @@
 import { useState, useRef, useEffect } from "react";
 import { Search, ChevronDown, MapPin, Check, ChevronRight } from "lucide-react";
 import {
+  PH_PROVINCES,
   PH_REGIONS,
   citiesByProvince,
   getCitiesGroupedByRegion,
+  normalizeSearchKey,
+  provinceRegion,
   searchCities,
   type CityLocation,
   type CitySearchResult,
@@ -22,6 +25,12 @@ export interface CitySelection {
   province: string;
   region: string;
   isCity: boolean;
+  /**
+   * Set when the user picked a whole province ("All of {province}"),
+   * either by clicking a province header or a province search result.
+   * When set, `province` holds the province name and `name` is "".
+   */
+  provinceSelect?: string;
 }
 
 interface CityComboboxProps {
@@ -104,11 +113,37 @@ export function CityCombobox({
 
 interface CityPickerPanelProps {
   selectedName?: string;
+  /** Currently selected province ("all cities in this province"), if any. */
+  selectedProvince?: string;
   onSelect?: (city: CitySelection) => void;
   /** Extra classes for sizing (default w-80). */
   className?: string;
   /** When set, restrict the panel to this province's cities/municipalities. */
   provinceFilter?: string;
+}
+
+/**
+ * Provinces whose name matches the query (prefix first, then substring),
+ * capped at 5, each with its region id and city count. Rendered as
+ * "All of {province}" selectable rows above the city results.
+ */
+function provinceSearchMatches(query: string): { province: string; region: string; cityCount: number }[] {
+  const q = normalizeSearchKey(query);
+  if (!q) return [];
+  const scored: { name: string; score: number }[] = [];
+  for (const p of PH_PROVINCES) {
+    const key = normalizeSearchKey(p.name);
+    if (key === q || key.startsWith(q)) scored.push({ name: p.name, score: 0 });
+    else if (key.includes(q)) scored.push({ name: p.name, score: 1 });
+  }
+  return scored
+    .sort((a, b) => a.score - b.score || a.name.localeCompare(b.name))
+    .slice(0, 5)
+    .map(({ name }) => ({
+      province: name,
+      region: provinceRegion(name),
+      cityCount: citiesByProvince(name).length,
+    }));
 }
 
 /**
@@ -118,7 +153,7 @@ interface CityPickerPanelProps {
  * With a `provinceFilter`, the panel becomes a flat list of that province's
  * cities (search stays within the province).
  */
-export function CityPickerPanel({ selectedName, onSelect, className, provinceFilter }: CityPickerPanelProps) {
+export function CityPickerPanel({ selectedName, selectedProvince, onSelect, className, provinceFilter }: CityPickerPanelProps) {
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(new Set(["ncr"]));
   const inputRef = useRef<HTMLInputElement>(null);
@@ -132,13 +167,23 @@ export function CityPickerPanel({ selectedName, onSelect, className, provinceFil
   const provinceCities = provinceFilter
     ? citiesByProvince(provinceFilter).slice().sort((a, b) => a.name.localeCompare(b.name))
     : [];
-  const results: CitySearchResult[] = query.trim()
-    ? searchCities(query, 60).filter((r) => !provinceFilter || r.province === provinceFilter)
+  const q = query.trim();
+  // Idle (no query): with provinceFilter, flat list of that province's cities.
+  // With a query: city results + matching provinces as "All of {province}" rows.
+  const results: CitySearchResult[] = q
+    ? searchCities(q, 60).filter((r) => !provinceFilter || r.province === provinceFilter)
+    : [];
+  const provinceMatches: { province: string; region: string; cityCount: number }[] = q && !provinceFilter
+    ? provinceSearchMatches(q)
     : [];
   const grouped = getCitiesGroupedByRegion();
 
   const pick = (city: CityLocation) => {
     onSelect?.({ name: city.name, province: city.province, region: city.region, isCity: city.isCity });
+  };
+
+  const pickProvince = (province: string, region: string) => {
+    onSelect?.({ name: "", province, region, isCity: false, provinceSelect: province });
   };
 
   const toggleRegion = (regionId: string) => {
@@ -169,13 +214,38 @@ export function CityPickerPanel({ selectedName, onSelect, className, provinceFil
 
       {/* Results */}
       <div className="max-h-80 overflow-y-auto p-2 space-y-1">
-        {query.trim() ? (
-          results.length === 0 ? (
+        {q ? (
+          results.length === 0 && provinceMatches.length === 0 ? (
             <p className="px-3 py-4 text-center text-sm text-muted-foreground">
               No city found for “{query}”
             </p>
           ) : (
-            results.map((r) => (
+            <>
+              {provinceMatches.map((pm) => (
+                <button
+                  key={`prov:${pm.province}`}
+                  type="button"
+                  onClick={() => pickProvince(pm.province, pm.region)}
+                  className={cn(
+                    "w-full text-left px-3 py-2 rounded-xl text-sm transition-colors flex items-center gap-2",
+                    selectedProvince === pm.province
+                      ? "bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium"
+                      : "text-card-foreground hover:bg-muted"
+                  )}
+                >
+                  <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">All of {pm.province}</span>
+                    <span className="block truncate text-[11px] text-muted-foreground">
+                      Province · {pm.cityCount} {pm.cityCount === 1 ? "city/municipality" : "cities & municipalities"}
+                    </span>
+                  </span>
+                  {selectedProvince === pm.province && (
+                    <Check className="h-4 w-4 shrink-0 text-blue-500" />
+                  )}
+                </button>
+              ))}
+              {results.map((r) => (
               <button
                 key={r.id}
                 type="button"
@@ -196,7 +266,8 @@ export function CityPickerPanel({ selectedName, onSelect, className, provinceFil
                   <Check className="h-4 w-4 shrink-0 text-blue-500" />
                 )}
               </button>
-            ))
+              ))}
+            </>
           )
         ) : provinceFilter ? (
           <div className="space-y-0.5">
@@ -246,9 +317,22 @@ export function CityPickerPanel({ selectedName, onSelect, className, provinceFil
                 {isExpanded &&
                   group.provinces.map((prov) => (
                     <div key={prov.province} className="pl-2">
-                      <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground">
-                        {prov.province}
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => pickProvince(prov.province, group.regionId)}
+                        title={`All of ${prov.province}`}
+                        className={cn(
+                          "w-full text-left px-2 py-1 text-[10px] font-semibold rounded-md transition-colors flex items-center gap-1",
+                          selectedProvince === prov.province
+                            ? "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30"
+                            : "text-muted-foreground hover:text-blue-600 dark:hover:text-blue-400 hover:bg-muted"
+                        )}
+                      >
+                        <span className="truncate">{prov.province}</span>
+                        <span className="ml-auto shrink-0 font-normal opacity-70">
+                          All{selectedProvince === prov.province ? " ✓" : ""}
+                        </span>
+                      </button>
                       {prov.cities.map((city) => (
                         <button
                           key={city.id}

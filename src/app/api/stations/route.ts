@@ -6,6 +6,7 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const city = searchParams.get("city");
+    const province = searchParams.get("province");
     const barangay = searchParams.get("barangay");
     const featured = searchParams.get("featured");
     const query = searchParams.get("query");
@@ -17,6 +18,7 @@ export async function GET(req: NextRequest) {
     const where: any = { isActive: true };
 
     if (city) where.city = { contains: city };
+    if (province) where.province = { contains: province };
     if (barangay) where.barangay = { contains: barangay };
     if (featured === "true") where.isFeatured = true;
     if (query) {

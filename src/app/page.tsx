@@ -29,7 +29,7 @@ import { CustomerDashboard } from "@/components/customer/Dashboard";
 // Home page component — landing screen for AquaLink PH
 export default function HomePage() {
   const { data: session, status } = useSession();
-  const { selectedCity, selectedRegion, getRegionTagline } = useCityStore();
+  const { selectedCity, selectedProvince, selectedRegion, getRegionTagline } = useCityStore();
   const [searchQuery, setSearchQuery] = useState("");
   const [featuredStations, setFeaturedStations] = useState<any[]>([]);
   const [allMapStations, setAllMapStations] = useState<any[]>([]);
@@ -45,7 +45,8 @@ export default function HomePage() {
     setIsLoadingStations(true);
     
     const featuredParams = new URLSearchParams({ featured: "true", limit: "6" });
-    if (selectedCity) featuredParams.append("city", selectedCity);
+    if (selectedProvince) featuredParams.append("province", selectedProvince);
+    else if (selectedCity) featuredParams.append("city", selectedCity);
     
     const allParams = new URLSearchParams({ limit: "50" });
 
@@ -88,19 +89,23 @@ export default function HomePage() {
       .catch(() => {
         setIsLoadingStations(false);
       });
-  }, [selectedCity, userRole]);
+  }, [selectedCity, selectedProvince, userRole]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchQuery.trim()) {
-      window.location.href = `/stations?query=${encodeURIComponent(searchQuery)}&city=${encodeURIComponent(selectedCity)}`;
+      window.location.href = `/stations?query=${encodeURIComponent(searchQuery)}&${areaParam}`;
     } else {
-      window.location.href = `/stations?city=${encodeURIComponent(selectedCity)}`;
+      window.location.href = `/stations?${areaParam}`;
     }
   };
 
   const regionInfo = CITIES_BY_REGION[selectedRegion];
-  const isNationwide = !selectedCity;
+  const isNationwide = !selectedCity && !selectedProvince;
+  const areaShort = selectedProvince || selectedCity || "";
+  const areaParam = selectedProvince
+    ? `province=${encodeURIComponent(selectedProvince)}`
+    : `city=${encodeURIComponent(selectedCity)}`;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-950">
@@ -338,7 +343,7 @@ export default function HomePage() {
                       <div className="flex items-center gap-2 mt-2">
                         <p className="text-xs text-blue-200 flex items-center gap-1">
                           <MapPin className="h-3 w-3" />
-                          Service area: {isNationwide ? "Nationwide" : selectedCity}
+                          Service area: {isNationwide ? "Nationwide" : areaShort}
                         </p>
                         <span className="text-blue-300 text-xs">•</span>
                         <CitySelector variant="hero" />
@@ -361,7 +366,7 @@ export default function HomePage() {
             </section>
 
             {/* ─── Find stations: list + map ──────────── */}
-            <StationFinder stations={allMapStations} selectedCity={selectedCity} isLoading={isLoadingStations} />
+            <StationFinder stations={allMapStations} selectedCity={selectedCity} selectedProvince={selectedProvince} isLoading={isLoadingStations} />
 
             {/* ─── Platform Stats ──────────────────────── */}
             <section className="mx-auto max-w-7xl px-4 py-8 lg:py-12">
@@ -404,10 +409,10 @@ export default function HomePage() {
           <section className="mx-auto max-w-7xl px-4 py-12">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold text-foreground">
-                {isNationwide ? "Mga Station Nationwide" : `Mga Station sa ${selectedCity}`}
+                {isNationwide ? "Mga Station Nationwide" : `Mga Station sa ${areaShort}`}
               </h2>
               <Link
-                href={`/stations?city=${encodeURIComponent(selectedCity)}`}
+                href={selectedProvince ? `/stations?province=${encodeURIComponent(selectedProvince)}` : `/stations?city=${encodeURIComponent(selectedCity)}`}
                 className="text-sm text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
               >
                 See All <ChevronRight className="h-4 w-4" />
@@ -472,7 +477,7 @@ export default function HomePage() {
               <div className="text-center py-12 bg-muted rounded-2xl">
                 <Droplets className="h-12 w-12 mx-auto text-muted-foreground/50 mb-3" />
                 <p className="text-muted-foreground">
-                  No stations found in {selectedCity}. Try selecting a different city above.
+                  No stations found in {areaShort || "the Philippines"}. Try selecting a different area above.
                 </p>
                 <Button className="mt-4 rounded-full" variant="outline" asChild>
                   <Link href="/onboarding/station">

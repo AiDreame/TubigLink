@@ -33,6 +33,7 @@ const WATER_FILTERS = ["PURIFIED", "MINERAL", "ALKALINE"] as const;
 interface StationFinderProps {
   stations: FinderStation[];
   selectedCity: string;
+  selectedProvince?: string;
   isLoading: boolean;
 }
 
@@ -44,7 +45,8 @@ function openBadge(open: boolean | null) {
   return null;
 }
 
-export default function StationFinder({ stations, selectedCity, isLoading }: StationFinderProps) {
+export default function StationFinder({ stations, selectedCity, selectedProvince, isLoading }: StationFinderProps) {
+  const areaShort = selectedProvince || selectedCity || "";
   const [query, setQuery] = useState("");
   const [waterType, setWaterType] = useState<string | null>(null);
   const [featuredOnly, setFeaturedOnly] = useState(false);
@@ -69,7 +71,7 @@ export default function StationFinder({ stations, selectedCity, isLoading }: Sta
       setLocStatus(status);
     });
     return () => { cancelled = true; };
-  }, [selectedCity]);
+  }, [selectedCity, selectedProvince]);
 
   const distances = useMemo(() => {
     const d: Record<string, number> = {};
@@ -86,7 +88,7 @@ export default function StationFinder({ stations, selectedCity, isLoading }: Sta
     const q = query.trim().toLowerCase();
     let rows = stations.filter((s) => {
       if (q) {
-        const hay = `${s.name} ${s.barangay ?? ""} ${s.city ?? ""}`.toLowerCase();
+        const hay = `${s.name} ${s.barangay ?? ""} ${s.city ?? ""} ${s.province ?? ""}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       if (waterType && !stationWaterTypes(s).includes(waterType)) return false;
@@ -127,7 +129,7 @@ export default function StationFinder({ stations, selectedCity, isLoading }: Sta
         <div>
           <h2 className="text-2xl font-bold text-foreground">Find water stations</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            {isLoading ? "Loading stations…" : `${filtered.length} station${filtered.length === 1 ? "" : "s"}${selectedCity ? ` near ${selectedCity}` : " nationwide"}`}
+            {isLoading ? "Loading stations…" : `${filtered.length} station${filtered.length === 1 ? "" : "s"}${areaShort ? ` near ${areaShort}` : " nationwide"}`}
             {locStatus.state === "found" && userLoc && " · sorted nearest first"}
           </p>
         </div>
@@ -172,8 +174,8 @@ export default function StationFinder({ stations, selectedCity, isLoading }: Sta
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search station name, barangay, or city…"
-            aria-label="Search stations by name, barangay, or city"
+            placeholder="Search station name, barangay, city, or province…"
+            aria-label="Search stations by name, barangay, city, or province"
             className="w-full rounded-xl border border-border bg-card pl-9 pr-8 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-blue-500 min-h-[44px]"
           />
           {query && (
@@ -282,7 +284,7 @@ export default function StationFinder({ stations, selectedCity, isLoading }: Sta
               <p className="text-muted-foreground text-sm">
                 {hasActiveFilters
                   ? "No stations match your search or filters. Try widening them."
-                  : `No stations found${selectedCity ? ` in ${selectedCity}` : ""}. Try selecting a different city.`}
+                  : `No stations found${areaShort ? ` in ${areaShort}` : ""}. Try selecting a different area.`}
               </p>
               {hasActiveFilters && (
                 <Button variant="outline" size="sm" className="mt-4 rounded-full" onClick={clearFilters}>
@@ -363,7 +365,7 @@ export default function StationFinder({ stations, selectedCity, isLoading }: Sta
           )}
           {filtered.length > 0 && (
             <Link
-              href={`/stations?city=${encodeURIComponent(selectedCity)}`}
+              href={selectedProvince ? `/stations?province=${encodeURIComponent(selectedProvince)}` : `/stations?city=${encodeURIComponent(selectedCity)}`}
               className="mt-3 text-sm text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1"
             >
               View all stations <ChevronRight className="h-4 w-4" aria-hidden />

@@ -7,6 +7,7 @@ export interface FinderStation {
   name: string;
   barangay?: string | null;
   city?: string | null;
+  province?: string | null;
   address?: string | null;
   latitude?: number | null;
   longitude?: number | null;
