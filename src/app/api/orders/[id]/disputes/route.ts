@@ -6,7 +6,7 @@ import { createNotification, notifyAllAdmins, notifyStationUsers } from "@/lib/n
 import { applyAutoEscalateMany, orderNetCentavos } from "@/lib/disputes";
 import { DISPUTE_WINDOW_HOURS } from "@/lib/delivery";
 import { rateLimit, tooManyRequests } from "@/lib/rate-limit";
-import { pushDisputeCreated } from "@/lib/discord";
+import { ensureTicketChannel } from "@/lib/discord";
 import { recordAudit } from "@/lib/audit";
 
 const types = ["NOT_DELIVERED", "QUALITY", "OTHER"];
@@ -52,12 +52,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (!types.includes(type) || !description || description.length > 2000 || (evidence && evidence.length > 4000)) return NextResponse.json({ error: "Invalid dispute details" }, { status: 400 });
   const dispute = await prisma.dispute.create({ data: { orderId: order.id, customerId: user.id, stationId: order.stationId, type, description, evidence, amountHeldCentavos: orderNetCentavos(order), openedAt: now, responseDeadlineAt: new Date(now.getTime() + 24 * 3600000), status: "OPEN" }, include: include });
   // Seed the support conversation with the customer's report, then mirror it
-  // into the Discord support thread (fire-and-forget; no-op when unconfigured).
+  // into the per-ticket Discord channel (Phase 2a, fire-and-forget; no-op
+  // when unconfigured). New disputes go to per-ticket channels.
   const customerName = user.name || user.phone || "A customer";
   await prisma.disputeMessage.create({ data: { disputeId: dispute.id, authorRole: "CUSTOMER", authorName: customerName, content: description } });
-  void pushDisputeCreated(
+  void ensureTicketChannel(
+    "dispute",
     { id: dispute.id, orderId: order.id, type, description },
-    { customerName }
+    { reporterName: customerName, reporterLabel: "Customer" }
   );
   // Notify everyone involved, each with a role-appropriate link:
   //  - station owner + all active staff  -> /dashboard/disputes

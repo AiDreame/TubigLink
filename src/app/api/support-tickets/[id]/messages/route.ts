@@ -60,7 +60,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   // Push into the Discord thread once available; never block or fail the request.
   void pushDisputeMessage(
-    { id: ticket.id, discordThreadId: ticket.discordThreadId },
+    { id: ticket.id, discordThreadId: ticket.discordThreadId, discordChannelId: ticket.discordChannelId },
     { authorRole, authorName, content }
   );
 

@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { createNotification, notifyAllAdmins } from "@/lib/notifications";
 import { rateLimit, tooManyRequests } from "@/lib/rate-limit";
-import { pushSupportTicketCreated } from "@/lib/discord";
+import { ensureTicketChannel } from "@/lib/discord";
 import { recordAudit } from "@/lib/audit";
 
 /**
@@ -64,13 +64,16 @@ export async function POST(req: NextRequest) {
   });
 
   // Seed the support conversation with the reporter's issue, then mirror it
-  // into the Discord support thread (fire-and-forget; no-op when unconfigured).
+  // into the per-ticket Discord channel (Phase 2a, fire-and-forget; no-op
+  // when unconfigured). New entities go to per-ticket channels; the old
+  // webhook-thread flow is kept only for legacy records (no discordChannelId).
   const authorRole = user.role === "PROVIDER" ? "STATION" : "CUSTOMER";
   const authorName = (user.name || user.phone || authorRole).slice(0, 80);
   await prisma.disputeMessage.create({
     data: { ticketId: ticket.id, authorRole, authorName, content: description },
   });
-  void pushSupportTicketCreated(
+  void ensureTicketChannel(
+    "ticket",
     { id: ticket.id, orderId: orderId || null, category, description },
     { reporterName: authorName, reporterLabel: user.role === "PROVIDER" ? "Station" : "Customer" }
   );

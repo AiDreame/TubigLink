@@ -464,6 +464,7 @@ model Dispute {
   @@index([orderId])
   @@index([responseDeadlineAt])
   @@index([discordThreadId])
+  @@index([discordChannelId])
 }
 
 // ─── SUPPORT TICKET (general issue report) ──────────
@@ -489,6 +490,7 @@ model SupportTicket {
   @@index([orderId])
   @@index([status])
   @@index([discordThreadId])
+  @@index([discordChannelId])
 }
 
 // A single message in a dispute's OR support ticket's conversation. Used for
