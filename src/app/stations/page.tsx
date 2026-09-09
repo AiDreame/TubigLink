@@ -16,7 +16,7 @@ import { useCityStore } from "@/hooks/use-city";
 
 export default function StationsPage() {
   const router = useRouter();
-  const { selectedCity, setCity } = useCityStore();
+  const { selectedCity, selectedProvince, setCity, setProvince } = useCityStore();
   const [searchQuery, setSearchQuery] = useState("");
   const [stations, setStations] = useState<StationWithProducts[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -24,9 +24,28 @@ export default function StationsPage() {
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
   const [totalCount, setTotalCount] = useState(0);
 
+  // Honor deep links: ?province=X selects the whole province (clearing any
+  // city), ?city=X selects a city (clearing any province). Runs when the
+  // page mounts with URL params.
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    const prov = sp.get("province");
+    const city = sp.get("city");
+    if (prov) setProvince(prov);
+    else if (city) setCity(city === "Nationwide" ? "" : city);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     fetchStations();
-  }, [selectedCity, activeFilter]);
+  }, [selectedCity, selectedProvince, activeFilter]);
+
+  // "All of {province}" label for province selections, else the city (or nationwide).
+  const areaLabel = selectedProvince
+    ? `All of ${selectedProvince}`
+    : selectedCity || "Nationwide";
+  // Short copy for "N stations in {area}" headings.
+  const areaShort = selectedProvince || selectedCity || "the Philippines";
 
   const fetchStations = async () => {
     setIsLoading(true);
@@ -34,7 +53,8 @@ export default function StationsPage() {
       const params = new URLSearchParams();
       if (searchQuery) params.append("query", searchQuery);
       if (activeFilter) params.append("type", activeFilter);
-      if (selectedCity) params.append("city", selectedCity);
+      if (selectedProvince) params.append("province", selectedProvince);
+      else if (selectedCity) params.append("city", selectedCity);
 
       const res = await fetch(`/api/stations?${params.toString()}`);
       const data = await res.json();
@@ -132,11 +152,11 @@ export default function StationsPage() {
       <main className="max-w-7xl mx-auto px-4 py-6">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-lg lg:text-xl font-bold text-foreground">
-            {isLoading ? "Searching..." : `${totalCount} station${totalCount !== 1 ? 's' : ''} in ${selectedCity}`}
+            {isLoading ? "Searching..." : `${totalCount} station${totalCount !== 1 ? 's' : ''} in ${areaShort}`}
           </h1>
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <MapPin className="h-3 w-3" />
-            <span>{selectedCity}, PH</span>
+            <span>{areaShort}, PH</span>
           </div>
         </div>
 
@@ -188,11 +208,11 @@ export default function StationsPage() {
             <div className="h-20 w-20 rounded-full bg-muted flex items-center justify-center mb-4">
               <Search className="h-10 w-10 text-muted-foreground/50" />
             </div>
-            <h2 className="text-xl font-bold text-foreground">No stations found in {selectedCity}</h2>
+            <h2 className="text-xl font-bold text-foreground">No stations found in {areaShort}</h2>
             <p className="text-muted-foreground mt-1">
-              {selectedCity === "Manila" 
+              {selectedCity === "Manila" && !selectedProvince
                 ? "Try adjusting your filters or search terms" 
-                : `We're expanding! Try selecting a different city above.`}
+                : `We're expanding! Try selecting a different area above.`}
             </p>
             <div className="flex gap-2 mt-4">
               <Button 
@@ -249,9 +269,9 @@ export default function StationsPage() {
               </div>
 
               <div>
-                <h3 className="font-semibold mb-3 text-card-foreground">City</h3>
+                <h3 className="font-semibold mb-3 text-card-foreground">Service area</h3>
                 <div className="text-sm text-muted-foreground mb-2">
-                  Currently browsing: <strong className="text-card-foreground">{selectedCity}</strong>
+                  Currently browsing: <strong className="text-card-foreground">{areaLabel}</strong>
                 </div>
               </div>
             </div>

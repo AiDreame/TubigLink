@@ -12,7 +12,7 @@ interface CitySelectorProps {
 }
 
 export function CitySelector({ variant = "compact", onChange }: CitySelectorProps) {
-  const { selectedCity, setCity } = useCityStore();
+  const { selectedCity, selectedProvince, setCity, setProvince } = useCityStore();
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -28,6 +28,13 @@ export function CitySelector({ variant = "compact", onChange }: CitySelectorProp
   }, []);
 
   const handleSelect = (city: CitySelection) => {
+    // Province pick ("All of {province}") clears the city and selects the province.
+    if (city.provinceSelect) {
+      setProvince(city.provinceSelect, city.region);
+      setIsOpen(false);
+      onChange?.(city.name);
+      return;
+    }
     // Pass the picked region explicitly so ambiguous names (e.g. "Buenavista",
     // "San Juan") resolve to the region the user actually selected.
     setCity(city.name, city.region);
@@ -40,6 +47,11 @@ export function CitySelector({ variant = "compact", onChange }: CitySelectorProp
     setIsOpen(false);
     onChange?.("");
   };
+
+  // Displayed service-area label: province selection wins over city.
+  const areaLabel = selectedProvince
+    ? `All of ${selectedProvince}`
+    : selectedCity || "Nationwide";
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -55,7 +67,7 @@ export function CitySelector({ variant = "compact", onChange }: CitySelectorProp
       >
         <MapPin className={cn(variant === "hero" ? "h-4 w-4" : "h-3 w-3")} />
         <span className="font-medium">
-          {variant === "hero" ? `Service area: ${selectedCity}` : selectedCity}
+          {variant === "hero" ? `Service area: ${areaLabel}` : areaLabel}
         </span>
         <ChevronDown className={cn(variant === "hero" ? "h-3.5 w-3.5" : "h-3 w-3", "opacity-60")} />
       </button>
@@ -71,12 +83,13 @@ export function CitySelector({ variant = "compact", onChange }: CitySelectorProp
             >
               <span className="text-lg">🇵🇭</span>
               <span>Nationwide — All Cities</span>
-              {selectedCity === "" && (
+              {selectedCity === "" && !selectedProvince && (
                 <span className="ml-auto text-[10px] text-blue-500 font-bold">✓</span>
               )}
             </button>
             <CityPickerPanel
               selectedName={selectedCity || undefined}
+              selectedProvince={selectedProvince || undefined}
               onSelect={handleSelect}
               className="w-full border-0 rounded-none shadow-none"
             />
