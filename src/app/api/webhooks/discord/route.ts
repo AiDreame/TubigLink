@@ -1,25 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import {
-  getDiscordConfig,
-  discordSecretOk,
-  TICKET_MARKER_RE,
-} from "@/lib/discord";
+import { getDiscordConfig, discordSecretOk } from "@/lib/discord";
 import { createNotification, notifyAllAdmins, notifyStationUsers } from "@/lib/notifications";
 import { rateLimit, tooManyRequests } from "@/lib/rate-limit";
 
 /**
  * Incoming endpoint called by scripts/discord-bot.mjs (and by the app itself for
- * binding). Two events:
+ * binding). Three events:
  *
  *   bind    { action:"bind", disputeId, threadId, channelId }
  *           -> store discordThreadId on the dispute so follow-up app messages
- *              are posted into the right thread.
+ *              are posted into the right thread (legacy thread flow).
  *
  *   message { action:"message", threadId, content, authorName, authorId }
  *           -> reverse-map threadId -> dispute by discordThreadId, then append
  *              a DisputeMessage (authorRole=STAFF) so the support reply is
  *              visible 3-party (customer / station / admin) in the app.
+ *
+ *   channel_message { action:"channel_message", channelId, content,
+ *                     authorName, authorAvatar?, authorId?, timestamp? }
+ *           -> reverse-map channelId -> dispute/ticket by discordChannelId
+ *              (Phase 2a per-ticket channels), then append the same STAFF
+ *              DisputeMessage + notifications as `message`.
  *
  * SECURITY: every call must carry the shared secret as a Bearer token
  * (DISCORD_WEBHOOK_SECRET). Without the secret configured the route is fully
@@ -117,68 +119,116 @@ export async function POST(req: NextRequest) {
     if (!rl.ok) return tooManyRequests("Rate limit exceeded", rl.retryAfterSec);
 
     const authorName = String(body.authorName || "Support").trim().slice(0, 80) || "Support";
+    return appendStaffReply({ dispute, ticket, authorName, content });
+  }
 
-    if (ticket) {
-      const message = await prisma.disputeMessage.create({
-        data: {
-          ticketId: ticket.id,
-          authorRole: "STAFF",
-          authorName,
-          content,
-        },
-      });
-      // Notify the ticket creator and every admin that support replied.
-      await createNotification({
-        userId: ticket.userId,
-        type: "SUPPORT",
-        title: "Support replied",
-        body: "AquaLink support replied to your issue report.",
-        link: `/support/${ticket.id}`,
-      });
-      await notifyAllAdmins({
-        type: "SUPPORT",
-        title: "Support replied to ticket",
-        body: `AquaLink support replied to a support ticket.`,
-        link: `/admin/support`,
-      });
-      return NextResponse.json({ success: true, data: message });
+  if (action === "channel_message") {
+    // Phase 2a: a staff reply typed in a `ticket-*` channel, forwarded by the
+    // bot. Same self-echo guard as the legacy path.
+    if (cfg.selfUserId && String(body.authorId || "") === cfg.selfUserId) {
+      return NextResponse.json({ success: true, ignored: "self" });
+    }
+    const channelId = String(body.channelId || "").trim();
+    const content = typeof body.content === "string" ? body.content.trim() : "";
+    if (!/^\d+$/.test(channelId) || !content || content.length > 4000) {
+      return NextResponse.json({ error: "Invalid message payload" }, { status: 400 });
     }
 
-    // Dispute branch (dispute is non-null here).
+    // Reverse-map channelId -> Dispute OR SupportTicket by discordChannelId.
+    const dispute = await prisma.dispute.findFirst({
+      where: { discordChannelId: channelId },
+      include: { order: true, station: { select: { name: true } } },
+    });
+    const ticket = dispute
+      ? null
+      : await prisma.supportTicket.findFirst({
+          where: { discordChannelId: channelId },
+          include: { user: { select: { name: true, phone: true } }, order: true },
+        });
+    if (!dispute && !ticket) {
+      return NextResponse.json({ error: "No ticket for channel" }, { status: 404 });
+    }
+
+    const rl = rateLimit(`discord-inbound:${channelId}`, 30, 60 * 1000);
+    if (!rl.ok) return tooManyRequests("Rate limit exceeded", rl.retryAfterSec);
+
+    const authorName = String(body.authorName || "Support").trim().slice(0, 80) || "Support";
+    return appendStaffReply({ dispute, ticket, authorName, content });
+  }
+
+  return NextResponse.json({ error: "Unknown action" }, { status: 400 });
+}
+
+/**
+ * Shared STAFF-reply append for both inbound events (`message` from legacy
+ * threads, `channel_message` from per-ticket channels). Creates the
+ * DisputeMessage row + the same customer/station/admin notifications.
+ */
+async function appendStaffReply(args: {
+  dispute: { id: string; customerId: string; stationId: string; orderId: string } | null;
+  ticket: { id: string; userId: string } | null;
+  authorName: string;
+  content: string;
+}) {
+  const { dispute, ticket, authorName, content } = args;
+  if (ticket) {
     const message = await prisma.disputeMessage.create({
       data: {
-        disputeId: dispute!.id,
+        ticketId: ticket.id,
         authorRole: "STAFF",
         authorName,
         content,
       },
     });
-
-    // Notify the customer, the station and every admin that support replied.
+    // Notify the ticket creator and every admin that support replied.
     await createNotification({
-      userId: dispute!.customerId,
-      type: "DISPUTE",
+      userId: ticket.userId,
+      type: "SUPPORT",
       title: "Support replied",
-      body: `AquaLink support replied to your issue report on order #${dispute!.orderId.slice(0, 8)}.`,
-      link: `/orders/${dispute!.orderId}`,
-    });
-    await notifyStationUsers(dispute!.stationId, {
-      type: "DISPUTE",
-      title: "Support replied to dispute",
-      body: `AquaLink support replied to the dispute on order #${dispute!.orderId.slice(0, 8)}.`,
-      link: "/dashboard/disputes",
+      body: "AquaLink support replied to your issue report.",
+      link: `/support/${ticket.id}`,
     });
     await notifyAllAdmins({
-      type: "DISPUTE",
-      title: "Support replied to dispute",
-      body: `AquaLink support replied to the dispute on order #${dispute!.orderId.slice(0, 8)}.`,
-      link: "/admin/disputes",
+      type: "SUPPORT",
+      title: "Support replied to ticket",
+      body: `AquaLink support replied to a support ticket.`,
+      link: `/admin/support`,
     });
-
     return NextResponse.json({ success: true, data: message });
   }
 
-  return NextResponse.json({ error: "Unknown action" }, { status: 400 });
+  // Dispute branch (dispute is non-null here).
+  const message = await prisma.disputeMessage.create({
+    data: {
+      disputeId: dispute!.id,
+      authorRole: "STAFF",
+      authorName,
+      content,
+    },
+  });
+
+  // Notify the customer, the station and every admin that support replied.
+  await createNotification({
+    userId: dispute!.customerId,
+    type: "DISPUTE",
+    title: "Support replied",
+    body: `AquaLink support replied to your issue report on order #${dispute!.orderId.slice(0, 8)}.`,
+    link: `/orders/${dispute!.orderId}`,
+  });
+  await notifyStationUsers(dispute!.stationId, {
+    type: "DISPUTE",
+    title: "Support replied to dispute",
+    body: `AquaLink support replied to the dispute on order #${dispute!.orderId.slice(0, 8)}.`,
+    link: "/dashboard/disputes",
+  });
+  await notifyAllAdmins({
+    type: "DISPUTE",
+    title: "Support replied to dispute",
+    body: `AquaLink support replied to the dispute on order #${dispute!.orderId.slice(0, 8)}.`,
+    link: "/admin/disputes",
+  });
+
+  return NextResponse.json({ success: true, data: message });
 }
 
 // GET: disabled — nothing to expose.

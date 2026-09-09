@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
-import { pushTicketStatusChange } from "@/lib/discord";
+import { pushTicketStatusChange, archiveTicketChannel } from "@/lib/discord";
 import { recordAudit } from "@/lib/audit";
 
 /**
@@ -57,10 +57,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     data: { status },
   });
 
-  // Push a short note into the bound Discord thread (fire-and-forget; no-op when
-  // Discord is unconfigured or no thread exists yet).
+  // Push a short note into the bound Discord destination (fire-and-forget;
+  // no-op when Discord is unconfigured) and archive the per-ticket channel
+  // into "Closed Tickets" on RESOLVED/CLOSED (both are terminal here).
   const actorName = (user.name || user.phone || user.role || "User").slice(0, 80);
   void pushTicketStatusChange(ticket, status, actorName);
+  void archiveTicketChannel(ticket.discordChannelId);
 
   void recordAudit({ actor: { id: user.id, role: user.role || "CUSTOMER" }, action: ticket.status === "CLOSED" ? "dispute.close" : "dispute.resolve", entityType: "supportTicket", entityId: updated.id, details: { before: ticket.status, after: updated.status } });
   return NextResponse.json({ success: true, data: { id: updated.id, status: updated.status } });

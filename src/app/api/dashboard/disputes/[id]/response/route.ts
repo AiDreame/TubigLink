@@ -33,7 +33,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   await prisma.disputeMessage.create({
     data: { disputeId: d.id, authorRole: "STATION", authorName, content: response },
   });
-  void pushDisputeMessage({ id: d.id, discordThreadId: d.discordThreadId }, { authorRole: "STATION", authorName, content: response });
+  void pushDisputeMessage({ id: d.id, discordThreadId: d.discordThreadId, discordChannelId: d.discordChannelId }, { authorRole: "STATION", authorName, content: response });
 
   // Notify the customer and every admin that the station has responded.
   await createNotification({

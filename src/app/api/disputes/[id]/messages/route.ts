@@ -70,7 +70,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   });
 
   // Push into the Discord thread once available; never block or fail the request.
-  void pushDisputeMessage({ id: d.id, discordThreadId: d.discordThreadId }, { authorRole, authorName, content });
+  void pushDisputeMessage({ id: d.id, discordThreadId: d.discordThreadId, discordChannelId: d.discordChannelId }, { authorRole, authorName, content });
 
   void recordAudit({ actor: { id: user.id, role: user.role || "CUSTOMER" }, action: "dispute.reply", entityType: "dispute", entityId: d.id, details: { orderId: d.orderId, authorRole } });
   return NextResponse.json({ success: true, data: message });
