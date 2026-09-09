@@ -103,3 +103,106 @@ export const WATER_TYPE_LABELS: Record<string, string> = {
   MINERAL: "Mineral",
   ALKALINE: "Alkaline",
 };
+
+// ---------------------------------------------------------------------------
+// Shared station sorting — single code path for the home-page finder and the
+// /stations browse page so both order identically for the same key.
+// ---------------------------------------------------------------------------
+
+/** All supported sort keys, shared by StationFinder and /stations. */
+export type StationSortKey =
+  | "recommended"
+  | "nearest"
+  | "rated"
+  | "fee"
+  | "open"
+  | "featured"
+  | "name";
+
+export const STATION_SORT_KEYS: readonly StationSortKey[] = [
+  "recommended",
+  "nearest",
+  "rated",
+  "fee",
+  "open",
+  "featured",
+  "name",
+];
+
+/** True when `value` is one of the supported sort keys (for ?sort= params). */
+export function isStationSortKey(value: unknown): value is StationSortKey {
+  return (
+    typeof value === "string" &&
+    (STATION_SORT_KEYS as readonly string[]).includes(value)
+  );
+}
+
+export interface SortStationsOptions {
+  /**
+   * Distance in km keyed by station id. Sources: the finder's geolocation
+   * distances, or /stations' cached navigator.geolocation position run
+   * through haversineKm. Stations missing from the map are treated as
+   * infinitely far for "nearest" (they sink, never error).
+   */
+  distances?: Record<string, number>;
+}
+
+/**
+ * Return a new array sorted per `sortKey`. Never mutates the input.
+ * - "recommended": keep the caller's (API) order — featured first, then name.
+ * - "nearest": ascending distance; unknown distances sink to the end
+ *   (rating desc tie-break); with no distance data at all this degrades to
+ *   the input order.
+ * - "rated": rating desc. "fee": deliveryFee asc, rating desc tie-break.
+ * - "open": open-now first (unknown hours treated as open — consistent with
+ *   isOpenNow's null-means-unknown), then input order.
+ * - "featured": featured first, then input order.
+ * - "name": case-insensitive localeCompare on name.
+ */
+export function sortStations<T extends FinderStation>(
+  stations: readonly T[],
+  sortKey: StationSortKey,
+  opts: SortStationsOptions = {}
+): T[] {
+  const rows = [...stations];
+  switch (sortKey) {
+    case "nearest": {
+      const d = opts.distances ?? {};
+      rows.sort((a, b) => {
+        const da = d[a.id] ?? Number.POSITIVE_INFINITY;
+        const db = d[b.id] ?? Number.POSITIVE_INFINITY;
+        if (da !== db) return da - db;
+        return (b.rating ?? 0) - (a.rating ?? 0);
+      });
+      return rows;
+    }
+    case "rated":
+      rows.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
+      return rows;
+    case "fee":
+      rows.sort((a, b) => {
+        const fee = (a.deliveryFee ?? 0) - (b.deliveryFee ?? 0);
+        if (fee !== 0) return fee;
+        return (b.rating ?? 0) - (a.rating ?? 0);
+      });
+      return rows;
+    case "open":
+      rows.sort((a, b) => {
+        const ao = isOpenNow(a.openingTime, a.closingTime) === false ? 1 : 0;
+        const bo = isOpenNow(b.openingTime, b.closingTime) === false ? 1 : 0;
+        return ao - bo; // stable: keeps input order within each group
+      });
+      return rows;
+    case "featured":
+      rows.sort((a, b) => Number(Boolean(b.isFeatured)) - Number(Boolean(a.isFeatured)));
+      return rows;
+    case "name":
+      rows.sort((a, b) =>
+        (a.name ?? "").localeCompare(b.name ?? "", "en", { sensitivity: "base" })
+      );
+      return rows;
+    case "recommended":
+    default:
+      return rows;
+  }
+}
