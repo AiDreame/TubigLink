@@ -166,6 +166,25 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // Discord embed sync (fire-and-forget): an in-app decision instantly
+    // updates the station-docs embed (recolor + buttons disabled). Best-effort.
+    if (updatedDocument.discordMessageId) {
+      const admin = await prisma.user.findUnique({
+        where: { id: adminId },
+        select: { name: true },
+      });
+      const station = await prisma.station.findUnique({
+        where: { id: stationId },
+        select: { name: true, user: { select: { name: true } } },
+      });
+      const { updateStationDocEmbed } = await import("@/lib/discord-docs");
+      void updateStationDocEmbed(updatedDocument, {
+        stationName: station?.name,
+        ownerName: station?.user?.name || undefined,
+        reviewer: admin?.name ? `in-app: ${admin.name}` : "in-app admin",
+      }).catch((e) => console.warn("[review] discord docs sync failed", (e as Error).message));
+    }
+
     return NextResponse.json({
       success: true,
       data: updatedDocument,

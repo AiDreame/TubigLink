@@ -60,6 +60,15 @@ export async function DELETE(
       where: { id: documentId },
     });
 
+    // Discord embed cleanup (fire-and-forget): remove the review embed so
+    // staff don't act on a deleted doc. Best-effort, never fails the delete.
+    if (document.discordMessageId) {
+      const { deleteStationDocEmbed } = await import("@/lib/discord-docs");
+      void deleteStationDocEmbed(document).catch((e) =>
+        console.warn("[doc-delete] discord docs cleanup failed", (e as Error).message)
+      );
+    }
+
     // Create verification log entry
     await prisma.verificationLog.create({
       data: {

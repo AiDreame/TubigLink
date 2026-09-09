@@ -118,6 +118,28 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    // Discord review embed (fire-and-forget): pushes a live Approve/Reject
+    // embed into the station-docs channel. Never blocks/fails the upload.
+    {
+      const owner = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { name: true },
+      });
+      const { pushStationDocEmbed } = await import("@/lib/discord-docs");
+      void pushStationDocEmbed(
+        {
+          id: document.id,
+          type: document.type,
+          fileName: document.fileName,
+          fileUrl: document.fileUrl,
+          verificationStatus: document.verificationStatus,
+          uploadedAt: document.uploadedAt,
+        },
+        { name: station.name },
+        owner?.name || ""
+      ).catch((e) => console.warn("[upload] discord docs push failed", (e as Error).message));
+    }
+
     return NextResponse.json(
       { success: true, data: document },
       { status: 201 }

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getDiscordConfig, discordSecretOk } from "@/lib/discord";
+import { DOC_CUSTOM_ID_RE } from "@/lib/discord-docs";
+import { recordAudit } from "@/lib/audit";
 import { createNotification, notifyAllAdmins, notifyStationUsers } from "@/lib/notifications";
 import { rateLimit, tooManyRequests } from "@/lib/rate-limit";
 
@@ -19,6 +21,11 @@ import { rateLimit, tooManyRequests } from "@/lib/rate-limit";
  *
  *   channel_message { action:"channel_message", channelId, content,
  *                     authorName, authorAvatar?, authorId?, timestamp? }
+ *
+ *   doc_decision { action:"doc_decision", customId, userId, userName, reason? }
+ *           -> parse `doc_approve:<docId>` / `doc_reject:<docId>`, flip the
+ *              StationDocument row (idempotent), audit + notify, and PATCH
+ *              the station-docs embed (recolor + buttons disabled).
  *           -> reverse-map channelId -> dispute/ticket by discordChannelId
  *              (Phase 2a per-ticket channels), then append the same STAFF
  *              DisputeMessage + notifications as `message`.
@@ -154,6 +161,104 @@ export async function POST(req: NextRequest) {
 
     const authorName = String(body.authorName || "Support").trim().slice(0, 80) || "Support";
     return appendStaffReply({ dispute, ticket, authorName, content });
+  }
+
+  if (action === "doc_decision") {
+    // Station-doc review from the station-docs channel buttons (customId
+    // `doc_approve:<docId>` / `doc_reject:<docId>`), forwarded by the bot.
+    // Idempotent: an already-decided doc returns { already:true }.
+    const customId = String(body.customId || "").trim();
+    const m = customId.match(DOC_CUSTOM_ID_RE);
+    if (!m) {
+      return NextResponse.json({ error: "Invalid doc decision payload" }, { status: 400 });
+    }
+    const decision = m[1] === "approve" ? "VERIFIED" : "REJECTED";
+    const docId = m[2];
+    const userName = String(body.userName || "Discord staff").trim().slice(0, 80) || "Discord staff";
+    const reason = typeof body.reason === "string" ? body.reason.trim().slice(0, 500) : "";
+
+    const rl = rateLimit(`discord-inbound:doc:${docId}`, 10, 60 * 1000);
+    if (!rl.ok) return tooManyRequests("Rate limit exceeded", rl.retryAfterSec);
+
+    const doc = await prisma.stationDocument.findUnique({
+      where: { id: docId },
+      include: { station: { select: { id: true, name: true, user: { select: { name: true } } } } },
+    });
+    if (!doc) {
+      return NextResponse.json({ error: "Document not found" }, { status: 404 });
+    }
+    if (doc.verificationStatus !== "PENDING") {
+      return NextResponse.json({ ok: true, already: true, status: doc.verificationStatus });
+    }
+
+    // verifiedById: match a User by Discord display name when one exists;
+    // else leave null and record the Discord name in notes + audit.
+    let verifier: { id: string; role: string } | null = null;
+    try {
+      const match = await prisma.user.findFirst({
+        where: { name: userName },
+        select: { id: true, role: true },
+      });
+      if (match) verifier = { id: match.id, role: match.role };
+    } catch {
+      /* best-effort */
+    }
+
+    const updated = await prisma.stationDocument.update({
+      where: { id: docId },
+      data: {
+        verificationStatus: decision,
+        rejectionReason: decision === "REJECTED" ? reason || "Rejected via Discord (no reason given)" : null,
+        verifiedById: verifier?.id || null,
+        verifiedAt: new Date(),
+        notes: verifier ? doc.notes : [`Discord decision by @${userName}`, doc.notes].filter(Boolean).join(" | "),
+      },
+    });
+
+    await prisma.verificationLog.create({
+      data: {
+        stationId: doc.stationId,
+        action: decision === "VERIFIED" ? "DOCUMENT_VERIFIED" : "DOCUMENT_REJECTED",
+        performedById: verifier?.id || null,
+        details: JSON.stringify({
+          documentId: docId,
+          documentType: doc.type,
+          fileName: doc.fileName,
+          newStatus: decision,
+          via: "discord",
+          discordUser: userName,
+          rejectionReason: decision === "REJECTED" ? updated.rejectionReason : null,
+        }),
+      },
+    });
+
+    void recordAudit({
+      actor: verifier,
+      action: decision === "VERIFIED" ? "station.document_verified" : "station.document_rejected",
+      entityType: "station",
+      entityId: doc.stationId,
+      details: { stationName: doc.station?.name, via: "discord", discordUser: userName },
+    });
+
+    await notifyStationUsers(doc.stationId, {
+      type: "SYSTEM",
+      title: decision === "VERIFIED" ? "Document approved" : "Document rejected",
+      body: decision === "VERIFIED"
+        ? `Your ${doc.type.replace(/_/g, " ")} document was approved.`
+        : `Your ${doc.type.replace(/_/g, " ")} document was rejected${updated.rejectionReason ? `: ${updated.rejectionReason}` : "."}`,
+      link: "/dashboard/documents",
+    });
+
+    // Sync the embed (recolor + buttons disabled) — awaited so the bot's ack
+    // reflects the final state. Best-effort internally, never throws.
+    const { updateStationDocEmbed } = await import("@/lib/discord-docs");
+    await updateStationDocEmbed(updated, {
+      stationName: doc.station?.name,
+      ownerName: doc.station?.user?.name || undefined,
+      reviewer: `Discord: ${userName}`,
+    });
+
+    return NextResponse.json({ ok: true, status: decision });
   }
 
   return NextResponse.json({ error: "Unknown action" }, { status: 400 });
