@@ -295,6 +295,8 @@ model StationDocument {
   verifiedAt         DateTime?
   uploadedAt         DateTime  @default(now())
   notes              String?
+  discordMessageId   String? // Discord message id of the station-docs review embed (doc approval flow, Sep 9)
+  discordChannelId   String? // Discord channel id the review embed was posted in
 
   station    Station @relation(fields: [stationId], references: [id])
   verifiedBy User?   @relation("DocumentVerifier", fields: [verifiedById], references: [id])

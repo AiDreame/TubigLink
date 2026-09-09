@@ -16,7 +16,15 @@
  *      `message` event to /api/webhooks/discord with the threadId + content,
  *      and the app appends a DisputeMessage (authorRole=STAFF) visible 3-party
  *      in-app.
- *   3. CHANNEL FORWARD (Phase 2a): when support staff post in any `ticket-*`
+ *   3. DOC DECISION (station-docs review, Sep 9): when staff click the
+ *      Approve/Reject buttons on a station-document embed (customId
+ *      `doc_approve:<docId>` / `doc_reject:<docId>`), the bot POSTs a
+ *      `doc_decision` event to /api/webhooks/discord and acks the click by
+ *      disabling the buttons. The app flips the StationDocument row, audits,
+ *      notifies, and PATCHes the embed (recolor). Ticket/dispute flows below
+ *      are untouched by this path.
+ *
+ *   4. CHANNEL FORWARD (Phase 2a): when support staff post in any `ticket-*`
  *      channel (the per-ticket channels the app creates via the bot REST API),
  *      it POSTs a `channel_message` event to /api/webhooks/discord with the
  *      channelId + content, and the app reverse-maps discordChannelId ->
@@ -64,7 +72,9 @@ if (!SECRET || !APP_BASE) {
 
 const API = "https://discord.com/api/v10";
 const GATEWAY = "wss://gateway.discord.gg/?v=10&encoding=json";
-// intents: GUILDS(1) + GUILD_MESSAGES(512) + MESSAGE_CONTENT(32768)
+// intents: GUILDS(1) + GUILD_MESSAGES(512) + MESSAGE_CONTENT(32768).
+// Button clicks arrive as INTERACTION_CREATE dispatches, which need no
+// extra privileged intent.
 const INTENTS = 1 | 512 | 32768;
 
 let ws = null;
@@ -149,6 +159,61 @@ async function resolveSelfId() {
 function avatarUrl(author) {
   if (!author?.id || !author?.avatar) return undefined;
   return `https://cdn.discordapp.com/avatars/${author.id}/${author.avatar}.png`;
+}
+
+/** Doc-review button customIds: `doc_approve:<docId>` / `doc_reject:<docId>`. */
+const DOC_DECISION_RE = /^doc_(approve|reject):([A-Za-z0-9]+)$/;
+
+/**
+ * Acknowledge a doc-review button click: disable both buttons on the original
+ * message so nobody double-clicks, then POST the decision to the app (the app
+ * is authoritative — it flips the row, audits, and PATCHes the embed with the
+ * final color). Failures are logged, never thrown.
+ */
+async function handleDocDecision(interaction) {
+  const data = interaction?.data || {};
+  const customId = String(data.custom_id || "");
+  const m = customId.match(DOC_DECISION_RE);
+  if (!m) return;
+  const decision = m[1]; // approve | reject
+  const member = interaction.member || {};
+  const user = member.user || interaction.user || {};
+  const userName = String(user.username || member.nick || "Discord staff").slice(0, 80);
+  const userId = String(user.id || "");
+  log(`[discord-bot] doc ${decision} by @${userName} (${customId})`);
+
+  // 1) Ack the click immediately: disable the buttons on the source message.
+  try {
+    const msg = interaction.message || {};
+    const comps = Array.isArray(msg.components) ? msg.components : [];
+    const disabled = comps.map((row) => ({
+      ...row,
+      components: (row.components || []).map((c) => ({ ...c, disabled: true })),
+    }));
+    const content =
+      (decision === "approve" ? `\u2713 Approved by @${userName}` : `\u2717 Rejected by @${userName}`) +
+      (msg.content ? `\n${msg.content}`.slice(0, 1900) : "");
+    await discordFetch(
+      `/webhooks/${interaction.application_id}/${interaction.token}/messages/@original`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({
+          content: content.slice(0, 2000),
+          ...(disabled.length ? { components: disabled } : {}),
+        }),
+      }
+    );
+  } catch (e) {
+    log("[discord-bot] doc ack edit failed:", e.message);
+  }
+
+  // 2) Forward the decision to the app (authoritative flip + embed PATCH).
+  await postToApp({
+    action: "doc_decision",
+    customId,
+    userId,
+    userName,
+  });
 }
 
 async function handleEvent(payload) {
@@ -271,7 +336,11 @@ function connect(attempt) {
       log("[discord-bot] reconnect requested by gateway");
       ws.close();
     } else if (op === 0) {
-      if (t === "READY") {
+      if (t === "INTERACTION_CREATE") {
+        // Button clicks (MESSAGE_COMPONENT, type 3). Doc-review buttons are
+        // handled here; anything else is ignored (ticket flows use messages).
+        if (d?.type === 3) handleDocDecision(d).catch((e) => log("[discord-bot] doc decision failed:", e.message));
+      } else if (t === "READY") {
         // Prefer the env override, else the connected user; ALSO resolve via
         // /users/@me so restarts pick up the real id even when the env var is
         // stale (Phase 2a echo guard).
