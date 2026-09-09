@@ -3,6 +3,7 @@ import prisma from "@/lib/prisma";
 import { requireAdmin } from "../../_lib";
 import { decryptPayout } from "@/lib/payout-security";
 import { createWalletTransaction, PAYOUT_DISBURSEMENT_FEE_PESOS } from "@/lib/paymongo-disbursement";
+import { recordAudit } from "@/lib/audit";
 
 /**
  * Initiate an automatic disbursement for a PROCESSING payout via the
@@ -84,6 +85,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         paymongoError: message,
       },
     });
+    void recordAudit({ action: "payout.failed", entityType: "payout", entityId: p.id, details: { stationId: p.stationId, netCentavos: p.netCentavos, via: "disbursement_create", failureMessage: message } });
     return NextResponse.json(
       { success: false, error: message, ...(result.error.code ? { code: result.error.code } : {}) },
       { status: 502 },
@@ -123,6 +125,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return payout;
   });
 
+  void recordAudit({
+    action: tx.status === "succeeded" ? "payout.paid" : tx.status === "failed" ? "payout.failed" : "payout.process",
+    entityType: "payout",
+    entityId: p.id,
+    details: { stationId: p.stationId, netCentavos: p.netCentavos, disbursementStatus: tx.status, disbursementId: tx.id, referenceNumber: tx.referenceNumber },
+  });
   return NextResponse.json({
     success: true,
     data,

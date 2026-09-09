@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "node:crypto";
 import prisma from "@/lib/prisma";
 import { getPayMongoConfig } from "@/lib/paymongo";
+import { recordAudit } from "@/lib/audit";
 
 const TIMESTAMP_TOLERANCE_SECONDS = 5 * 60;
 
@@ -100,6 +101,7 @@ export async function POST(request: NextRequest) {
   const isTransferEvent = normalizedType.startsWith("transfer.outward");
 
   if (isTransferEvent) {
+    let transferAudit: { payoutId: string; stationId: string; netCentavos: number; succeeded: boolean } | null = null as { payoutId: string; stationId: string; netCentavos: number; succeeded: boolean } | null;
     try {
       await prisma.$transaction(async (tx) => {
         const walletTransactionId = text(resource?.id);
@@ -157,7 +159,9 @@ export async function POST(request: NextRequest) {
           }
         }
         await tx.paymentEvent.update({ where: { id: event.id }, data: { processedAt: new Date() } });
+        transferAudit = { payoutId: payout.id, stationId: payout.stationId, netCentavos: payout.netCentavos, succeeded };
       });
+      if (transferAudit) void recordAudit({ actor: null, action: transferAudit.succeeded ? "payout.paid" : "payout.failed", entityType: "payout", entityId: transferAudit.payoutId, details: { stationId: transferAudit.stationId, netCentavos: transferAudit.netCentavos, via: "transfer_webhook", eventType: normalizedType } });
     } catch (error) {
       console.error("PayMongo transfer webhook processing error", { providerEventId, error });
       await prisma.paymentEvent.update({ where: { id: event.id }, data: { processingError: error instanceof Error ? error.message : "Processing failed" } }).catch(() => undefined);
@@ -166,6 +170,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ received: true });
   }
 
+  let paymentAudit: { kind: "payment.paid" | "payment.failed" | "payment.refunded"; orderId: string; stationId: string } | null = null as { kind: "payment.paid" | "payment.failed" | "payment.refunded"; orderId: string; stationId: string } | null;
   try {
     await prisma.$transaction(async (tx) => {
       let order = orderId ? await tx.order.findUnique({ where: { id: orderId } }) : null;
@@ -229,7 +234,22 @@ export async function POST(request: NextRequest) {
         await tx.dispute.updateMany({ where: { orderId: order.id, status: "REFUND_PENDING" }, data: { status: "REFUNDED" } });
       }
       await tx.paymentEvent.update({ where: { id: event.id }, data: { orderId: order.id, processedAt: new Date() } });
+      paymentAudit = (
+        (isPaid && order.paymentStatus !== "PAID") ? { kind: "payment.paid" as const, orderId: order.id, stationId: order.stationId }
+        : (isFailed && order.paymentStatus !== "PAID") ? { kind: "payment.failed" as const, orderId: order.id, stationId: order.stationId }
+        : isRefund ? { kind: "payment.refunded" as const, orderId: order.id, stationId: order.stationId }
+        : null
+      );
     });
+    if (paymentAudit) {
+      const base = { stationId: paymentAudit.stationId };
+      const extra = paymentAudit.kind === "payment.paid"
+        ? { paymentIntentId: intentId || null, amountCentavos: typeof resourceAttributes.amount === "number" ? resourceAttributes.amount : null }
+        : paymentAudit.kind === "payment.failed"
+          ? { failureCode: text(resourceAttributes.failure_code) || text(resourceAttributes.code) || null }
+          : { providerRefundId: text(resource?.id) || null };
+      void recordAudit({ actor: null, action: paymentAudit.kind, entityType: "order", entityId: paymentAudit.orderId, details: { ...base, ...extra } });
+    }
   } catch (error) {
     console.error("PayMongo webhook processing error", { providerEventId, error });
     await prisma.paymentEvent.update({ where: { id: event.id }, data: { processingError: error instanceof Error ? error.message : "Processing failed" } }).catch(() => undefined);

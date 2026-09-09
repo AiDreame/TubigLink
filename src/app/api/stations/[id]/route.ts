@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { reviewDisplayName } from "@/lib/review-display";
+import { recordAudit } from "@/lib/audit";
 
 // GET /api/stations/[id] — Get station details with products and reviews.
 //
@@ -167,7 +168,7 @@ export async function PUT(
       where: { id: station.id },
       data: filteredFields,
     });
-
+    void recordAudit({ actor: { id: sessionUser.id, role: sessionUser.role || "PROVIDER" }, action: "station.update", entityType: "station", entityId: station.id, details: { fields: Object.keys(filteredFields), stationName: station.name } });
     return NextResponse.json({ success: true, data: updatedStation });
   } catch (error) {
     console.error("Station update error:", error);

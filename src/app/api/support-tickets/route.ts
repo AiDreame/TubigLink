@@ -5,6 +5,7 @@ import prisma from "@/lib/prisma";
 import { createNotification, notifyAllAdmins } from "@/lib/notifications";
 import { rateLimit, tooManyRequests } from "@/lib/rate-limit";
 import { pushSupportTicketCreated } from "@/lib/discord";
+import { recordAudit } from "@/lib/audit";
 
 /**
  * General support tickets (owner direction, Aug 19): opened from a floating
@@ -89,6 +90,7 @@ export async function POST(req: NextRequest) {
     link: `/support/${ticket.id}`,
   });
 
+  void recordAudit({ actor: { id: user.id, role: user.role || "CUSTOMER" }, action: "dispute.create", entityType: "supportTicket", entityId: ticket.id, details: { category, orderId: orderId || null } });
   return NextResponse.json({ success: true, data: { id: ticket.id, category, status: ticket.status } });
 }
 

@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { applyAutoEscalateMany } from "@/lib/disputes";
 import { createRefund } from "@/lib/paymongo";
+import { recordAudit } from "@/lib/audit";
 
 const include = { order: { select: { id: true, total: true, paymentStatus: true, paymentId: true, paymentIntentId: true } }, customer: { select: { name: true, phone: true } }, station: { select: { id: true, name: true } }, refund: true, messages: { orderBy: { createdAt: "asc" } } } as const;
 async function admin() { const u = (await getServerSession(authOptions))?.user as any; return u?.id && u.role === "ADMIN" ? u : null; }
@@ -17,7 +18,7 @@ export async function POST(req: NextRequest) {
   if (!["OPEN", "STATION_RESPONDED", "UNDER_REVIEW"].includes(d.status)) return NextResponse.json({ error: "Dispute already resolved" }, { status: 400 });
   if (decision !== "REJECT" && d.order.paymentStatus !== "PAID") return NextResponse.json({ error: "payment not collected" }, { status: 400 });
   const now = new Date();
-  if (decision === "REJECT") { const dispute = await prisma.dispute.update({ where: { id }, data: { status: "REJECTED", resolution: note ?? "", resolvedAt: now } }); return NextResponse.json({ success: true, data: { dispute } }); }
+  if (decision === "REJECT") { const dispute = await prisma.dispute.update({ where: { id }, data: { status: "REJECTED", resolution: note ?? "", resolvedAt: now } }); void recordAudit({ action: "dispute.close", entityType: "dispute", entityId: id, details: { orderId: d.orderId, decision, before: d.status, after: "REJECTED" } }); return NextResponse.json({ success: true, data: { dispute } }); }
   const result = await prisma.$transaction(async tx => {
     const refund = await tx.refund.create({ data: { orderId: d.orderId, amountCentavos: d.amountHeldCentavos, reason: decision, status: "PENDING", requestedById: u.id } });
     const dispute = await tx.dispute.update({ where: { id }, data: { status: "REFUND_PENDING", resolution: note ?? "", resolvedAt: now, refundId: refund.id } });
@@ -29,5 +30,6 @@ export async function POST(req: NextRequest) {
   const refund = provider.ok
     ? await prisma.refund.update({ where: { id: result.refund.id }, data: { providerRefundId: provider.data.id } })
     : await prisma.refund.update({ where: { id: result.refund.id }, data: { status: "FAILED", failureMessage: provider.error.message } });
+  void recordAudit({ action: "dispute.resolve", entityType: "dispute", entityId: id, details: { orderId: d.orderId, decision, refundId: result.refund.id, providerOk: provider.ok } });
   return NextResponse.json({ success: provider.ok, data: { ...result, refund }, ...(provider.ok ? {} : { error: provider.error.message }) }, { status: provider.ok ? 200 : 502 });
 }

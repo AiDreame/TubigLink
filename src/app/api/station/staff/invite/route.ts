@@ -5,6 +5,7 @@ import prisma from "@/lib/prisma";
 import { getDefaultPermissions } from "@/lib/permissions";
 import { sendEmail } from "@/lib/email";
 import crypto from "crypto";
+import { recordAudit } from "@/lib/audit";
 
 // POST /api/station/staff/invite — Send staff invite (owner only)
 export async function POST(req: NextRequest) {
@@ -111,6 +112,7 @@ export async function POST(req: NextRequest) {
       ? `Invitation sent to ${email}`
       : `Invitation recorded for ${email}, but the email failed to send: ${emailResult.error}`;
 
+    void recordAudit({ actor: { id: userId, role: "PROVIDER" }, action: "staff.invite", entityType: "staff", entityId: staff.id, details: { stationId: staff.stationId, email: staff.email, role: staff.role, emailStatus } });
     return NextResponse.json(
       {
         success: true,

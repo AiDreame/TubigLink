@@ -7,6 +7,7 @@ import { applyAutoEscalateMany, orderNetCentavos } from "@/lib/disputes";
 import { DISPUTE_WINDOW_HOURS } from "@/lib/delivery";
 import { rateLimit, tooManyRequests } from "@/lib/rate-limit";
 import { pushDisputeCreated } from "@/lib/discord";
+import { recordAudit } from "@/lib/audit";
 
 const types = ["NOT_DELIVERED", "QUALITY", "OTHER"];
 const include = { order: { select: { id: true, total: true, paymentStatus: true, deliveryConfirmedAt: true } }, customer: { select: { id: true, name: true, phone: true } }, station: { select: { id: true, name: true } }, refund: true, messages: { orderBy: { createdAt: "asc" } } } as const;
@@ -82,5 +83,6 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     body: `We received your issue report for order #${order.id.substring(0, 8)}. ${stationName} has 24 hours to respond.`,
     link: `/orders/${order.id}`,
   });
+  void recordAudit({ actor: { id: user.id, role: user.role || "CUSTOMER" }, action: "dispute.create", entityType: "dispute", entityId: dispute.id, details: { orderId: order.id, stationId: order.stationId, type } });
   return NextResponse.json({ success: true, data: dispute });
 }

@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { pushDisputeMessage } from "@/lib/discord";
 import { rateLimit, tooManyRequests } from "@/lib/rate-limit";
+import { recordAudit } from "@/lib/audit";
 
 /**
  * Customer / station / admin in-app reply to a dispute's support conversation.
@@ -71,5 +72,6 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   // Push into the Discord thread once available; never block or fail the request.
   void pushDisputeMessage({ id: d.id, discordThreadId: d.discordThreadId }, { authorRole, authorName, content });
 
+  void recordAudit({ actor: { id: user.id, role: user.role || "CUSTOMER" }, action: "dispute.reply", entityType: "dispute", entityId: d.id, details: { orderId: d.orderId, authorRole } });
   return NextResponse.json({ success: true, data: message });
 }

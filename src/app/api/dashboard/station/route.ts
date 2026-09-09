@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { recordAudit } from "@/lib/audit";
 
 // GET /api/dashboard/station — Get the current provider's station with delivery zones
 export async function GET() {
@@ -130,6 +131,7 @@ export async function PUT(req: NextRequest) {
       include: { deliveryZones: true },
     });
 
+    void recordAudit({ actor: { id: userId, role: "PROVIDER" }, action: "station.update", entityType: "station", entityId: existingStation.id, details: { stationName: existingStation.name } });
     return NextResponse.json({ success: true, data: result });
   } catch (error) {
     console.error("Dashboard station update error:", error);

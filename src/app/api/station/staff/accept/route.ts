@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import { recordAudit } from "@/lib/audit";
 
 // POST /api/station/staff/accept — Accept an invitation
 export async function POST(req: NextRequest) {
@@ -86,6 +87,7 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    void recordAudit({ actor: { id: user.id, role: "PROVIDER" }, action: "staff.accept", entityType: "staff", entityId: updatedStaff.id, details: { stationId: staff.stationId, stationName: staff.station.name } });
     return NextResponse.json({
       success: true,
       data: {
