@@ -10,8 +10,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  formatDistance, haversineKm, isOpenNow, stationWaterTypes,
-  WATER_TYPE_LABELS, type FinderStation,
+  formatDistance, haversineKm, isOpenNow, sortStations, stationWaterTypes,
+  WATER_TYPE_LABELS, type FinderStation, type StationSortKey,
 } from "@/lib/station-utils";
 import { getUserGeoWithFallback, type UserGeo, type LocationStatus } from "@/components/shared/StationMap";
 
@@ -26,7 +26,15 @@ const StationMap = dynamic(() => import("@/components/shared/StationMap"), {
   ),
 });
 
-type SortKey = "nearest" | "rated" | "fee";
+const STATION_SORT_LABELS: { key: StationSortKey; label: string }[] = [
+  { key: "recommended", label: "Recommended" },
+  { key: "nearest", label: "Nearest first" },
+  { key: "rated", label: "Top rated" },
+  { key: "fee", label: "Lowest delivery fee" },
+  { key: "open", label: "Open now first" },
+  { key: "featured", label: "Featured first" },
+  { key: "name", label: "Name A–Z" },
+];
 
 const WATER_FILTERS = ["PURIFIED", "MINERAL", "ALKALINE"] as const;
 
@@ -51,7 +59,7 @@ export default function StationFinder({ stations, selectedCity, selectedProvince
   const [waterType, setWaterType] = useState<string | null>(null);
   const [featuredOnly, setFeaturedOnly] = useState(false);
   const [openNowOnly, setOpenNowOnly] = useState(false);
-  const [sort, setSort] = useState<SortKey>("nearest");
+  const [sort, setSort] = useState<StationSortKey>("nearest");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [mobilePane, setMobilePane] = useState<"list" | "map">("list");
@@ -86,7 +94,7 @@ export default function StationFinder({ stations, selectedCity, selectedProvince
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    let rows = stations.filter((s) => {
+    const rows = stations.filter((s) => {
       if (q) {
         const hay = `${s.name} ${s.barangay ?? ""} ${s.city ?? ""} ${s.province ?? ""}`.toLowerCase();
         if (!hay.includes(q)) return false;
@@ -96,15 +104,7 @@ export default function StationFinder({ stations, selectedCity, selectedProvince
       if (openNowOnly && isOpenNow(s.openingTime, s.closingTime) !== true) return false;
       return true;
     });
-    rows = [...rows].sort((a, b) => {
-      if (sort === "rated") return (b.rating ?? 0) - (a.rating ?? 0);
-      if (sort === "fee") return (a.deliveryFee ?? 0) - (b.deliveryFee ?? 0);
-      const da = distances[a.id] ?? Number.POSITIVE_INFINITY;
-      const db = distances[b.id] ?? Number.POSITIVE_INFINITY;
-      if (da !== db) return da - db;
-      return (b.rating ?? 0) - (a.rating ?? 0);
-    });
-    return rows;
+    return sortStations(rows, sort, { distances });
   }, [stations, query, waterType, featuredOnly, openNowOnly, sort, distances]);
 
   const hasActiveFilters = query.trim() !== "" || waterType !== null || featuredOnly || openNowOnly;
@@ -193,12 +193,12 @@ export default function StationFinder({ stations, selectedCity, selectedProvince
           <select
             id="station-sort"
             value={sort}
-            onChange={(e) => setSort(e.target.value as SortKey)}
+            onChange={(e) => setSort(e.target.value as StationSortKey)}
             className="rounded-xl border border-border bg-card px-3 py-2.5 text-sm text-foreground min-h-[44px] focus:ring-2 focus:ring-blue-500 outline-none"
           >
-            <option value="nearest">Nearest first</option>
-            <option value="rated">Top rated</option>
-            <option value="fee">Lowest delivery fee</option>
+            {STATION_SORT_LABELS.map((opt) => (
+              <option key={opt.key} value={opt.key}>{opt.label}</option>
+            ))}
           </select>
           <Button
             variant="outline"

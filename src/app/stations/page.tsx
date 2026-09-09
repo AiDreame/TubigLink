@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Search, SlidersHorizontal, MapPin, X, Loader2, ArrowLeft, Home } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,23 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { NotificationBell } from "@/components/shared/NotificationBell";
 import { CitySelector } from "@/components/shared/CitySelector";
 import { useCityStore } from "@/hooks/use-city";
+import {
+  haversineKm,
+  isStationSortKey,
+  sortStations,
+  type StationSortKey,
+} from "@/lib/station-utils";
+
+// Drawer sort options in display order: label + shared sort key.
+const STATION_SORT_OPTIONS: { label: string; key: StationSortKey }[] = [
+  { label: "Recommended", key: "recommended" },
+  { label: "Nearest", key: "nearest" },
+  { label: "Top Rated", key: "rated" },
+  { label: "Lowest Delivery Fee", key: "fee" },
+  { label: "Open Now First", key: "open" },
+  { label: "Featured First", key: "featured" },
+  { label: "Name A–Z", key: "name" },
+];
 
 export default function StationsPage() {
   const router = useRouter();
@@ -23,6 +40,8 @@ export default function StationsPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
   const [totalCount, setTotalCount] = useState(0);
+  const [sortKey, setSortKey] = useState<StationSortKey>("recommended");
+  const [userLoc, setUserLoc] = useState<{ lat: number; lng: number } | null>(null);
 
   // Honor deep links: ?province=X selects the whole province (clearing any
   // city), ?city=X selects a city (clearing any province). Runs when the
@@ -33,7 +52,20 @@ export default function StationsPage() {
     const city = sp.get("city");
     if (prov) setProvince(prov);
     else if (city) setCity(city === "Nationwide" ? "" : city);
+    const sort = sp.get("sort");
+    if (isStationSortKey(sort)) setSortKey(sort);
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Request the device position once; cached for "Nearest" sorting via
+  // haversineKm. If denied/unavailable, sortStations degrades gracefully.
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !("geolocation" in navigator)) return;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => setUserLoc({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => {},
+      { maximumAge: 300000, timeout: 8000 }
+    );
   }, []);
 
   useEffect(() => {
@@ -70,6 +102,28 @@ export default function StationsPage() {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     fetchStations();
+  };
+
+  const distances = useMemo(() => {
+    const d: Record<string, number> = {};
+    if (!userLoc) return d;
+    for (const st of stations) {
+      if (st.latitude != null && st.longitude != null) {
+        d[st.id] = haversineKm(userLoc.lat, userLoc.lng, st.latitude, st.longitude);
+      }
+    }
+    return d;
+  }, [stations, userLoc]);
+
+  // Client-side re-sort of the fetched list (API order = "recommended").
+  const sortedStations = useMemo(
+    () => sortStations(stations, sortKey, { distances }),
+    [stations, sortKey, distances]
+  );
+
+  const handleSortSelect = (key: StationSortKey) => {
+    setSortKey(key);
+    if (window.innerWidth < 768) setShowFilters(false);
   };
 
   const waterTypes = ["PURIFIED", "MINERAL", "ALKALINE"];
@@ -170,33 +224,33 @@ export default function StationsPage() {
               </div>
             ))}
           </div>
-        ) : stations.length > 0 ? (
+        ) : sortedStations.length > 0 ? (
           <div>
             {/* Featured stations section */}
-            {stations.filter(s => s.isFeatured).length > 0 && (
+            {sortedStations.filter(s => s.isFeatured).length > 0 && (
               <div className="mb-8">
                 <h2 className="text-sm font-bold text-yellow-600 dark:text-yellow-400 uppercase tracking-wider mb-3 flex items-center gap-2">
                   <span className="h-5 w-5 rounded-full bg-yellow-400 flex items-center justify-center text-[10px]">★</span>
                   Featured Stations
                 </h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {stations.filter(s => s.isFeatured).map((station) => (
+                  {sortedStations.filter(s => s.isFeatured).map((station) => (
                     <StationCard key={station.id} station={station} />
                   ))}
                 </div>
               </div>
             )}
             {/* Regular stations section */}
-            {stations.filter(s => !s.isFeatured).length > 0 && (
+            {sortedStations.filter(s => !s.isFeatured).length > 0 && (
               <div>
-                {stations.filter(s => s.isFeatured).length > 0 && (
+                {sortedStations.filter(s => s.isFeatured).length > 0 && (
                   <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
                     <span className="h-1 w-4 rounded-full bg-muted-foreground/30" />
                     All Stations
                   </h2>
                 )}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {stations.filter(s => !s.isFeatured).map((station) => (
+                  {sortedStations.filter(s => !s.isFeatured).map((station) => (
                     <StationCard key={station.id} station={station} />
                   ))}
                 </div>
@@ -256,15 +310,20 @@ export default function StationsPage() {
               <div>
                 <h3 className="font-semibold mb-3 text-card-foreground">Sort By</h3>
                 <div className="grid grid-cols-1 gap-2">
-                  {["Recommended", "Top Rated", "Lowest Price", "Nearest"].map((sort) => (
-                    <Button 
-                      key={sort} 
-                      variant="outline" 
-                      className="justify-start rounded-xl font-normal text-muted-foreground"
-                    >
-                      {sort}
-                    </Button>
-                  ))}
+                  {STATION_SORT_OPTIONS.map((opt) => {
+                    const active = sortKey === opt.key;
+                    return (
+                      <Button
+                        key={opt.key}
+                        variant={active ? "default" : "outline"}
+                        onClick={() => handleSortSelect(opt.key)}
+                        aria-pressed={active}
+                        className={`justify-start rounded-xl font-normal ${active ? "bg-blue-600" : "text-muted-foreground"}`}
+                      >
+                        {opt.label}
+                      </Button>
+                    );
+                  })}
                 </div>
               </div>
 
