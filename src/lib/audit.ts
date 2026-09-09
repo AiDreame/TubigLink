@@ -76,6 +76,24 @@ export async function recordAudit(opts: AuditOpts): Promise<void> {
         details: safeDetails(opts.details),
       },
     });
+    // Phase 2 (owner audit-trail request): live-deliver to the matching Discord
+    // audit channel. Lazy import keeps the static module graph one-directional
+    // (audit-discord imports ./discord, never ./audit). Fire-and-forget, never
+    // throws — a failed delivery leaves the table row standing.
+    try {
+      const { deliverAuditToDiscord } = await import("./audit-discord");
+      void deliverAuditToDiscord({
+        actorId,
+        actorRole,
+        action: opts.action,
+        entityType: opts.entityType,
+        entityId: opts.entityId,
+        details: opts.details,
+        createdAt: new Date(),
+      });
+    } catch {
+      // Import/delivery failure must not break the main action.
+    }
   } catch (err) {
     // Audit must NEVER break the main action.
     console.warn("[audit] failed to record", opts.action, err);
