@@ -284,7 +284,7 @@ interface DiscordChannel {
   parent_id?: string | null;
 }
 
-async function botFetch(
+export async function botFetch(
   token: string,
   path: string,
   options: { method?: string; body?: unknown } = {}
@@ -323,7 +323,7 @@ async function listGuildChannels(token: string, guildId: string): Promise<Discor
  * token cannot address arbitrary channels). Returns true when posted.
  * Never throws — graceful no-op on any failure.
  */
-async function tryPostChannelMessage(channelId: string | null | undefined, content: string): Promise<boolean> {
+export async function tryPostChannelMessage(channelId: string | null | undefined, content: string): Promise<boolean> {
   const cfg = getDiscordConfig();
   if (!cfg?.botToken || !channelId) return false;
   const r = await botFetch(cfg.botToken, `/channels/${channelId}/messages`, {
