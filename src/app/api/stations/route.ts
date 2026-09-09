@@ -24,6 +24,7 @@ export async function GET(req: NextRequest) {
         { name: { contains: query } },
         { description: { contains: query } },
         { barangay: { contains: query } },
+        { city: { contains: query } },
       ];
     }
     if (waterType) {
