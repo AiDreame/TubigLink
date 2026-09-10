@@ -265,13 +265,20 @@ export async function updateStationDocEmbed(
     if (!channelId || !messageId) {
       // Backfill lookup: not indexed, single-row fetch already done by caller —
       // just re-read the row in case the ids landed after the caller loaded it.
+      // Race guard: pushStationDocEmbed persists the ids fire-and-forget, so a
+      // fast decision (e.g. in-app approve ~300ms after upload) can land before
+      // the persist finishes. Poll briefly so the embed edit isn't skipped.
       try {
-        const fresh = await prisma.stationDocument.findUnique({
-          where: { id: doc.id },
-          select: { discordChannelId: true, discordMessageId: true },
-        });
-        channelId = channelId || fresh?.discordChannelId || null;
-        messageId = messageId || fresh?.discordMessageId || null;
+        for (let attempt = 0; attempt < 10; attempt++) {
+          const fresh = await prisma.stationDocument.findUnique({
+            where: { id: doc.id },
+            select: { discordChannelId: true, discordMessageId: true },
+          });
+          channelId = channelId || fresh?.discordChannelId || null;
+          messageId = messageId || fresh?.discordMessageId || null;
+          if (channelId && messageId) break;
+          await new Promise((r) => setTimeout(r, 500));
+        }
       } catch {
         /* ignore */
       }
