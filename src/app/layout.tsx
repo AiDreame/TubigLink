@@ -5,6 +5,7 @@ import "./globals.css";
 import { Providers } from "@/components/shared/Providers";
 import { BottomNav } from "@/components/shared/BottomNav";
 import { SupportFab } from "@/components/shared/SupportFab";
+import { CrashBoundary, CrashReporter } from "@/components/shared/CrashReporter";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -83,7 +84,12 @@ export default function RootLayout({
       </head>
       <body className={`${inter.className} pb-20 md:pb-0`}>
         <Providers>
-          {children}
+          {/* App-wide crash capture: window handlers + render-error boundary
+              (fire-and-forget telemetry; never affects UX — see CrashReporter). */}
+          <CrashReporter />
+          <CrashBoundary>
+            {children}
+          </CrashBoundary>
           <BottomNav />
           <SupportFab />
           <Toaster
