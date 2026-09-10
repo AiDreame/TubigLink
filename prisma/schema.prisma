@@ -526,7 +526,7 @@ model AuditLog {
   actorId    String?
   actorRole  String? // CUSTOMER | PROVIDER | ADMIN | STAFF | SYSTEM
   action     String // machine-readable, e.g. "order.status_change"
-  entityType String? // user | station | order | payout | dispute | supportTicket | staff | review
+  entityType String? // user | station | order | payout | dispute | supportTicket | staff | review | crash
   entityId   String?
   details    String? // compact JSON context (before/after, amounts, names)
   createdAt  DateTime @default(now())
