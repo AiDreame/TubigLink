@@ -7,6 +7,17 @@ import { createNotification, notifyAllAdmins, notifyStationUsers } from "@/lib/n
 import { rateLimit, tooManyRequests } from "@/lib/rate-limit";
 
 /**
+ * Privacy (owner): Discord-originated support replies must never expose the
+ * staff member's personal Discord handle to customers. We therefore persist an
+ * empty display name for those messages — the ticket renderers show STAFF
+ * messages as "AquaLink Support" and omit the "· name" suffix whenever
+ * authorName is falsy (checked in src/app/support/[id]/page.tsx and
+ * src/app/orders/[id]/page.tsx). The bot keeps sending authorName in its
+ * payloads (other consumers may use it); we simply don't store it here.
+ */
+const DISCORD_STAFF_AUTHOR_NAME = "";
+
+/**
  * Incoming endpoint called by scripts/discord-bot.mjs (and by the app itself for
  * binding). Three events:
  *
@@ -16,8 +27,9 @@ import { rateLimit, tooManyRequests } from "@/lib/rate-limit";
  *
  *   message { action:"message", threadId, content, authorName, authorId }
  *           -> reverse-map threadId -> dispute by discordThreadId, then append
- *              a DisputeMessage (authorRole=STAFF) so the support reply is
- *              visible 3-party (customer / station / admin) in the app.
+ *              a DisputeMessage (authorRole=STAFF, authorName masked to "" for
+ *              privacy — the Discord handle never reaches the ticket UI) so the
+ *              support reply is visible 3-party (customer / station / admin).
  *
  *   channel_message { action:"channel_message", channelId, content,
  *                     authorName, authorAvatar?, authorId?, timestamp? }
@@ -28,7 +40,8 @@ import { rateLimit, tooManyRequests } from "@/lib/rate-limit";
  *              the station-docs embed (recolor + buttons disabled).
  *           -> reverse-map channelId -> dispute/ticket by discordChannelId
  *              (Phase 2a per-ticket channels), then append the same STAFF
- *              DisputeMessage + notifications as `message`.
+ *              DisputeMessage (authorName masked to "") + notifications as
+ *              `message`.
  *
  * SECURITY: every call must carry the shared secret as a Bearer token
  * (DISCORD_WEBHOOK_SECRET). Without the secret configured the route is fully
@@ -125,7 +138,8 @@ export async function POST(req: NextRequest) {
     const rl = rateLimit(`discord-inbound:${threadId}`, 30, 60 * 1000);
     if (!rl.ok) return tooManyRequests("Rate limit exceeded", rl.retryAfterSec);
 
-    const authorName = String(body.authorName || "Support").trim().slice(0, 80) || "Support";
+    // Masked: never persist the Discord handle (see DISCORD_STAFF_AUTHOR_NAME).
+    const authorName = DISCORD_STAFF_AUTHOR_NAME;
     return appendStaffReply({ dispute, ticket, authorName, content });
   }
 
@@ -159,7 +173,8 @@ export async function POST(req: NextRequest) {
     const rl = rateLimit(`discord-inbound:${channelId}`, 30, 60 * 1000);
     if (!rl.ok) return tooManyRequests("Rate limit exceeded", rl.retryAfterSec);
 
-    const authorName = String(body.authorName || "Support").trim().slice(0, 80) || "Support";
+    // Masked: never persist the Discord handle (see DISCORD_STAFF_AUTHOR_NAME).
+    const authorName = DISCORD_STAFF_AUTHOR_NAME;
     return appendStaffReply({ dispute, ticket, authorName, content });
   }
 
