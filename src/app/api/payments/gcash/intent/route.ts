@@ -74,6 +74,12 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
+    // Native clients (Capacitor shell) signal `native` so the GCash return
+    // uses the aqualink:// custom scheme (routes back into the app). Web keeps
+    // the https app origin. The signal only selects between these two allow-
+    // listed families — it never carries a scheme/host of the client's choice.
+    const isNative =
+      body.native === true || body.native === 1 || body.native === "1";
 
     const order = await prisma.order.findFirst({
       where: { id: orderId, userId: user.id },
@@ -118,7 +124,14 @@ export async function POST(req: NextRequest) {
     // persisted on the order; otherwise create one server-side.
     let paymentMethodId: string | null = body.paymentMethodId || order.paymentMethodId || null;
 
-    const returnUrl = `${getPayMongoConfig().appUrl}/payment/gcash/return?order_id=${encodeURIComponent(order.id)}`;
+    // Return URL for the GCash hosted checkout redirect — two allowlisted
+    // families only, constructed server-side (never from client input):
+    //   - native shell → aqualink:// custom scheme; the OS hands it back to
+    //     the app and CapNativeBridge routes it to /payment/gcash/return.
+    //   - web → https app origin (NEXT_PUBLIC_APP_URL), the current behavior.
+    const returnUrl = isNative
+      ? `aqualink://orders/${encodeURIComponent(order.id)}`
+      : `${getPayMongoConfig().appUrl}/payment/gcash/return?order_id=${encodeURIComponent(order.id)}`;
 
     // ── Idempotent retry: the client reuses the same key per order so a
     //    retry never creates a duplicate PaymentIntent. Resume or fail the

@@ -6,6 +6,7 @@ import { Providers } from "@/components/shared/Providers";
 import { BottomNav } from "@/components/shared/BottomNav";
 import { SupportFab } from "@/components/shared/SupportFab";
 import { CrashBoundary, CrashReporter } from "@/components/shared/CrashReporter";
+import CapNativeBridge from "@/components/shared/CapNativeBridge";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -87,6 +88,9 @@ export default function RootLayout({
           {/* App-wide crash capture: window handlers + render-error boundary
               (fire-and-forget telemetry; never affects UX — see CrashReporter). */}
           <CrashReporter />
+          {/* Native shell (Capacitor) only: routes aqualink:// GCash-return
+              deep links to the existing /payment/gcash/return page. Web: no-op. */}
+          <CapNativeBridge />
           <CrashBoundary>
             {children}
           </CrashBoundary>
