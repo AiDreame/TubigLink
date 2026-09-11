@@ -31,6 +31,9 @@ const config: CapacitorConfig = {
   android: {
     allowMixedContent: false,
   },
+  // WebView background matches the branded splash (brand blue) so there is no
+  // white flash between the native splash and the first web render.
+  backgroundColor: '#0EA5E9',
   plugins: {},
 };
 

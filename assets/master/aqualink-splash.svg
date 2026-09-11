@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2732" height="2732" viewBox="0 0 2732 2732">
+  <!-- AquaLink PH splash-screen master (vector source of truth) -->
+  <!-- Solid brand-blue background + centered white droplet/chain glyph. -->
+  <rect x="0" y="0" width="2732" height="2732" fill="#0EA5E9"/>
+
+  <!-- DROPLET: point up at (1366,886), bulge center (1366,1166) r=280 -->
+  <path fill="#FFFFFF" d="
+    M 1366 886
+    C 1430 961, 1646 1011, 1646 1166
+    A 280 280 0 1 1 1086 1166
+    C 1086 1011, 1302 961, 1366 886
+    Z"/>
+
+  <!-- BACK link ring (circle ring r=208, bar=108 -> inner r=100) center (1268,1644) -->
+  <path fill="#FFFFFF" fill-rule="evenodd" d="
+    M 1476 1644
+    A 208 208 0 1 1 1060 1644
+    A 208 208 0 1 1 1476 1644
+    Z
+    M 1368 1644
+    A 100 100 0 1 1 1168 1644
+    A 100 100 0 1 1 1368 1644
+    Z"/>
+
+  <!-- FRONT link ring (circle ring r=208, bar=108) center (1464,1644) -->
+  <path fill="#FFFFFF" fill-rule="evenodd" d="
+    M 1672 1644
+    A 208 208 0 1 1 1256 1644
+    A 208 208 0 1 1 1672 1644
+    Z
+    M 1564 1644
+    A 100 100 0 1 1 1364 1644
+    A 100 100 0 1 1 1564 1644
+    Z"/>
+</svg>
