@@ -27,7 +27,7 @@ FCM/APNs), deep links, splash screen, app icon, offline/error page.
 | `www/` | Placeholder web assets (unused in remote mode; needed for `cap sync`) |
 | `android/` | **Generated native Android project — committed as source** (manifest, icons, gradle edited by hand) |
 | `ios/` | Generated native iOS project — committed (builds require macOS; CI or a Mac) |
-| `.github/workflows/android-build.yml` | CI: `cap sync` + Gradle `assembleDebug`/`assembleRelease` on a GitHub runner |
+| `.github/workflows/android-build.yml` | CI: `cap sync` + Gradle `assembleDebug`/`assembleRelease`/`bundleRelease` on a GitHub runner |
 | `npm run cap:*` | Convenience scripts (sync, add, open) |
 
 ## ⚠️ The config is embedded at sync time
@@ -93,16 +93,19 @@ In the shell, the return must land back in the app. Two mechanisms are pre-wired
      (`appUrlOpen` in `src/components/shared/CapNativeBridge.tsx`) is SHIPPED —
      sandbox-test it on a device before store submission.
 
-## CI (Android APK)
+## CI (Android APK + AAB)
 
 `.github/workflows/android-build.yml` runs on push/PR to `v3` (and manually):
-`npm ci` → `npx cap sync android` → JDK 17 → `./gradlew assembleDebug` +
-`assembleRelease`, uploading both APKs as artifacts.
+`npm ci` → `npx cap sync android` → JDK 21 → `./gradlew assembleDebug` +
+`assembleRelease` + `bundleRelease`, uploading the debug APK, release APK, and the
+**release AAB** (the Google Play upload artifact) as artifacts.
 
 Release signing: set repo secrets `KEYSTORE_BASE64` (the upload keystore, base64),
-`KEYSTORE_PASSWORD`, `KEYSTORE_ALIAS`, `KEYSTORE_KEY_PASSWORD`. When present, CI
-writes `android/keystore.properties` + `android/keystore.jks` and the release APK
-is signed. Without them the build still succeeds but signs with the debug key
+`KEYSTORE_PASSWORD`, `KEYSTORE_KEY_ALIAS`, `KEYSTORE_KEY_PASSWORD` (see
+`android/SIGNING.md` for generation + where to paste them). When present, CI
+writes `android/keystore.properties` + `android/keystore.jks` and the release
+APK/AAB are signed with the upload key. Without them the build still succeeds but
+signs with the debug key and prints `UNSIGNED — NOT Play-uploadable`
 (build.gradle fallback). `keystore.properties` and `*.jks` are gitignored — never
 commit secrets.
 

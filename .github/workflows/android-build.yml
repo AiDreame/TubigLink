@@ -1,4 +1,4 @@
-# Android APK build for the AquaLink native shell (Capacitor).
+# Android APK + AAB build for the AquaLink native shell (Capacitor).
 #
 # Local APK builds are NOT feasible on the dev box (JDK 17 + Android SDK ≈ 2.5–4 GB;
 # the machine has 3.9 GB RAM and hosts the live app) — so Gradle builds run here, on
@@ -10,9 +10,12 @@
 # sync MUST run after checkout on every build.
 #
 # Release signing: if the KEYSTORE_BASE64 secret is set, CI writes android/keystore.properties
-# + android/keystore.jks and assembleRelease produces a signed APK. Without the secret,
-# android/app/build.gradle falls back to the debug key so the release build still succeeds
-# (fine for smoke-testing the pipeline; the store needs the real upload keystore).
+# + android/keystore.jks and the release APK + AAB are signed with the upload key. Without
+# the secret, android/app/build.gradle falls back to the debug key so the release build still
+# succeeds (fine for smoke-testing the pipeline, but the artifacts are NOT Play-uploadable —
+# Google Play requires an upload-key-signed AAB and Play App Signing manages the real key).
+# Secrets (owner adds them): KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEYSTORE_KEY_ALIAS,
+# KEYSTORE_KEY_PASSWORD. See android/SIGNING.md for how to generate/encode the keystore.
 name: android-build
 
 on:
@@ -24,7 +27,7 @@ on:
 
 jobs:
   build-android:
-    name: Capacitor sync + Gradle APK (debug + release)
+    name: Capacitor sync + Gradle (debug APK, release APK, release AAB)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -56,16 +59,16 @@ jobs:
             printf '%s\n' \
               'storeFile=keystore.jks' \
               "storePassword=$KEYSTORE_PASSWORD" \
-              "keyAlias=$KEYSTORE_ALIAS" \
+              "keyAlias=$KEYSTORE_KEY_ALIAS" \
               "keyPassword=$KEYSTORE_KEY_PASSWORD" > keystore.properties
-            echo "keystore.properties written — release APK will be signed with the upload key."
+            echo "keystore.properties written — release APK/AAB will be signed with the upload key."
           else
-            echo "KEYSTORE_BASE64 not set — release APK will be signed with the debug key (build.gradle fallback)."
+            echo "!! UNSIGNED — NOT Play-uploadable !! KEYSTORE_BASE64 not set; release APK/AAB will be signed with the debug key (build.gradle fallback) — CI smoke-test only."
           fi
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEYSTORE_ALIAS: ${{ secrets.KEYSTORE_ALIAS }}
+          KEYSTORE_KEY_ALIAS: ${{ secrets.KEYSTORE_KEY_ALIAS }}
           KEYSTORE_KEY_PASSWORD: ${{ secrets.KEYSTORE_KEY_PASSWORD }}
 
       - name: Build debug APK
@@ -75,6 +78,10 @@ jobs:
       - name: Build release APK
         working-directory: android
         run: ./gradlew assembleRelease
+
+      - name: Build release AAB (Google Play upload artifact)
+        working-directory: android
+        run: ./gradlew bundleRelease
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
@@ -88,4 +95,11 @@ jobs:
         with:
           name: aqualink-release-apk
           path: android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+
+      - name: Upload release AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: aqualink-release-aab
+          path: android/app/build/outputs/bundle/release/app-release.aab
           if-no-files-found: error
