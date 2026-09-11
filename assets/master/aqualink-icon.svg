@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- AquaLink PH app icon master (vector source of truth) -->
+  <!-- Concept: a water droplet threaded between two interlocked chain links —
+       "droplets do the linking." Flat geometric shapes only (no filters/fonts)
+       so any rasterizer (rsvg/sharp/ImageMagick) renders it identically. -->
+  <defs>
+    <linearGradient id="drop" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7DD3FC"/>
+      <stop offset="0.45" stop-color="#38BDF8"/>
+      <stop offset="1" stop-color="#0284C7"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background: light sky white -->
+  <rect x="0" y="0" width="1024" height="1024" fill="#F0F9FF"/>
+
+  <!-- BACK chain link (vertical pill ring, darker sky) -->
+  <!-- outer: rounded rect 402,90 220x420 rx110 ; hole: 476,164 72x272 rx36 ; bar t=74 -->
+  <path fill="#0369A1" fill-rule="evenodd" d="
+    M 512 90
+    H 602
+    A 110 110 0 0 1 712 200
+    V 400
+    A 110 110 0 0 1 602 510
+    H 422
+    A 110 110 0 0 1 312 400
+    V 200
+    A 110 110 0 0 1 422 90
+    Z
+    M 512 164
+    H 548
+    A 36 36 0 0 1 584 200
+    V 400
+    A 36 36 0 0 1 548 436
+    H 476
+    A 36 36 0 0 1 440 400
+    V 200
+    A 36 36 0 0 1 476 164
+    Z"/>
+
+  <!-- FRONT chain link (horizontal pill ring, brand sky) -->
+  <!-- outer: rounded rect 307,275 410x210 rx105 ; hole: 381,349 262x62 rx31 ; bar t=74 -->
+  <path fill="#0EA5E9" fill-rule="evenodd" d="
+    M 412 275
+    H 612
+    A 105 105 0 0 1 717 380
+    V 380
+    A 105 105 0 0 1 612 485
+    H 412
+    A 105 105 0 0 1 307 380
+    V 380
+    A 105 105 0 0 1 412 275
+    Z
+    M 412 349
+    H 612
+    A 31 31 0 0 1 643 380
+    V 380
+    A 31 31 0 0 1 612 411
+    H 412
+    A 31 31 0 0 1 381 380
+    V 380
+    A 31 31 0 0 1 412 349
+    Z"/>
+
+  <!-- Chain-link shine dots -->
+  <circle cx="480" cy="146" r="12" fill="#FFFFFF" opacity="0.35"/>
+  <circle cx="663" cy="305" r="14" fill="#FFFFFF" opacity="0.45"/>
+
+  <!-- DROPLET: point up at (512,480), bulge center (512,690) r=235 -->
+  <path fill="url(#drop)" d="
+    M 512 480
+    C 560 545, 747 590, 747 690
+    A 235 235 0 1 1 277 690
+    C 277 590, 464 545, 512 480
+    Z"/>
+  <!-- droplet highlight -->
+  <ellipse cx="458" cy="628" rx="40" ry="64" fill="#FFFFFF" opacity="0.32" transform="rotate(-22 458 628)"/>
+
+  <!-- BOTTOM chain link (small horizontal pill ring, in front of droplet tip) -->
+  <!-- outer: rounded rect 402,820 220x120 rx60 ; hole: 450,868 124x24 rx12 ; bar t=48 -->
+  <path fill="#0EA5E9" fill-rule="evenodd" d="
+    M 462 820
+    H 562
+    A 60 60 0 0 1 622 880
+    V 880
+    A 60 60 0 0 1 562 940
+    H 462
+    A 60 60 0 0 1 402 880
+    V 880
+    A 60 60 0 0 1 462 820
+    Z
+    M 462 868
+    H 562
+    A 12 12 0 0 1 574 880
+    V 880
+    A 12 12 0 0 1 562 892
+    H 462
+    A 12 12 0 0 1 450 880
+    V 880
+    A 12 12 0 0 1 462 868
+    Z"/>
+</svg>
