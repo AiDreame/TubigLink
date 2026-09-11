@@ -20,11 +20,17 @@
 #   * Never installs node_modules on /home (install target lives on /tmp; the
 #     project dir only holds a symlink)
 #   * Starts the app on port 3000, NEVER port 80 (the sandbox exports PORT=80)
+#   * Manages the Discord support bot as a SINGLE instance: any existing
+#     discord-bot.mjs process is stopped (SIGTERM, then SIGKILL after a short
+#     grace) BEFORE exactly one is started and verified READY — two bots on one
+#     token drop Discord gateway events, so this stop-then-start is unconditional
+#     on every run (never a blanket pkill -f node: the app is untouched)
 #
 # Env overrides (useful for QA / scratch runs):
 #   APP_DIR=...      app checkout to operate on (default: repo root of this script)
 #   SITE_DIR=...     TanStack site checkout (default: /home/team/shared/site)
 #   INSTALL_DIR=...  dir that holds node_modules (default: /tmp/aqualink-v2)
+#   BOT_LOG=...      discord bot log (default: /tmp/discord-bot.log)
 #   DRY_RUN=1        print the plan, change nothing
 #   DRY_FORCE_RECOVERY=1   (with DRY_RUN) pretend the app is down so the
 #                          port-recovery plan is printed
@@ -390,6 +396,111 @@ ensure_app_running() {
 }
 
 # ---------------------------------------------------------------------------
+# 4b. Discord support bot — ALWAYS exactly ONE process.
+#     Two bots on one token = dropped Discord gateway events (owner ticket
+#     replies silently stop reaching the app), so this step is unconditional:
+#     every existing discord-bot.mjs process is stopped first (SIGTERM, then
+#     SIGKILL after a short grace) and exactly one is started and verified
+#     READY. Matching is by the bot entry file only — never a blanket
+#     pkill -f node, so the Next server and all other node processes survive.
+# ---------------------------------------------------------------------------
+
+BOT_LOG="${BOT_LOG:-/tmp/discord-bot.log}"
+BOT_MATCH="discord-bot.mjs"   # bot entry file — the ONLY thing we match on
+
+bot_pids() { # space-separated PIDs of any running bot instance (never blanket node)
+  pgrep -f "$BOT_MATCH" 2>/dev/null | sort -un | tr '\n' ' ' | sed 's/ $//' || true
+}
+
+bot_count() { pgrep -f "$BOT_MATCH" 2>/dev/null | wc -l | tr -d ' '; }
+
+load_discord_env() {
+  # Export every DISCORD_* key from the app .env (surrounding quotes stripped)
+  # without sourcing the file — values may contain spaces / '=' / shell
+  # metacharacters that sourcing would mis-parse. The bot needs these env vars
+  # (DISCORD_BOT_TOKEN, DISCORD_SUPPORT_CHANNEL_ID, ...) to connect.
+  local k v
+  while IFS= read -r k; do
+    [ -n "$k" ] || continue
+    v=$(awk -F= -v k="$k" '$1==k{sub(/^[^=]*=/,""); print}' "$APP_DIR/.env" 2>/dev/null | head -1)
+    if [ -n "$v" ]; then
+      v=${v#\"}; v=${v%\"}; v=${v#\'}; v=${v%\'}
+      export "$k=$v"
+    fi
+  done < <(grep -oE "^DISCORD_[A-Z0-9_]+=" "$APP_DIR/.env" 2>/dev/null | sed 's/=$//' | sort -u)
+}
+
+kill_bots() {
+  local pids; pids=$(bot_pids)
+  if [ -z "$pids" ]; then
+    log "no existing discord bot process — nothing to stop"
+    return 0
+  fi
+  log "stopping existing discord bot process(es): $pids (SIGTERM)"
+  [ -n "$DRY_RUN" ] && return 0
+  # shellcheck disable=SC2086
+  kill $pids 2>/dev/null
+  local i=0
+  while [ $i -lt 10 ] && [ "$(bot_count)" != "0" ]; do sleep 1; i=$((i+1)); done
+  pids=$(bot_pids)
+  if [ -n "$pids" ]; then
+    log "process(es) $pids did not exit within ${i}s of SIGTERM — sending SIGKILL"
+    # shellcheck disable=SC2086
+    kill -9 $pids 2>/dev/null
+    sleep 1
+  fi
+  if [ "$(bot_count)" != "0" ]; then
+    fail "CRITICAL: could not stop existing discord bot process(es): $(bot_pids)"
+  fi
+  sleep 1   # brief pause so the old PID/gateway socket is really gone
+  log "old discord bot process(es) gone"
+}
+
+start_bot() {
+  load_discord_env
+  if [ -n "$DRY_RUN" ]; then
+    log "DRY-RUN: would start: ( cd $APP_DIR && setsid nohup node scripts/discord-bot.mjs >> $BOT_LOG 2>&1 < /dev/null & )"
+    log "DRY-RUN: would wait for '[discord-bot] READY' in $BOT_LOG"
+    return 0
+  fi
+  if [ -z "${DISCORD_BOT_TOKEN:-}" ] || [ -z "${DISCORD_SUPPORT_CHANNEL_ID:-}" ]; then
+    log "FAIL: DISCORD_BOT_TOKEN / DISCORD_SUPPORT_CHANNEL_ID not found in $APP_DIR/.env — bot NOT started (no duplicate possible, but the runtime is incomplete without it)"
+    return 1
+  fi
+  local mark=0; [ -f "$BOT_LOG" ] && mark=$(wc -c < "$BOT_LOG")
+  local detach="setsid nohup"; command -v setsid >/dev/null 2>&1 || detach="nohup"
+  log "starting discord bot: cd $APP_DIR && $detach node scripts/discord-bot.mjs >> $BOT_LOG 2>&1 &"
+  ( cd "$APP_DIR" && $detach node scripts/discord-bot.mjs >> "$BOT_LOG" 2>&1 < /dev/null & )
+  local i=0 ok=""
+  while [ $i -lt 60 ]; do
+    [ "$(bot_count)" != "0" ] && tail -c +$((mark+1)) "$BOT_LOG" 2>/dev/null | grep -q "READY" && { ok=1; break; }
+    sleep 2; i=$((i+2))
+  done
+  if [ -z "$ok" ]; then
+    log "FAIL: discord bot did not reach READY within 120s. Tail of $BOT_LOG:"
+    tail -10 "$BOT_LOG" 2>/dev/null | sed 's/^/  /'
+    return 1
+  fi
+  log "discord bot Ready — PID(s): $(bot_pids)"
+  return 0
+}
+
+ensure_bot_running() {
+  log "=== discord bot (must be exactly ONE process) ==="
+  if [ -n "$DRY_FORCE_RECOVERY" ] && [ -n "$DRY_RUN" ]; then
+    log "DRY-RUN: bot plan: stop any existing discord-bot.mjs process, then start exactly one"
+    return 0
+  fi
+  kill_bots
+  start_bot || return 1
+  if [ -z "$DRY_RUN" ] && [ "$(bot_count)" != "1" ]; then
+    fail "CRITICAL: expected exactly ONE discord bot process after start, found $(bot_count): $(bot_pids)"
+  fi
+  log "single-instance confirmed: exactly 1 discord bot process"
+  return 0
+}
+
+# ---------------------------------------------------------------------------
 # 5. verification + summary
 # ---------------------------------------------------------------------------
 
@@ -410,6 +521,18 @@ verify() {
   local scode; scode=$(http_code "http://localhost:$SITE_PORT/" 8)
   if [ "$scode" = "200" ]; then log "PASS  site  :$SITE_PORT -> 200"
   else log "FAIL  site  :$SITE_PORT -> $scode"; ok=0; fi
+  # discord bot single-instance check
+  local bcount; bcount=$(bot_count)
+  if [ "$bcount" = "1" ]; then
+    log "PASS  bot   exactly 1 discord-bot.mjs process ($(bot_pids))"
+    if grep -q "READY" "$BOT_LOG" 2>/dev/null; then
+      log "PASS  bot   READY seen in $BOT_LOG"
+    else
+      log "WARN  bot   process up but no READY in $BOT_LOG yet (may be reconnecting)"
+    fi
+  else
+    log "FAIL  bot   expected exactly 1 discord-bot.mjs process, found $bcount"; ok=0
+  fi
   # best-effort read-only DB sanity (never re-seeds)
   if [ -f "$APP_DIR/prisma/dev.db" ] && command -v sqlite3 >/dev/null 2>&1; then
     local users; users=$(sqlite3 "$APP_DIR/prisma/dev.db" "SELECT COUNT(*) FROM User;" 2>/dev/null || echo "?")
@@ -435,4 +558,5 @@ ensure_node_modules
 ensure_next
 ensure_prisma
 ensure_app_running
+ensure_bot_running
 verify
