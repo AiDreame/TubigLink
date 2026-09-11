@@ -30,6 +30,7 @@ import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { MESSAGES } from "@/lib/constants";
 import { NotificationBell } from "@/components/shared/NotificationBell";
+import { isNativePlatform, openExternalCheckout, watchBrowserClosed } from "@/lib/native";
 import { format } from "date-fns";
 import toast from "react-hot-toast";
 
@@ -188,6 +189,16 @@ export default function MyDashboardPage() {
     }
   }, [sessionStatus, session?.user?.id]);
 
+  // Native only: closing the in-app browser tab before paying should clear the
+  // "Redirecting to GCash…" banner so the customer can retry from the cart.
+  useEffect(
+    () =>
+      watchBrowserClosed(() => {
+        setRedirectingOrderId((id) => (id ? null : id));
+      }),
+    [],
+  );
+
   const handleReorder = async (orderId: string) => {
     setReorderingId(orderId);
     try {
@@ -216,7 +227,8 @@ export default function MyDashboardPage() {
           const payRes = await fetch("/api/payments/gcash/intent", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ orderId: order.id, idempotencyKey }),
+            // `native` selects the aqualink:// return_url family in the shell.
+            body: JSON.stringify({ orderId: order.id, idempotencyKey, native: isNativePlatform() ? 1 : undefined }),
           });
           payResult = await payRes.json();
         } catch {
@@ -240,8 +252,9 @@ export default function MyDashboardPage() {
           toast.success(MESSAGES.reorderSuccess);
           fetchDashboard();
           setRedirectingOrderId(order.id);
-          // Redirecting to GCash to complete payment...
-          window.location.href = nextAction.url;
+          // Native: in-app browser so the aqualink:// return fires back into
+          // the app; web: unchanged full-page checkout navigation.
+          void openExternalCheckout(nextAction.url);
           return;
         }
 

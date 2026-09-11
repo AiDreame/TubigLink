@@ -50,9 +50,22 @@ The web flow sends the customer to PayMongo's GCash hosted checkout and redirect
 back via `return_url` (built server-side in `src/app/api/payments/gcash/intent/route.ts`).
 In the shell, the return must land back in the app. Two mechanisms are pre-wired:
 
-1. **Custom scheme `aqualink://`** (works today, no domain needed)
+1. **Custom scheme `aqualink://`** (works today, no domain needed) — **SHIPPED**
    - Android: intent filter in `android/app/src/main/AndroidManifest.xml`
    - iOS: `CFBundleURLTypes` in `ios/App/App/Info.plist`
+   - Client handling is live in the web app:
+     - `src/components/shared/CapNativeBridge.tsx` (mounted in `src/app/layout.tsx`)
+       listens for `@capacitor/app`'s `appUrlOpen` (plus `getLaunchUrl` for cold
+       starts) and routes `aqualink://orders/<id>` (or
+       `aqualink://payment/return?order_id=<id>`) to the existing
+       `/payment/gcash/return` page — the server state machine stays authoritative.
+     - Native clients send `native: 1` to `/api/payments/gcash/intent`; the route
+       then sets `return_url` to `aqualink://orders/<orderId>` (allowlist: the
+       aqualink:// scheme or the https app origin — never arbitrary schemes).
+       Web clients omit the flag and keep the https return URL.
+     - The hosted checkout opens via `@capacitor/browser` on native
+       (`src/lib/native.ts` `openExternalCheckout`, used by the cart + reorder
+       flows); web keeps `window.location.href`.
    - Web-side caveat (unverified, sandbox test): PayMongo must honor a non-http(s)
      `return_url`. If it doesn't, use mechanism 2 (no web change needed).
 
@@ -77,7 +90,8 @@ In the shell, the return must land back in the app. Two mechanisms are pre-wired
    - The GCash hosted checkout is an external https page — open it with
      `@capacitor/browser` (system browser/custom tab), never inside the WebView, so
      the return redirect fires as an intent back into the app. Client-side handling
-     will use `@capacitor/app`'s `appUrlOpen` event (next engineering step).
+     (`appUrlOpen` in `src/components/shared/CapNativeBridge.tsx`) is SHIPPED —
+     sandbox-test it on a device before store submission.
 
 ## CI (Android APK)
 
@@ -111,8 +125,9 @@ runners `ANDROID_HOME` is provided by the preinstalled SDK.
 - [ ] **iOS build**: needs macOS (CI runner or a Mac): `npm run cap:add:ios` was run
       here, but `xcodebuild` requires macOS.
 - [ ] App icon/splash assets (currently Capacitor defaults).
-- [ ] `@capacitor/app` `appUrlOpen` handler + `@capacitor/browser` for the GCash
-      return (next engineering step), then device-test the return flow.
+- [ ] Device-test the GCash return flow in the shell (appUrlOpen handler +
+      Browser plugin are shipped; see the GCash deep-link return PR for
+      sandbox-test steps).
 - [ ] Later: Firebase project → `google-services.json` → FCM push (replaces polling).
 
 ## Verified on the dev box (this PR)

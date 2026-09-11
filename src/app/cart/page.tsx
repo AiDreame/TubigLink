@@ -26,6 +26,7 @@ import { toast } from "react-hot-toast";
 import { useSession } from "next-auth/react";
 import { MESSAGES, PAYMENT_METHODS } from "@/lib/constants";
 import { NotificationBell } from "@/components/shared/NotificationBell";
+import { isNativePlatform, openExternalCheckout, watchBrowserClosed } from "@/lib/native";
 
 interface Address {
   id: string;
@@ -153,8 +154,9 @@ export default function CartPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         // No paymentMethodId — the server creates the GCash PaymentMethod
-        // server-side via the PayMongo client.
-        body: JSON.stringify({ orderId, idempotencyKey }),
+        // server-side via the PayMongo client. `native` selects the aqualink://
+        // return_url family in the native shell (web omits it → https return).
+        body: JSON.stringify({ orderId, idempotencyKey, native: isNativePlatform() ? 1 : undefined }),
       });
       const payResult = await payRes.json();
 
@@ -189,7 +191,10 @@ export default function CartPage() {
       if (nextAction?.type === "redirect" && nextAction.url) {
         setCheckoutPhase("redirecting");
         clearCart();
-        window.location.href = nextAction.url;
+        // Native: opens in the in-app browser (Browser plugin) so the return
+        // redirect fires as an aqualink:// intent back into the app. Web:
+        // unchanged full-page navigation to the hosted checkout.
+        void openExternalCheckout(nextAction.url);
         return;
       }
 
@@ -204,6 +209,17 @@ export default function CartPage() {
       setIsCheckingOut(false);
     }
   }, [clearCart, router]);
+
+  // Native only: if the customer closes the in-app browser tab before paying,
+  // drop the "redirecting to GCash…" state so they can see the empty cart and
+  // retry (web never fires browserFinished — navigation took the page away).
+  useEffect(
+    () =>
+      watchBrowserClosed(() => {
+        setCheckoutPhase((phase) => (phase === "redirecting" ? "idle" : phase));
+      }),
+    [],
+  );
 
   const handleCheckout = useCallback(async () => {
     if (!session?.user) {
