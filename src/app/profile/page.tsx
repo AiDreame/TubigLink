@@ -43,23 +43,23 @@ export default function ProfilePage() {
       href: "/orders",
       color: "bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400"
     },
-    { 
-      label: MESSAGES.notifications, 
-      icon: Bell, 
-      href: "/profile/notifications",
+    {
+      label: MESSAGES.notifications,
+      icon: Bell,
+      href: "/my/notifications",
       color: "bg-yellow-50 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400"
     },
-    { 
-      label: MESSAGES.paymentMethods, 
-      icon: CreditCard, 
-      href: "/profile/payments",
+    {
+      label: MESSAGES.paymentMethods,
+      icon: CreditCard,
+      href: "/my/payment-methods",
       color: "bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400"
     },
   ];
 
   const supportItems = [
     { label: MESSAGES.settings, icon: Settings, href: "/profile/settings" },
-    { label: MESSAGES.helpSupport, icon: ShieldCheck, href: "/help" },
+    { label: MESSAGES.helpSupport, icon: ShieldCheck, href: "/support" },
   ];
 
   if (isLoading) {
