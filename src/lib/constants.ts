@@ -3,6 +3,10 @@
 export const APP_NAME = "AquaLink PH";
 export const APP_TAGLINE = "Tubig, delivered!";
 
+// Monitored team inbox — works today. Swap once a custom domain is live.
+// TODO(domain): swap to support@<domain> once the custom domain is bought and mail is configured
+export const SUPPORT_EMAIL = "aqualink-ph-6b48799d@ctomail.io";
+
 // PH Regions
 export const PH_REGIONS = [
   "NCR — National Capital Region",
