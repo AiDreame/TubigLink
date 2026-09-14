@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ReportIssueDialog } from "@/components/support/ReportIssueDialog";
 import { FAQ_GROUPS } from "./faq";
+import { SUPPORT_EMAIL } from "@/lib/constants";
 
 const CATEGORY_LABEL: Record<string, string> = {
   ORDER_PROBLEM: "Order problem",
@@ -77,6 +78,15 @@ export default function SupportPage() {
             <p className="text-sm text-muted-foreground mt-0.5">
               Report an issue and we&apos;ll reply inside a support conversation linked to
               your ticket.
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Prefer email?{" "}
+              <a
+                href={`mailto:${SUPPORT_EMAIL}`}
+                className="text-blue-600 dark:text-blue-400 font-medium hover:underline"
+              >
+                {SUPPORT_EMAIL}
+              </a>
             </p>
           </div>
           <Button

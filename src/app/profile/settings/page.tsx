@@ -167,6 +167,10 @@ export default function SettingsPage() {
           Read our{" "}
           <Link href="/privacy" className="text-blue-600 dark:text-blue-400 font-medium hover:underline">
             Privacy Policy
+          </Link>{" "}
+          and{" "}
+          <Link href="/terms" className="text-blue-600 dark:text-blue-400 font-medium hover:underline">
+            Terms of Service
           </Link>
         </p>
 
