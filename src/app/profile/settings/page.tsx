@@ -172,6 +172,10 @@ export default function SettingsPage() {
           <Link href="/terms" className="text-blue-600 dark:text-blue-400 font-medium hover:underline">
             Terms of Service
           </Link>
+          , and our{" "}
+          <Link href="/refund-policy" className="text-blue-600 dark:text-blue-400 font-medium hover:underline">
+            Refund &amp; Cancellation Policy
+          </Link>
         </p>
 
         <Button

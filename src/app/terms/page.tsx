@@ -167,7 +167,14 @@ export default function TermsPage() {
           >
             {SUPPORT_EMAIL}
           </a>
-          , or use the in-app Support button on any order page.
+          , or use the in-app Support button on any order page. See also our{" "}
+          <Link
+            href="/refund-policy"
+            className="text-blue-600 dark:text-blue-400 font-medium hover:underline"
+          >
+            Refund &amp; Cancellation Policy
+          </Link>
+          .
         </p>
       </main>
     </div>
