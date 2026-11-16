@@ -48,6 +48,8 @@ uploads/*.png
 
 # Dispute photo uploads (served via /uploads/ rewrite at runtime)
 uploads/disputes/
+# Per-user / per-station document upload dirs (runtime data, never committed)
+uploads/*/
 public/uploads/
 
 # Misc
