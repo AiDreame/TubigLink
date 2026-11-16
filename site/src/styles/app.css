@@ -1,0 +1,17 @@
+@import "tailwindcss";
+
+@layer base {
+  html {
+    /* keep anchored sections clear of the sticky nav */
+    scroll-padding-top: 4.5rem;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-white text-slate-900 antialiased;
+  }
+
+  ::selection {
+    @apply bg-sky-200 text-sky-950;
+  }
+}
